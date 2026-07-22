@@ -1,0 +1,34 @@
+# --- Build artifacts ---
+/bin/
+/dist/
+/build/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# --- Go ---
+vendor/
+*.prof
+coverage.*
+
+# --- OS / editor noise ---
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# --- Local env / secrets (never commit) ---
+.env
+.env.*
+*.local
+
+# --- Installer / release ---
+*.tar.gz
+*.zip
+*.deb
+*.rpm
+*.pkg
+*.msi
