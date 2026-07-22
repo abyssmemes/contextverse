@@ -206,6 +206,7 @@ func newServerCmd() *cobra.Command {
 	cmd.AddCommand(newServerHealthCmd())
 	cmd.AddCommand(newServerLogsCmd())
 	cmd.AddCommand(newServerUnitCmd())
+	cmd.AddCommand(newServerTLSCmd())
 	return cmd
 }
 

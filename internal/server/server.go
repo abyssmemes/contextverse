@@ -124,11 +124,23 @@ func (s *Server) ListenAndServe() error {
 		return fmt.Errorf("listen %s: %w\nHint: another contextd may still be running. Try: lsof -iTCP:%d -sTCP:LISTEN then contextd server stop (or kill <pid>)",
 			s.Cfg.Addr(), err, s.Cfg.Listen.Port)
 	}
-	logx.L().Info("server listening", "addr", s.Cfg.Addr(), "data_dir", s.Cfg.DataDir, "setup", s.NeedsSetup)
+	logx.L().Info("server listening", "addr", s.Cfg.Addr(), "data_dir", s.Cfg.DataDir, "setup", s.NeedsSetup, "tls", s.Cfg.TLS.Enabled)
+	if !s.Cfg.TLS.Enabled && !isLoopbackListen(s.Cfg.Listen.Address) {
+		logx.L().Warn("TLS disabled while listening on a non-loopback address — traffic is plaintext; enable tls in config or bind 127.0.0.1",
+			"address", s.Cfg.Listen.Address)
+	}
 	if s.Cfg.TLS.Enabled {
+		if s.Cfg.TLS.CertFile == "" || s.Cfg.TLS.KeyFile == "" {
+			return fmt.Errorf("tls.enabled requires tls.cert_file and tls.key_file")
+		}
 		return s.http.ServeTLS(ln, s.Cfg.TLS.CertFile, s.Cfg.TLS.KeyFile)
 	}
 	return s.http.Serve(ln)
+}
+
+func isLoopbackListen(addr string) bool {
+	a := strings.TrimSpace(strings.ToLower(addr))
+	return a == "127.0.0.1" || a == "::1" || a == "localhost" || a == ""
 }
 
 // Shutdown stops the server gracefully.

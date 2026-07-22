@@ -5,7 +5,9 @@ package storage
 import (
 	"context"
 	"os"
+	"strconv"
 	"testing"
+	"time"
 )
 
 func TestS3IntegrationCAS(t *testing.T) {
@@ -62,7 +64,7 @@ func runBackendCAS(t *testing.T, store Backend) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scope := "it-" + t.Name()
+	scope := "it-" + t.Name() + "-" + randomSuffix()
 	if err := store.SetHead(ctx, scope, "", Version("v1")); err != nil {
 		t.Fatal(err)
 	}
@@ -71,6 +73,10 @@ func runBackendCAS(t *testing.T, store Backend) {
 		t.Fatalf("head: %q %v", h, err)
 	}
 	_ = store.Delete(ctx, path, v2)
+}
+
+func randomSuffix() string {
+	return strconv.FormatInt(time.Now().UnixNano(), 36)
 }
 
 func envOr(k, def string) string {

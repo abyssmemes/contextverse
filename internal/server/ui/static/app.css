@@ -702,6 +702,46 @@ code, .mono {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+.file-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.file-tabs a {
+  padding: 8px 14px;
+  color: var(--ink-soft);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font-size: 0.9rem;
+}
+.file-tabs a.active {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+.md-preview {
+  background: var(--input-bg);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  max-height: 70vh;
+  overflow: auto;
+  line-height: 1.55;
+}
+.md-preview h1, .md-preview h2, .md-preview h3 { margin-top: 1.2em; }
+.md-preview pre {
+  background: var(--panel);
+  padding: 12px;
+  overflow: auto;
+  border-radius: calc(var(--radius) - 2px);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+.md-preview code { font-family: var(--font-mono); font-size: 0.9em; }
+.md-preview table { border-collapse: collapse; width: 100%; }
+.md-preview th, .md-preview td { border: 1px solid var(--line-soft); padding: 6px 10px; }
 .footer {
   margin-top: 36px;
   color: var(--ink-soft);

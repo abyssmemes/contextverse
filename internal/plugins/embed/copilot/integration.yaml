@@ -1,0 +1,15 @@
+id: copilot
+display: GitHub Copilot
+detect:
+  - bin: gh
+  - path: ~/.config/github-copilot/
+  - path: ~/.copilot/
+mechanism: instructions-slot
+target: "{{cwd}}/.github/copilot-instructions.md"
+merge: replace-file
+payload: payload.tmpl
+notes: static snapshot for Copilot Chat / coding agent instructions
+manual: |
+  Create {{cwd}}/.github/copilot-instructions.md with the ContextVerse entry-set
+  (or run: contextd plugin install copilot). GitHub Copilot reads repository
+  instructions from that path when present.

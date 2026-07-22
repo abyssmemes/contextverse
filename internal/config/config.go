@@ -38,6 +38,12 @@ type Config struct {
 	Backend   Backend   `yaml:"backend,omitempty"`
 	Server    ClientServer `yaml:"server,omitempty"` // client mode
 	Sync      SyncState    `yaml:"sync,omitempty"`   // client sync markers
+	Daemon    DaemonConfig `yaml:"daemon,omitempty"` // client background poller
+}
+
+// DaemonConfig controls contextd daemon (client head poll → pull).
+type DaemonConfig struct {
+	IntervalSec int `yaml:"interval_sec,omitempty"` // default 60
 }
 
 // Backend selects the storage driver (local|git|s3|sql).

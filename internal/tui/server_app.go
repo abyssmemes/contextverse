@@ -168,6 +168,18 @@ func (m serverModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cursor = 0
 		return m, nil
 
+	case shellDoneMsg:
+		if msg.err != nil {
+			m.snap.LastMsg = "shell: " + msg.err.Error()
+		} else {
+			m.snap.LastMsg = "returned from shell"
+		}
+		return m, nil
+
+	case shellDeniedMsg:
+		m.snap.LastMsg = shellDeniedFlash()
+		return m, nil
+
 	case tea.MouseMsg:
 		if msg.Action != tea.MouseActionPress {
 			return m, nil
@@ -249,6 +261,11 @@ func (m serverModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "s":
 			m.busy = true
 			return m, tea.Batch(runServerActionCmd(ServerActionStatus, m.dataDir), m.spin.Tick)
+		case "!":
+			// Model A: spawn host $SHELL; under Wish (Model B) this is still the
+			// service-user shell — operators should not rely on ! there.
+			m.snap.LastMsg = "shell…"
+			return m, spawnHostShellCmd()
 		case "H":
 			m.busy = true
 			return m, tea.Batch(runServerActionCmd(ServerActionHealth, m.dataDir), m.spin.Tick)
@@ -386,7 +403,7 @@ func (m serverModel) View() string {
 			if m.tab == serverTabSpaces && m.spaceDrill > 0 {
 				return "enter open · R restore · v preview · esc back · j/k · q"
 			}
-			return "1–6 tabs · s status · H health · r refresh · j/k · ? help · q quit"
+			return "1–6 · s status · H health · ! shell · r · j/k · ? · q"
 		}(),
 	}.Render()
 }
@@ -409,9 +426,11 @@ func (m serverModel) renderBody(w, h int) string {
 			"Actions (CLI wrappers)",
 			"  s           server status",
 			"  H           health probe",
+			"  !           spawn $SHELL (Model A / local; exit returns here)",
 			"  r           refresh from data dir",
-			"  q           quit",
+			"  q           quit (Model A login → host shell)",
 			"",
+			"Model A: contextd tui login enable --server",
 			"Wish SSH (Model B): contextd tui ssh enable && server start",
 			"No UI-only ops — same verbs as the CLI.",
 		}, "\n")

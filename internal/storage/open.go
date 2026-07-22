@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/abyssmemes/contextverse/internal/config"
 )
@@ -21,6 +22,7 @@ const (
 type OpenOptions struct {
 	Driver    string // local|git|s3|sql
 	SpaceRoot string // used by local/git for on-disk roots
+	SpaceName string // isolates S3/SQL keys per space (required for shared backends)
 	Backend   config.Backend
 }
 
@@ -93,11 +95,19 @@ func Open(opts OpenOptions) (Backend, error) {
 		if endpoint == "" {
 			endpoint = os.Getenv("CONTEXTVERSE_S3_ENDPOINT")
 		}
+		prefix := opts.Backend.S3Prefix
+		if opts.SpaceName != "" {
+			if prefix != "" {
+				prefix = strings.Trim(prefix, "/") + "/spaces/" + opts.SpaceName
+			} else {
+				prefix = "spaces/" + opts.SpaceName
+			}
+		}
 		return OpenS3(ctx, S3Config{
 			Endpoint:  endpoint,
 			Region:    or(opts.Backend.S3Region, os.Getenv("AWS_REGION"), "us-east-1"),
 			Bucket:    bucket,
-			Prefix:    opts.Backend.S3Prefix,
+			Prefix:    prefix,
 			AccessKey: access,
 			SecretKey: secret,
 			PathStyle: opts.Backend.S3PathStyle || endpoint != "",
@@ -108,7 +118,14 @@ func Open(opts OpenOptions) (Backend, error) {
 		if dsn == "" {
 			dsn = os.Getenv("CONTEXTVERSE_SQL_DSN")
 		}
-		return OpenSQL(ctx, SQLConfig{DSN: dsn})
+		store, err := OpenSQL(ctx, SQLConfig{DSN: dsn})
+		if err != nil {
+			return nil, err
+		}
+		if opts.SpaceName != "" {
+			return &Prefixed{Inner: store, Prefix: "spaces/" + opts.SpaceName}, nil
+		}
+		return store, nil
 
 	default:
 		return nil, fmt.Errorf("%w: unknown driver %q", ErrInvalidArgument, driver)

@@ -148,15 +148,7 @@ func renderPayload(in *Integration, vars Vars) (string, error) {
 func ManualInstructions(in *Integration, vars Vars) string {
 	var b strings.Builder
 	if in == nil {
-		b.WriteString("No supported AI client detected on this machine.\n")
-		b.WriteString("To deliver ContextVerse context at session start, configure your AI's\n")
-		b.WriteString("session-start slot manually. For Claude Code, add to ~/.claude/settings.json:\n\n")
-		b.WriteString("  \"hooks\": { \"SessionStart\": [ { \"hooks\": [\n")
-		b.WriteString("    { \"type\": \"command\", \"command\": \"contextd context inject --format claude-hook\" }\n")
-		b.WriteString("  ] } ] }\n\n")
-		b.WriteString("Using a different AI? See `contextd context inject --list` for known formats,\n")
-		b.WriteString("or add a client-integration template: https://github.com/abyssmemes/contextverse-templates\n")
-		return b.String()
+		return ManualInstructionsCatalog(nil, vars)
 	}
 	b.WriteString(fmt.Sprintf("Manual setup for %s (%s):\n", in.Display, in.ID))
 	b.WriteString(fmt.Sprintf("  mechanism: %s\n", in.Mechanism))
@@ -169,5 +161,35 @@ func ManualInstructions(in *Integration, vars Vars) string {
 	if in.Notes != "" {
 		b.WriteString(fmt.Sprintf("  notes:     %s\n", in.Notes))
 	}
+	if strings.TrimSpace(in.Manual) != "" {
+		b.WriteString("\n")
+		b.WriteString(Expand(strings.TrimSpace(in.Manual), vars))
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// ManualInstructionsCatalog prints fallback for every known integration.
+func ManualInstructionsCatalog(catalog []*Integration, vars Vars) string {
+	var b strings.Builder
+	b.WriteString("No supported AI client detected on this machine.\n")
+	b.WriteString("Configure a session-start slot manually, or run:\n")
+	b.WriteString("  contextd plugin install <id>\n")
+	b.WriteString("  contextd plugin list\n\n")
+	if len(catalog) == 0 {
+		b.WriteString("For Claude Code, add to ~/.claude/settings.json:\n\n")
+		b.WriteString("  \"hooks\": { \"SessionStart\": [ { \"hooks\": [\n")
+		b.WriteString("    { \"type\": \"command\", \"command\": \"contextd context inject --format claude-hook\" }\n")
+		b.WriteString("  ] } ] }\n\n")
+		b.WriteString("Templates: https://github.com/abyssmemes/contextverse-templates\n")
+		return b.String()
+	}
+	for _, in := range catalog {
+		b.WriteString("---\n")
+		b.WriteString(ManualInstructions(in, vars))
+		b.WriteString("\n")
+	}
+	b.WriteString("Contribute a client-integration template:\n")
+	b.WriteString("  https://github.com/abyssmemes/contextverse-templates\n")
 	return b.String()
 }

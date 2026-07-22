@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -98,14 +97,16 @@ func newPluginListCmd() *cobra.Command {
 }
 
 func newPluginInstallCmd() *cobra.Command {
-	var project string
+	var (
+		project        string
+		nonInteractive bool
+	)
 	cmd := &cobra.Command{
 		Use:   "install [client-id...]",
 		Short: "Apply client-integration templates (default: all detected)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			root, err := resolveSpaceRoot()
 			if err != nil {
-				// space optional for command-hook-only install, but helpful for slots
 				root = ""
 			}
 			cwd, err := os.Getwd()
@@ -124,7 +125,11 @@ func newPluginInstallCmd() *cobra.Command {
 				return err
 			}
 			if len(args) == 0 {
-				results, err := plugins.ApplyDetected(cat, vars)
+				interactive := !nonInteractive
+				if fi, err := os.Stdin.Stat(); err == nil && (fi.Mode()&os.ModeCharDevice) == 0 {
+					interactive = false
+				}
+				results, err := plugins.ApplyDetected(cat, vars, plugins.ApplyOpts{Interactive: interactive})
 				if err != nil {
 					return err
 				}
@@ -145,6 +150,7 @@ func newPluginInstallCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&project, "project", "", "active project name")
+	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "never prompt; print manual instructions if nothing detected")
 	return cmd
 }
 
@@ -160,7 +166,11 @@ func applySessionStartPlugins(spaceRoot, cwd, project string, silent bool) error
 	if err != nil {
 		return err
 	}
-	results, err := plugins.ApplyDetected(cat, vars)
+	interactive := !silent
+	if fi, err := os.Stdin.Stat(); err == nil && (fi.Mode()&os.ModeCharDevice) == 0 {
+		interactive = false
+	}
+	results, err := plugins.ApplyDetected(cat, vars, plugins.ApplyOpts{Interactive: interactive})
 	if err != nil {
 		return err
 	}
@@ -169,10 +179,6 @@ func applySessionStartPlugins(spaceRoot, cwd, project string, silent bool) error
 	}
 	for _, r := range results {
 		fmt.Fprintf(os.Stdout, "  ✅ plugin %s (%s) → %s\n", r.ID, r.Action, r.Target)
-	}
-	if len(results) == 0 {
-		// manual instructions already on stderr from ApplyDetected
-		_ = strings.Builder{}
 	}
 	return nil
 }

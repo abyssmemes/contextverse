@@ -520,22 +520,38 @@ func (s *Server) renderUIFile(w http.ResponseWriter, r *http.Request, flash, fla
 	historical := viewing > 0 && viewing != current
 	canWrite := s.canFileWrite(p, spaceName, path)
 	editable := utf8.Valid(data) && !historical && canWrite
+	isMD := isMarkdownPath(path) && utf8.Valid(data)
+	viewMode := strings.TrimSpace(r.URL.Query().Get("view"))
+	if viewMode != "preview" && viewMode != "edit" {
+		if historical && isMD {
+			viewMode = "preview"
+		} else {
+			viewMode = "edit"
+		}
+	}
+	if !editable && isMD {
+		viewMode = "preview"
+	}
 
 	pg := s.pageBase("spaces", p)
 	pg.Title = path
 	pg.Flash = flash
 	pg.FlashError = flashErr
 	pg.Data = map[string]any{
-		"Space":       spaceName,
-		"Path":        path,
-		"Version":     string(ver),
-		"Current":     current,
-		"Viewing":     viewing,
-		"Historical":  historical,
-		"Content":     string(data),
-		"CanWrite":    canWrite,
-		"Editable":    editable,
-		"Versions":    versions,
+		"Space":        spaceName,
+		"Path":         path,
+		"Version":      string(ver),
+		"Current":      current,
+		"Viewing":      viewing,
+		"Historical":   historical,
+		"Content":      string(data),
+		"CanWrite":     canWrite,
+		"Editable":     editable,
+		"Versions":     versions,
+		"IsMarkdown":   isMD,
+		"ViewMode":     viewMode,
+		"MarkdownHTML": renderMarkdownHTML(data),
+		"VersionQ":     r.URL.Query().Get("version"),
 	}
 	_ = ui.Render(w, "file.html", pg)
 }
@@ -613,6 +629,7 @@ func (s *Server) handleUIBackendTest(w http.ResponseWriter, r *http.Request) {
 	}
 	b, err := storage.Open(storage.OpenOptions{
 		SpaceRoot: s.Spaces.SpaceRoot(space),
+		SpaceName: space,
 		Backend:   s.Cfg.Backend,
 		Driver:    s.Cfg.Backend.Driver,
 	})

@@ -29,7 +29,8 @@ Server admin (--server):
   1 Overview · 2 Spaces · 3 Users · 4 Policies · 5 Backend · 6 Output
   s=status  H=health  r=refresh  q=quit
 
-Wish SSH: contextd tui ssh enable && server start`,
+Wish SSH (Model B): contextd tui ssh enable && server start
+Host login (Model A): contextd tui login enable [--server] [--user name]`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if asServer || flagServerDir != "" {
 				dir, err := resolveServerDir()
@@ -59,6 +60,7 @@ Wish SSH: contextd tui ssh enable && server start`,
 	}
 	cmd.Flags().BoolVar(&asServer, "server", false, "open server admin TUI (uses --server-dir)")
 	cmd.AddCommand(newTUISSHCmd())
+	cmd.AddCommand(newTUILoginCmd())
 	return cmd
 }
 

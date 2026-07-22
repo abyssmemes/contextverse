@@ -166,6 +166,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesErr = ""
 		return m, nil
 
+	case shellDoneMsg:
+		if msg.err != nil {
+			m.snap.LastMsg = "shell: " + msg.err.Error()
+		} else {
+			m.snap.LastMsg = "returned from shell"
+		}
+		return m, nil
+
+	case shellDeniedMsg:
+		m.snap.LastMsg = shellDeniedFlash()
+		return m, nil
+
 	case tea.MouseMsg:
 		if msg.Action != tea.MouseActionPress {
 			return m, nil
@@ -266,6 +278,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "s":
 			m.busy = true
 			return m, tea.Batch(runActionCmd(ActionStatus, m.spaceRoot, m.cwd), m.spin.Tick)
+		case "!":
+			// Model A / local: spawn $SHELL; exit returns to TUI. q quits to parent shell.
+			m.snap.LastMsg = "shell…"
+			return m, spawnHostShellCmd()
 		case "u":
 			if m.snap.Mode == "client" {
 				m.busy = true
@@ -405,7 +421,7 @@ func (m model) View() string {
 		busy = m.spin.View() + " working"
 	}
 
-	keys := "a activate · i install · s status · r refresh · 1–5 tabs · j/k · ? help · q quit"
+	keys := "a activate · i install · s status · ! shell · r refresh · 1–5 · j/k · ? · q"
 	if m.snap.Mode == "client" {
 		keys = "a activate · i install · u/U pull/push · s status · r refresh · 1–5 · j/k · ? · q"
 	}
@@ -442,9 +458,10 @@ func (m model) renderBody(w, h int) string {
 			"  a           activate entry points + session-start hooks",
 			"  i           plugin install (detected AI clients)",
 			"  s           status",
+			"  !           spawn $SHELL (return with exit; Model A / local)",
 			"  u / U       pull / push (client mode only)",
 			"  r           refresh snapshot from disk",
-			"  q           quit",
+			"  q           quit (under Model A login → host shell)",
 			"",
 			"Files (tab 3) — version switch",
 			"  enter       open versions for selected file",

@@ -34,6 +34,7 @@ type Integration struct {
 	Command   string        `yaml:"command,omitempty"`
 	Payload   string        `yaml:"payload,omitempty"`
 	Notes     string        `yaml:"notes,omitempty"`
+	Manual    string        `yaml:"manual,omitempty"` // paste-block for --list / fallback
 
 	// Dir is the on-disk template directory (set when loaded).
 	Dir string `yaml:"-"`

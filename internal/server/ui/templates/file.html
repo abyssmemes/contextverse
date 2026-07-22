@@ -25,7 +25,18 @@
 
   <div class="file-layout">
     <div class="file-main">
-      {{if and .Data.CanWrite .Data.Editable}}
+      {{if .Data.IsMarkdown}}
+      <nav class="file-tabs" aria-label="File view">
+        {{if .Data.Editable}}
+        <a class="{{if eq .Data.ViewMode "edit"}}active{{end}}"
+           href="/ui/spaces/{{.Data.Space}}/files/{{.Data.Path}}?view=edit{{if .Data.VersionQ}}&version={{.Data.VersionQ}}{{end}}">Edit</a>
+        {{end}}
+        <a class="{{if eq .Data.ViewMode "preview"}}active{{end}}"
+           href="/ui/spaces/{{.Data.Space}}/files/{{.Data.Path}}?view=preview{{if .Data.VersionQ}}&version={{.Data.VersionQ}}{{end}}">Preview</a>
+      </nav>
+      {{end}}
+
+      {{if and .Data.CanWrite .Data.Editable (ne .Data.ViewMode "preview")}}
       <form method="post" action="/ui/spaces/{{.Data.Space}}/files/{{.Data.Path}}">
         <input type="hidden" name="version" value="{{.Data.Version}}">
         <label for="content" class="sr-only">File contents</label>
@@ -36,6 +47,21 @@
           <span class="muted">CAS write — conflict if version changed.</span>
         </div>
       </form>
+      {{else if and .Data.IsMarkdown (eq .Data.ViewMode "preview")}}
+        <article class="md-preview">{{.Data.MarkdownHTML}}</article>
+        {{if and .Data.CanWrite .Data.Historical}}
+        <form method="post" action="/ui/spaces/{{.Data.Space}}/files/{{.Data.Path}}" class="actions">
+          <input type="hidden" name="action" value="restore">
+          <input type="hidden" name="restore_version" value="{{.Data.Viewing}}">
+          <input type="hidden" name="version" value="{{.Data.Current}}">
+          <button class="btn accent" type="submit">Restore v{{.Data.Viewing}} as current</button>
+          <a class="btn secondary" href="/ui/spaces/{{.Data.Space}}/files/{{.Data.Path}}">Back to current</a>
+        </form>
+        {{else if .Data.Editable}}
+        <div class="actions">
+          <a class="btn secondary" href="/ui/spaces/{{.Data.Space}}/files/{{.Data.Path}}?view=edit">Edit</a>
+        </div>
+        {{end}}
       {{else if not (or .Data.Editable .Data.Historical)}}
         {{if not .Data.CanWrite}}
         <div class="flash err">Read-only for your role/policy on this path.</div>
@@ -72,7 +98,7 @@
             <td class="muted">{{.CreatedAt.Format "2006-01-02 15:04"}}{{if .Destroyed}} · gone{{end}}</td>
             <td class="row-actions">
               {{if not .Destroyed}}
-              <a href="/ui/spaces/{{$.Data.Space}}/files/{{$.Data.Path}}?version={{.Version}}">View</a>
+              <a href="/ui/spaces/{{$.Data.Space}}/files/{{$.Data.Path}}?version={{.Version}}&view=preview">View</a>
               {{if and $.Data.CanWrite (ne .Version $.Data.Current)}}
               <form method="post" action="/ui/spaces/{{$.Data.Space}}/files/{{$.Data.Path}}" style="display:inline">
                 <input type="hidden" name="action" value="restore">

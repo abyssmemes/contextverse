@@ -57,6 +57,7 @@ func (s *Service) SpaceRoot(name string) string {
 func (s *Service) OpenBackend(name string) (storage.Backend, error) {
 	return storage.Open(storage.OpenOptions{
 		SpaceRoot: s.SpaceRoot(name),
+		SpaceName: name,
 		Backend:   s.Backend,
 		Driver:    s.Backend.Driver,
 	})

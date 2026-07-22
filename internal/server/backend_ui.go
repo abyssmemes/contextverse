@@ -115,6 +115,7 @@ func (s *Server) applyBackend(b config.Backend) error {
 	}
 	if _, err := storage.Open(storage.OpenOptions{
 		SpaceRoot: s.Spaces.SpaceRoot(rootName),
+		SpaceName: rootName,
 		Backend:   b,
 		Driver:    b.Driver,
 	}); err != nil {
@@ -144,6 +145,7 @@ func (s *Server) probeBackendStatus(r *http.Request) string {
 	}
 	b, err := storage.Open(storage.OpenOptions{
 		SpaceRoot: s.Spaces.SpaceRoot(space),
+		SpaceName: space,
 		Backend:   s.Cfg.Backend,
 		Driver:    driver,
 	})
@@ -217,6 +219,7 @@ func (s *Server) migrateAllSpaces(r *http.Request, to config.Backend) (int, erro
 	for _, name := range names {
 		src, err := storage.Open(storage.OpenOptions{
 			SpaceRoot: s.Spaces.SpaceRoot(name),
+			SpaceName: name,
 			Backend:   from,
 			Driver:    from.Driver,
 		})
@@ -225,6 +228,7 @@ func (s *Server) migrateAllSpaces(r *http.Request, to config.Backend) (int, erro
 		}
 		dst, err := storage.Open(storage.OpenOptions{
 			SpaceRoot: s.Spaces.SpaceRoot(name),
+			SpaceName: name,
 			Backend:   to,
 			Driver:    to.Driver,
 		})

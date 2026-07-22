@@ -1,0 +1,15 @@
+id: windsurf
+display: Windsurf
+detect:
+  - path: ~/.codeium/
+  - path: ~/.windsurf/
+  - bin: windsurf
+mechanism: rules-slot
+target: "{{cwd}}/.windsurfrules"
+merge: replace-file
+payload: payload.tmpl
+notes: static snapshot refreshed on activate; project-local Windsurf rules slot
+manual: |
+  Create or replace {{cwd}}/.windsurfrules with the ContextVerse entry-set pointer
+  (or run: contextd plugin install windsurf). Windsurf loads .windsurfrules from the
+  project root when opening a workspace.
