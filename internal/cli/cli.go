@@ -68,6 +68,7 @@ func newRoot() *cobra.Command {
 	root.AddCommand(newDaemonCmd())
 	root.AddCommand(newAuditCmd())
 	root.AddCommand(newWebhooksCmd())
+	root.AddCommand(newFreshnessCmd())
 	root.AddCommand(newMCPCmd())
 	return root
 }

@@ -205,3 +205,82 @@ func TestServerPushPullFlow(t *testing.T) {
 		t.Fatalf("audit list %d %s", res.StatusCode, b)
 	}
 }
+
+func TestQuotaAndRateLimit(t *testing.T) {
+	dir := t.TempDir()
+	cfg := &config.ServerConfig{
+		Mode:    config.ModeServer,
+		DataDir: dir,
+		Listen:  config.ListenConfig{Address: "127.0.0.1", Port: 0},
+		Backend: config.Backend{Driver: "local"},
+		Quotas:  config.QuotasConfig{MaxFileSize: 32, MaxSpaceSize: 1 << 20, MaxFiles: 5000},
+		RateLimit: config.RateLimitConfig{Enabled: true, RequestsPerMinute: 3, AuthPerMinute: 10},
+	}
+	if err := config.SaveServer(cfg); err != nil {
+		t.Fatal(err)
+	}
+	store, err := auth.OpenStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AddUser("admin", auth.RoleAdmin); err != nil {
+		t.Fatal(err)
+	}
+	token, _, err := store.CreateToken("admin", "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := &spacesvc.Service{DataDir: dir}
+	if _, err := svc.Create(context.Background(), "team", "solo-default", true); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := server.New(cfg, store)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	for i := 0; i < 3; i++ {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/whoami", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if res.StatusCode != 200 {
+			t.Fatalf("whoami %d on %d", res.StatusCode, i)
+		}
+	}
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/whoami", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("rate limit want 429 got %d %s", res.StatusCode, b)
+	}
+	if res.Header.Get("Retry-After") == "" {
+		t.Fatal("expected Retry-After")
+	}
+
+	tok2, _, err := store.CreateToken("admin", "quota")
+	if err != nil {
+		t.Fatal(err)
+	}
+	big := bytes.Repeat([]byte("x"), 64)
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/api/v1/spaces/team/files/too-big.md", bytes.NewReader(big))
+	req.Header.Set("Authorization", "Bearer "+tok2)
+	req.Header.Set("If-Match", `""`)
+	res, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("quota want 413 got %d %s", res.StatusCode, body)
+	}
+}

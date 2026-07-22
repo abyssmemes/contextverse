@@ -20,6 +20,8 @@ import (
 	"github.com/abyssmemes/contextverse/internal/config"
 	"github.com/abyssmemes/contextverse/internal/hooks"
 	"github.com/abyssmemes/contextverse/internal/logx"
+	"github.com/abyssmemes/contextverse/internal/quotas"
+	"github.com/abyssmemes/contextverse/internal/ratelimit"
 	"github.com/abyssmemes/contextverse/internal/spacesvc"
 	"github.com/abyssmemes/contextverse/internal/storage"
 	"github.com/abyssmemes/contextverse/internal/version"
@@ -35,6 +37,7 @@ type Server struct {
 	Audit    *audit.Logger
 	Hooks    *webhooks.Store
 	Dispatch *webhooks.Dispatcher
+	Limiter  *ratelimit.Limiter
 	http     *http.Server
 
 	mu           sync.Mutex
@@ -62,14 +65,25 @@ func New(cfg *config.ServerConfig, authStore *auth.Store) *Server {
 	if err != nil {
 		logx.L().Warn("load hooks.yaml", "err", err)
 	}
+	ql := quotas.Config{
+		MaxFileSize:  cfg.Quotas.MaxFileSize,
+		MaxSpaceSize: cfg.Quotas.MaxSpaceSize,
+		MaxFiles:     cfg.Quotas.MaxFiles,
+	}
+	lim := ratelimit.New(ratelimit.Config{
+		Enabled:           cfg.RateLimit.Enabled,
+		RequestsPerMinute: cfg.RateLimit.RequestsPerMinute,
+		AuthPerMinute:     cfg.RateLimit.AuthPerMinute,
+	})
 	return &Server{
 		Cfg:      cfg,
 		Auth:     authStore,
 		Authz:    eng,
-		Spaces:   &spacesvc.Service{DataDir: cfg.DataDir, Backend: cfg.Backend, Hooks: hookCfg},
+		Spaces:   &spacesvc.Service{DataDir: cfg.DataDir, Backend: cfg.Backend, Hooks: hookCfg, Quotas: ql},
 		Audit:    al,
 		Hooks:    wh,
 		Dispatch: webhooks.NewDispatcher(wh),
+		Limiter:  lim,
 	}
 }
 
@@ -135,9 +149,10 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle("DELETE /api/v1/webhooks/{id}", s.auth(s.handleWebhooksDelete))
 		mux.Handle("POST /api/v1/webhooks/{id}/test", s.auth(s.handleWebhooksTest))
 		mux.Handle("GET /api/v1/webhooks/dead-letter", s.auth(s.handleWebhooksDeadLetter))
+		mux.Handle("GET /api/v1/spaces/{space}/freshness", s.auth(s.handleFreshness))
 	}
 
-	return s.withRequestID(mux)
+	return s.withRateLimit(s.withRequestID(mux))
 }
 
 // ListenAndServe starts the HTTP server (blocking).
@@ -217,6 +232,48 @@ func (s *Server) withRequestID(next http.Handler) http.Handler {
 		w.Header().Set("X-Request-Id", id)
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (s *Server) withRateLimit(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		if path == "/health" || path == "/api/v1/health" || strings.HasPrefix(path, "/ui/static/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		authEP := r.Method == http.MethodPost && strings.Contains(path, "/auth/")
+		key := rateLimitKey(r)
+		ok, limit, remaining, reset, retry := s.Limiter.Allow(key, authEP)
+		if limit > 0 {
+			w.Header().Set("X-RateLimit-Limit", strconv.Itoa(limit))
+			w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
+			w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(reset, 10))
+		}
+		if !ok {
+			w.Header().Set("Retry-After", strconv.Itoa(retry))
+			writeErr(w, r, http.StatusTooManyRequests, "rate_limited", "rate limit exceeded", map[string]any{
+				"retry_after": retry,
+			})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func rateLimitKey(r *http.Request) string {
+	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
+		tok := strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
+		if tok != "" {
+			return "bearer:" + tok
+		}
+	}
+	ip := r.RemoteAddr
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		ip = strings.TrimSpace(strings.Split(xff, ",")[0])
+	} else if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		ip = host
+	}
+	return "ip:" + ip
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -512,6 +569,23 @@ func (s *Server) handlePutFile(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	var qerr *quotas.Exceeded
+	if errors.As(err, &qerr) {
+		s.auditWrite(r, "quota.exceeded", name, path, audit.ResultDenied, qerr.Error(), nil)
+		if s.Dispatch != nil {
+			s.Dispatch.Emit(webhooks.Event{
+				Type:  "quota.exceeded",
+				Space: name,
+				Scope: path,
+				Actor: actorFrom(r, principalFrom(r.Context())).Username,
+				Data:  map[string]any{"quota": qerr.Quota, "used": qerr.Used, "limit": qerr.Limit},
+			})
+		}
+		writeErr(w, r, http.StatusRequestEntityTooLarge, "quota_exceeded", qerr.Error(), map[string]any{
+			"quota": qerr.Quota, "used": qerr.Used, "limit": qerr.Limit,
+		})
+		return
+	}
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, "internal", err.Error(), nil)
 		return
@@ -519,6 +593,7 @@ func (s *Server) handlePutFile(w http.ResponseWriter, r *http.Request) {
 	_, _ = s.bumpHead(r.Context(), name)
 	w.Header().Set("ETag", etag(ver))
 	s.auditEmit(r, "file.write", name, path, &audit.Diff{Ops: 1})
+	s.maybeQuotaWarning(r, name)
 	writeJSON(w, http.StatusOK, map[string]any{"version": string(ver)})
 }
 
@@ -620,6 +695,22 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	var qerr *quotas.Exceeded
+	if errors.As(err, &qerr) {
+		s.auditWrite(r, "quota.exceeded", name, "", audit.ResultDenied, qerr.Error(), nil)
+		if s.Dispatch != nil {
+			s.Dispatch.Emit(webhooks.Event{
+				Type:  "quota.exceeded",
+				Space: name,
+				Actor: actorFrom(r, principalFrom(r.Context())).Username,
+				Data:  map[string]any{"quota": qerr.Quota, "used": qerr.Used, "limit": qerr.Limit},
+			})
+		}
+		writeErr(w, r, http.StatusRequestEntityTooLarge, "quota_exceeded", qerr.Error(), map[string]any{
+			"quota": qerr.Quota, "used": qerr.Used, "limit": qerr.Limit,
+		})
+		return
+	}
 	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, "invalid_request", err.Error(), nil)
 		return
@@ -629,6 +720,7 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 		ops = res.Applied
 	}
 	s.auditEmit(r, "space.push", name, "", &audit.Diff{Ops: ops})
+	s.maybeQuotaWarning(r, name)
 	writeJSON(w, http.StatusOK, res)
 }
 

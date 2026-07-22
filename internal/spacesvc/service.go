@@ -15,6 +15,7 @@ import (
 	"github.com/abyssmemes/contextverse/internal/config"
 	"github.com/abyssmemes/contextverse/internal/hooks"
 	"github.com/abyssmemes/contextverse/internal/logx"
+	"github.com/abyssmemes/contextverse/internal/quotas"
 	"github.com/abyssmemes/contextverse/internal/space"
 	"github.com/abyssmemes/contextverse/internal/storage"
 )
@@ -44,6 +45,7 @@ type Service struct {
 	DataDir string
 	Backend config.Backend
 	Hooks   hooks.Config
+	Quotas  quotas.Config
 }
 
 func (s *Service) spacesRoot() string {
@@ -258,6 +260,12 @@ func (s *Service) PutFile(ctx context.Context, name, path string, data []byte, e
 	if err := s.Hooks.CheckPut(path, data); err != nil {
 		return "", err
 	}
+	if err := s.Quotas.CheckFileSize(int64(len(data))); err != nil {
+		return "", err
+	}
+	if err := s.checkSpaceQuota(ctx, name, int64(len(data)), path); err != nil {
+		return "", err
+	}
 	fl, err := s.fileLog(name)
 	if err != nil {
 		return "", err
@@ -270,6 +278,48 @@ func (s *Service) PutFile(ctx context.Context, name, path string, data []byte, e
 		return ver, err
 	}
 	return ver, nil
+}
+
+func (s *Service) checkSpaceQuota(ctx context.Context, name string, newBytes int64, path string) error {
+	entries, err := s.Tree(ctx, name)
+	if err != nil {
+		return nil // don't block on list failure
+	}
+	var total, oldSize int64
+	exists := false
+	for _, e := range entries {
+		p := filepath.Join(s.SpaceRoot(name), filepath.FromSlash(e.Path))
+		st, err := os.Stat(p)
+		if err != nil {
+			continue
+		}
+		total += st.Size()
+		if e.Path == path {
+			exists = true
+			oldSize = st.Size()
+		}
+	}
+	deltaFiles := 0
+	if !exists {
+		deltaFiles = 1
+	}
+	deltaBytes := newBytes - oldSize
+	return s.Quotas.CheckSpace(total, len(entries), deltaBytes, deltaFiles)
+}
+
+// SpaceUsage returns approximate on-disk bytes and file count for quota warnings.
+func (s *Service) SpaceUsage(ctx context.Context, name string) (bytes int64, files int, err error) {
+	entries, err := s.Tree(ctx, name)
+	if err != nil {
+		return 0, 0, err
+	}
+	for _, e := range entries {
+		p := filepath.Join(s.SpaceRoot(name), filepath.FromSlash(e.Path))
+		if st, err := os.Stat(p); err == nil {
+			bytes += st.Size()
+		}
+	}
+	return bytes, len(entries), nil
 }
 
 // DeleteFile soft-deletes with CAS (history retained) and removes from tree.
@@ -392,6 +442,12 @@ func (s *Service) Push(ctx context.Context, name string, req PushRequest) (*Push
 				return nil, fmt.Errorf("op put %s: %w", op.Path, err)
 			}
 			if err := s.Hooks.CheckPut(op.Path, data); err != nil {
+				return nil, err
+			}
+			if err := s.Quotas.CheckFileSize(int64(len(data))); err != nil {
+				return nil, err
+			}
+			if err := s.checkSpaceQuota(ctx, name, int64(len(data)), op.Path); err != nil {
 				return nil, err
 			}
 			expected := storage.Version(op.Expected)

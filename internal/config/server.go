@@ -31,6 +31,35 @@ type ServerConfig struct {
 	Defaults ServerDefaults `yaml:"defaults"`
 	Auth     ServerAuth     `yaml:"auth"`
 	TUI      TUIConfig      `yaml:"tui,omitempty"`
+	RateLimit RateLimitConfig `yaml:"rate_limit,omitempty"`
+	Quotas    QuotasConfig    `yaml:"quotas,omitempty"`
+}
+
+// RateLimitConfig is in-process API throttling.
+type RateLimitConfig struct {
+	Enabled           bool `yaml:"enabled"`
+	RequestsPerMinute int  `yaml:"requests_per_minute"`
+	AuthPerMinute     int  `yaml:"auth_per_minute"`
+	explicit          bool `yaml:"-"` // true when rate_limit: appeared in YAML
+}
+
+// UnmarshalYAML records that the block was present (so enabled: false can opt out).
+func (c *RateLimitConfig) UnmarshalYAML(value *yaml.Node) error {
+	type raw RateLimitConfig
+	var r raw
+	if err := value.Decode(&r); err != nil {
+		return err
+	}
+	*c = RateLimitConfig(r)
+	c.explicit = true
+	return nil
+}
+
+// QuotasConfig limits space growth (0 = default).
+type QuotasConfig struct {
+	MaxFileSize  int64 `yaml:"max_file_size"`
+	MaxSpaceSize int64 `yaml:"max_space_size"`
+	MaxFiles     int   `yaml:"max_files"`
 }
 
 // TUIConfig holds server TUI / Wish SSH options (Model B).
@@ -120,6 +149,24 @@ func LoadServer(dataDir string) (*ServerConfig, error) {
 	}
 	if cfg.TUI.SSH.Listen == "" {
 		cfg.TUI.SSH.Listen = DefaultTUISSHListen
+	}
+	if !cfg.RateLimit.explicit {
+		cfg.RateLimit.Enabled = true
+		cfg.RateLimit.RequestsPerMinute = 120
+		cfg.RateLimit.AuthPerMinute = 10
+		cfg.RateLimit.explicit = true
+	} else {
+		if cfg.RateLimit.RequestsPerMinute == 0 {
+			cfg.RateLimit.RequestsPerMinute = 120
+		}
+		if cfg.RateLimit.AuthPerMinute == 0 {
+			cfg.RateLimit.AuthPerMinute = 10
+		}
+	}
+	if cfg.Quotas.MaxFileSize == 0 && cfg.Quotas.MaxSpaceSize == 0 && cfg.Quotas.MaxFiles == 0 {
+		cfg.Quotas.MaxFileSize = 5 << 20
+		cfg.Quotas.MaxSpaceSize = 100 << 20
+		cfg.Quotas.MaxFiles = 5000
 	}
 	return &cfg, nil
 }
