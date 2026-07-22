@@ -12,6 +12,7 @@ import (
 	"github.com/abyssmemes/contextverse/internal/config"
 	"github.com/abyssmemes/contextverse/internal/entrypoint"
 	"github.com/abyssmemes/contextverse/internal/logx"
+	"github.com/abyssmemes/contextverse/internal/mcpserver"
 	"github.com/abyssmemes/contextverse/internal/space"
 	templatepkg "github.com/abyssmemes/contextverse/internal/template"
 	"github.com/abyssmemes/contextverse/internal/version"
@@ -49,6 +50,7 @@ func newRoot() *cobra.Command {
 	root.AddCommand(newIndexCmd())
 	root.AddCommand(newTemplateCmd())
 	root.AddCommand(newSpaceCmd())
+	root.AddCommand(newMCPCmd())
 	return root
 }
 
@@ -370,6 +372,25 @@ func newSpaceCmd() *cobra.Command {
 	seed.Flags().BoolVar(&refreshTpl, "refresh-template", false, "re-fetch catalog template")
 	seed.Flags().BoolVar(&force, "force", false, "overwrite existing space files (keeps identity)")
 	cmd.AddCommand(seed)
+	return cmd
+}
+
+func newMCPCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "mcp",
+		Short: "MCP server for AI clients (Claude, Cursor, …)",
+	}
+	cmd.AddCommand(&cobra.Command{
+		Use:   "serve",
+		Short: "Run the ContextVerse MCP server on stdio (reads the local space)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			root, err := resolveSpaceRoot()
+			if err != nil {
+				return err
+			}
+			return mcpserver.Run(cmd.Context(), mcpserver.Options{SpaceRoot: root})
+		},
+	})
 	return cmd
 }
 

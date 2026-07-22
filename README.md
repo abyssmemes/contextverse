@@ -51,6 +51,7 @@ Details: [`scripts/README.md`](./scripts/README.md). We ship our own Homebrew ta
 contextd init solo      # create & configure a local context space
 contextd activate        # generate entry points (CLAUDE.md, .cursor/rules, …)
 contextd status          # see what's active and fresh
+contextd mcp serve       # live MCP tools for Claude/Cursor (stdio)
 ```
 
 Optional: seed from a community template — see [`contextverse-templates`](https://github.com/abyssmemes/contextverse-templates).
