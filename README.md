@@ -18,25 +18,27 @@ Every AI tool keeps your context in its own silo. Switch tools and you start ove
 
 ## Install
 
-**macOS / Linux** (script lands with first release):
+**macOS / Linux**
 
 ```bash
-curl -fsSL https://get.contextverse.dev/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/abyssmemes/contextverse/main/scripts/install.sh | bash
 ```
 
-**Windows (PowerShell):**
+**Windows (PowerShell)**
 
 ```powershell
-irm https://get.contextverse.dev/install.ps1 | iex
+irm https://raw.githubusercontent.com/abyssmemes/contextverse/main/scripts/install.ps1 | iex
 ```
 
-**From source:**
+**From source / Go**
 
 ```bash
 go install github.com/abyssmemes/contextverse/cmd/contextd@latest
 ```
 
-Install scripts live in [`scripts/`](./scripts). Package managers (Homebrew, apt, scoop, winget) come later.
+While the repo is private, set `GITHUB_TOKEN` or run `gh auth login` first. Details: [`scripts/README.md`](./scripts/README.md).
+
+Package managers (Homebrew, apt, scoop, winget) come later.
 
 ## Quickstart (solo)
 
