@@ -36,6 +36,7 @@ func (s *Server) requireCap(w http.ResponseWriter, r *http.Request, path string,
 		pols = []string{string(p.Role)}
 	}
 	if !s.Authz.Allow(pols, path, cap, s.authzVars()) {
+		s.auditDenied(r, "authz.deny", "", path, fmt.Sprintf("missing %s on %s", cap, path))
 		s.deny(w, r, fmt.Sprintf("missing %s on %s", cap, path))
 		return false
 	}

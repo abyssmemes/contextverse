@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/abyssmemes/contextverse/internal/audit"
 	"github.com/abyssmemes/contextverse/internal/auth"
 	"github.com/abyssmemes/contextverse/internal/config"
 	"github.com/abyssmemes/contextverse/internal/server"
@@ -136,5 +137,38 @@ func TestServerPushPullFlow(t *testing.T) {
 	res.Body.Close()
 	if res.StatusCode != http.StatusForbidden {
 		t.Fatalf("viewer push want 403 got %d", res.StatusCode)
+	}
+
+	// audit recorded push + deny
+	entries, err := srv.Audit.Query(audit.Filter{Limit: 50})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sawPush, sawDeny bool
+	for _, e := range entries {
+		if e.Action == "space.push" && e.Result == audit.ResultSuccess {
+			sawPush = true
+		}
+		if e.Action == "authz.deny" {
+			sawDeny = true
+		}
+	}
+	if !sawPush {
+		t.Fatal("expected space.push audit entry")
+	}
+	if !sawDeny {
+		t.Fatal("expected authz.deny audit entry")
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/audit?limit=20", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	res, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		b, _ := io.ReadAll(res.Body)
+		t.Fatalf("audit list %d %s", res.StatusCode, b)
 	}
 }

@@ -1,0 +1,52 @@
+{{define "audit.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>{{template "head" .}}</head>
+<body class="app">
+{{template "app-open" .}}
+<header class="page-head">
+  <div>
+    <p class="eyebrow">Ops</p>
+    <h1>Audit log</h1>
+    <p class="lede">Append-only JSONL under the server data dir. Same data as <code>contextd audit list</code>.</p>
+  </div>
+  <div class="actions">
+    <a class="btn secondary" href="/ui/audit/export?format=csv">Export CSV</a>
+    <a class="btn secondary" href="/ui/audit/export?format=jsonl">Export JSONL</a>
+  </div>
+</header>
+
+<form class="toolbar" method="get" action="/ui/audit">
+  <label>Since <input name="since" value="{{.Data.Since}}" placeholder="24h"></label>
+  <label>Actor <input name="actor" value="{{.Data.Actor}}" placeholder="alice"></label>
+  <label>Action <input name="action" value="{{.Data.Action}}" placeholder="*push*"></label>
+  <button type="submit" class="btn accent">Filter</button>
+</form>
+
+{{if .Data.Stats}}
+<p class="muted">{{.Data.Stats.Entries}} entries · {{.Data.Stats.Actors}} actors · {{.Data.Stats.Failed}} failed</p>
+{{end}}
+
+<table class="table">
+  <thead>
+    <tr><th>Time</th><th>Actor</th><th>Action</th><th>Space</th><th>Target</th><th>Result</th></tr>
+  </thead>
+  <tbody>
+    {{range .Data.Entries}}
+    <tr>
+      <td class="mono">{{.Timestamp.UTC.Format "2006-01-02 15:04:05"}}</td>
+      <td>{{.Actor.Username}}</td>
+      <td class="mono">{{.Action}}</td>
+      <td>{{.Space}}</td>
+      <td class="mono">{{.Target}}</td>
+      <td>{{.Result}}</td>
+    </tr>
+    {{else}}
+    <tr><td colspan="6" class="muted">No entries yet.</td></tr>
+    {{end}}
+  </tbody>
+</table>
+{{template "app-close" .}}
+</body>
+</html>
+{{end}}

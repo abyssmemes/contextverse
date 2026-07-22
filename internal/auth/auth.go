@@ -25,6 +25,7 @@ const (
 	RoleSpaceLead   Role = "space-lead"
 	RoleContributor Role = "contributor"
 	RoleViewer      Role = "viewer"
+	RoleAuditor     Role = "auditor"
 )
 
 // User is a named account on the server.
@@ -411,7 +412,7 @@ func CanAdmin(role Role) bool {
 // ValidRole checks role string.
 func ValidRole(role Role) bool {
 	switch role {
-	case RoleAdmin, RoleSpaceLead, RoleContributor, RoleViewer:
+	case RoleAdmin, RoleSpaceLead, RoleContributor, RoleViewer, RoleAuditor:
 		return true
 	default:
 		return false

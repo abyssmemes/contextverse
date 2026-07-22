@@ -381,5 +381,19 @@ func BuiltinPolicies() []Policy {
 				{Path: "sys/health", Capabilities: []Capability{CapRead}},
 			},
 		},
+		{
+			Name:        "auditor",
+			Description: "Read audit log + viewer on default space",
+			Builtin:     true,
+			Rules: []Rule{
+				{Path: "spaces/", Capabilities: []Capability{CapList}},
+				{Path: "spaces/{{default}}", Capabilities: []Capability{CapRead}},
+				{Path: "spaces/{{default}}/files", Capabilities: []Capability{CapList}},
+				{Path: "spaces/{{default}}/files/*", Capabilities: []Capability{CapRead, CapList}},
+				{Path: "spaces/{{default}}/head", Capabilities: []Capability{CapRead}},
+				{Path: "sys/health", Capabilities: []Capability{CapRead}},
+				{Path: "sys/audit", Capabilities: []Capability{CapRead, CapList}},
+			},
+		},
 	}
 }

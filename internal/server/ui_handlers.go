@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/abyssmemes/contextverse/internal/audit"
 	"github.com/abyssmemes/contextverse/internal/auth"
 	"github.com/abyssmemes/contextverse/internal/authz"
 	"github.com/abyssmemes/contextverse/internal/config"
@@ -19,6 +21,7 @@ import (
 	"github.com/abyssmemes/contextverse/internal/spacesvc"
 	"github.com/abyssmemes/contextverse/internal/storage"
 	"github.com/abyssmemes/contextverse/internal/version"
+	"github.com/abyssmemes/contextverse/internal/webhooks"
 )
 
 const sessionCookie = "cv_session"
@@ -51,6 +54,12 @@ func (s *Server) registerUI(mux *http.ServeMux) {
 	mux.Handle("GET /ui/policies", s.uiAuth(s.handleUIPolicies))
 	mux.Handle("GET /ui/policies/{name}", s.uiAuth(s.handleUIPolicyShow))
 	mux.Handle("POST /ui/policies", s.uiAuth(s.handleUIPolicyWrite))
+	mux.Handle("GET /ui/audit", s.uiAuth(s.handleUIAudit))
+	mux.Handle("GET /ui/audit/export", s.uiAuth(s.handleUIAuditExport))
+	mux.Handle("GET /ui/webhooks", s.uiAuth(s.handleUIWebhooks))
+	mux.Handle("POST /ui/webhooks", s.uiAuth(s.handleUIWebhooksCreate))
+	mux.Handle("POST /ui/webhooks/{id}/test", s.uiAuth(s.handleUIWebhooksTest))
+	mux.Handle("POST /ui/webhooks/{id}/delete", s.uiAuth(s.handleUIWebhooksDelete))
 }
 
 func (s *Server) pageBase(active string, p *auth.Principal) ui.Page {
@@ -452,9 +461,10 @@ func (s *Server) handleUIFileSave(w http.ResponseWriter, r *http.Request) {
 			s.renderUIFile(w, r, "", err.Error())
 			return
 		}
-		_, _ = s.bumpHead(r.Context(), spaceName)
-		logx.L().Info("ui file restored", "space", spaceName, "path", path, "from", n, "user", p.User, "version", string(ver))
-		http.Redirect(w, r, "/ui/spaces/"+spaceName+"/files/"+path, http.StatusSeeOther)
+	_, _ = s.bumpHead(r.Context(), spaceName)
+	logx.L().Info("ui file restored", "space", spaceName, "path", path, "from", n, "user", p.User, "version", string(ver))
+	s.auditEmit(r, "file.write", spaceName, path, &audit.Diff{Ops: 1})
+	http.Redirect(w, r, "/ui/spaces/"+spaceName+"/files/"+path, http.StatusSeeOther)
 		return
 	}
 
@@ -470,6 +480,7 @@ func (s *Server) handleUIFileSave(w http.ResponseWriter, r *http.Request) {
 	}
 	_, _ = s.bumpHead(r.Context(), spaceName)
 	logx.L().Info("ui file saved", "space", spaceName, "path", path, "user", p.User, "version", string(ver))
+	s.auditEmit(r, "file.write", spaceName, path, &audit.Diff{Ops: 1})
 	http.Redirect(w, r, "/ui/spaces/"+spaceName+"/files/"+path+"?flash=saved", http.StatusSeeOther)
 }
 
@@ -592,6 +603,7 @@ func (s *Server) handleUIAddUser(w http.ResponseWriter, r *http.Request) {
 	pg.Title = "Users"
 	pg.Flash = "user created"
 	pg.Data = map[string]any{"Users": users, "NewToken": token}
+	s.auditEmit(r, "user.add", "", name+":"+string(role), nil)
 	_ = ui.Render(w, "users.html", pg)
 }
 
@@ -612,6 +624,7 @@ func (s *Server) handleUIBackendSet(w http.ResponseWriter, r *http.Request) {
 		s.renderBackends(w, r, "", err.Error())
 		return
 	}
+	s.auditEmit(r, "backend.set", "", next.Driver, nil)
 	s.renderBackends(w, r, "backend saved: "+next.Driver, "")
 }
 
@@ -662,6 +675,7 @@ func (s *Server) handleUIBackendMigrate(w http.ResponseWriter, r *http.Request) 
 		s.renderBackends(w, r, "", err.Error())
 		return
 	}
+	s.auditEmit(r, "backend.migrate", "", to.Driver, &audit.Diff{Ops: n})
 	s.renderBackends(w, r, fmt.Sprintf("migrated %d objects → %s", n, to.Driver), "")
 }
 
@@ -761,5 +775,165 @@ func (s *Server) handleUIPolicyWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	logx.L().Info("policy written", "name", pol.Name, "user", principalFrom(r.Context()).User)
+	s.auditEmit(r, "policy.write", "", pol.Name, nil)
 	http.Redirect(w, r, "/ui/policies/"+pol.Name, http.StatusSeeOther)
 }
+
+func (s *Server) handleUIAudit(w http.ResponseWriter, r *http.Request) {
+	p := principalFrom(r.Context())
+	if !s.canAuditRead(p) {
+		http.Error(w, "missing read/list on sys/audit", http.StatusForbidden)
+		return
+	}
+	f := audit.Filter{
+		Actor:  r.URL.Query().Get("actor"),
+		Action: r.URL.Query().Get("action"),
+		Limit:  100,
+	}
+	since := r.URL.Query().Get("since")
+	if since == "" {
+		since = "7d"
+	}
+	if ts, err := audit.ParseSince(since); err == nil {
+		f.Since = ts
+	}
+	var entries []audit.Entry
+	var st audit.Stats
+	if s.Audit != nil {
+		entries, _ = s.Audit.Query(f)
+		st, _ = s.Audit.Stats(f)
+	}
+	pg := s.pageBase("audit", p)
+	pg.Title = "Audit"
+	pg.Data = map[string]any{
+		"Entries": entries,
+		"Stats":   st,
+		"Since":   since,
+		"Actor":   f.Actor,
+		"Action":  f.Action,
+	}
+	_ = ui.Render(w, "audit.html", pg)
+}
+
+func (s *Server) handleUIAuditExport(w http.ResponseWriter, r *http.Request) {
+	p := principalFrom(r.Context())
+	if !s.canAuditRead(p) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	f := audit.Filter{Limit: -1}
+	if since := r.URL.Query().Get("since"); since != "" {
+		if ts, err := audit.ParseSince(since); err == nil {
+			f.Since = ts
+		}
+	}
+	format := r.URL.Query().Get("format")
+	if s.Audit == nil {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if format == "csv" {
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		w.Header().Set("Content-Disposition", `attachment; filename="audit.csv"`)
+		_ = s.Audit.ExportCSV(w, f)
+		return
+	}
+	w.Header().Set("Content-Type", "application/x-ndjson; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="audit.jsonl"`)
+	_ = s.Audit.ExportJSONL(w, f)
+}
+
+func (s *Server) canAuditRead(p *auth.Principal) bool {
+	if p == nil {
+		return false
+	}
+	if s.Authz == nil {
+		return auth.CanAdmin(p.Role)
+	}
+	pols := p.Policies
+	if len(pols) == 0 && p.Role != "" {
+		pols = []string{string(p.Role)}
+	}
+	return s.Authz.Allow(pols, "sys/audit", authz.CapList, s.authzVars()) ||
+		s.Authz.Allow(pols, "sys/audit", authz.CapRead, s.authzVars())
+}
+
+func (s *Server) handleUIWebhooks(w http.ResponseWriter, r *http.Request) {
+	p := principalFrom(r.Context())
+	if s.requireUIAdmin(w, r) == nil {
+		return
+	}
+	s.renderUIWebhooks(w, r, p, "", "", "")
+}
+
+func (s *Server) handleUIWebhooksCreate(w http.ResponseWriter, r *http.Request) {
+	p := s.requireUIAdmin(w, r)
+	if p == nil {
+		return
+	}
+	_ = r.ParseForm()
+	evRaw := strings.TrimSpace(r.FormValue("events"))
+	var ev []string
+	if evRaw != "" && evRaw != "*" {
+		for _, x := range strings.Split(evRaw, ",") {
+			x = strings.TrimSpace(x)
+			if x != "" {
+				ev = append(ev, x)
+			}
+		}
+	}
+	h, err := s.Hooks.Upsert(webhooks.Hook{
+		URL:     strings.TrimSpace(r.FormValue("url")),
+		Events:  ev,
+		Space:   strings.TrimSpace(r.FormValue("space")),
+		Enabled: true,
+	})
+	if err != nil {
+		s.renderUIWebhooks(w, r, p, "", "", err.Error())
+		return
+	}
+	s.auditEmit(r, "webhook.create", h.Space, h.ID, nil)
+	s.renderUIWebhooks(w, r, p, h.ID, h.Secret, "")
+}
+
+func (s *Server) handleUIWebhooksTest(w http.ResponseWriter, r *http.Request) {
+	if s.requireUIAdmin(w, r) == nil {
+		return
+	}
+	id := r.PathValue("id")
+	if err := s.Dispatch.Test(r.Context(), id); err != nil {
+		http.Error(w, err.Error(), 502)
+		return
+	}
+	s.auditEmit(r, "webhook.test", "", id, nil)
+	http.Redirect(w, r, "/ui/webhooks", http.StatusSeeOther)
+}
+
+func (s *Server) handleUIWebhooksDelete(w http.ResponseWriter, r *http.Request) {
+	if s.requireUIAdmin(w, r) == nil {
+		return
+	}
+	id := r.PathValue("id")
+	_ = s.Hooks.Delete(id)
+	s.auditEmit(r, "webhook.delete", "", id, nil)
+	http.Redirect(w, r, "/ui/webhooks", http.StatusSeeOther)
+}
+
+func (s *Server) renderUIWebhooks(w http.ResponseWriter, r *http.Request, p *auth.Principal, newID, newSecret, flashErr string) {
+	list, _ := s.Hooks.List()
+	dl, _ := s.Hooks.ListDeadLetter(20)
+	dlJSON, _ := json.MarshalIndent(dl, "", "  ")
+	pg := s.pageBase("webhooks", p)
+	pg.Title = "Webhooks"
+	if flashErr != "" {
+		pg.FlashError = flashErr
+	}
+	pg.Data = map[string]any{
+		"Hooks":      list,
+		"NewID":      newID,
+		"NewSecret":  newSecret,
+		"DeadLetter": string(dlJSON),
+	}
+	_ = ui.Render(w, "webhooks.html", pg)
+}
+

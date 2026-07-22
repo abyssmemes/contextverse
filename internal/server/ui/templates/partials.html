@@ -35,6 +35,8 @@
     <a href="/ui/users" class="{{if eq .Active "users"}}active{{end}}">Users</a>
     <a href="/ui/policies" class="{{if eq .Active "policies"}}active{{end}}">Policies</a>
     <a href="/ui/backends" class="{{if eq .Active "backends"}}active{{end}}">Backends</a>
+    <a href="/ui/audit" class="{{if eq .Active "audit"}}active{{end}}">Audit</a>
+    <a href="/ui/webhooks" class="{{if eq .Active "webhooks"}}active{{end}}">Webhooks</a>
     <a href="/ui/logout">Logout</a>
   </nav>
   <div style="display:flex;align-items:center;gap:10px;">
@@ -64,6 +66,8 @@
       <a href="/ui/users" class="{{if eq .Active "users"}}active{{end}}">Users</a>
       <a href="/ui/policies" class="{{if eq .Active "policies"}}active{{end}}">Policies</a>
       <a href="/ui/backends" class="{{if eq .Active "backends"}}active{{end}}">Backends</a>
+      <a href="/ui/audit" class="{{if eq .Active "audit"}}active{{end}}">Audit</a>
+      <a href="/ui/webhooks" class="{{if eq .Active "webhooks"}}active{{end}}">Webhooks</a>
     </nav>
     <div class="app-side-foot">
       <div class="who"><strong>{{.User}}</strong><br>{{.Role}}</div>

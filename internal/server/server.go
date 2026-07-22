@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/abyssmemes/contextverse/internal/audit"
 	"github.com/abyssmemes/contextverse/internal/auth"
 	"github.com/abyssmemes/contextverse/internal/authz"
 	"github.com/abyssmemes/contextverse/internal/config"
@@ -21,15 +22,19 @@ import (
 	"github.com/abyssmemes/contextverse/internal/spacesvc"
 	"github.com/abyssmemes/contextverse/internal/storage"
 	"github.com/abyssmemes/contextverse/internal/version"
+	"github.com/abyssmemes/contextverse/internal/webhooks"
 )
 
 // Server is the HTTP data-plane + admin UI process.
 type Server struct {
-	Cfg    *config.ServerConfig
-	Auth   *auth.Store
-	Authz  *authz.Engine
-	Spaces *spacesvc.Service
-	http   *http.Server
+	Cfg      *config.ServerConfig
+	Auth     *auth.Store
+	Authz    *authz.Engine
+	Spaces   *spacesvc.Service
+	Audit    *audit.Logger
+	Hooks    *webhooks.Store
+	Dispatch *webhooks.Dispatcher
+	http     *http.Server
 
 	mu           sync.Mutex
 	NeedsSetup   bool
@@ -44,11 +49,22 @@ func New(cfg *config.ServerConfig, authStore *auth.Store) *Server {
 	if err != nil {
 		logx.L().Error("open authz engine", "err", err)
 	}
+	al, err := audit.Open(cfg.DataDir)
+	if err != nil {
+		logx.L().Error("open audit log", "err", err)
+	}
+	wh, err := webhooks.Open(cfg.DataDir)
+	if err != nil {
+		logx.L().Error("open webhooks", "err", err)
+	}
 	return &Server{
-		Cfg:    cfg,
-		Auth:   authStore,
-		Authz:  eng,
-		Spaces: &spacesvc.Service{DataDir: cfg.DataDir, Backend: cfg.Backend},
+		Cfg:      cfg,
+		Auth:     authStore,
+		Authz:    eng,
+		Spaces:   &spacesvc.Service{DataDir: cfg.DataDir, Backend: cfg.Backend},
+		Audit:    al,
+		Hooks:    wh,
+		Dispatch: webhooks.NewDispatcher(wh),
 	}
 }
 
@@ -105,6 +121,15 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle("POST /api/v1/spaces/{space}/push", s.auth(s.handlePush))
 		mux.Handle("GET /api/v1/spaces/{space}/snapshots", s.auth(s.handleListSnapshots))
 		mux.Handle("POST /api/v1/spaces/{space}/snapshots", s.auth(s.handleTakeSnapshot))
+		mux.Handle("GET /api/v1/audit", s.auth(s.handleAuditList))
+		mux.Handle("GET /api/v1/audit/export", s.auth(s.handleAuditExport))
+		mux.Handle("GET /api/v1/audit/stats", s.auth(s.handleAuditStats))
+		mux.Handle("GET /api/v1/webhooks", s.auth(s.handleWebhooksList))
+		mux.Handle("POST /api/v1/webhooks", s.auth(s.handleWebhooksCreate))
+		mux.Handle("GET /api/v1/webhooks/{id}", s.auth(s.handleWebhooksGet))
+		mux.Handle("DELETE /api/v1/webhooks/{id}", s.auth(s.handleWebhooksDelete))
+		mux.Handle("POST /api/v1/webhooks/{id}/test", s.auth(s.handleWebhooksTest))
+		mux.Handle("GET /api/v1/webhooks/dead-letter", s.auth(s.handleWebhooksDeadLetter))
 	}
 
 	return s.withRequestID(mux)
@@ -279,6 +304,7 @@ func (s *Server) handleCreateSpace(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusConflict, "conflict", err.Error(), nil)
 		return
 	}
+	s.auditEmit(r, "space.create", body.Name, body.Template, nil)
 	writeJSON(w, http.StatusCreated, meta)
 }
 
@@ -311,6 +337,7 @@ func (s *Server) handleDeleteSpace(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusNotFound, "not_found", err.Error(), nil)
 		return
 	}
+	s.auditEmit(r, "space.delete", name, "", nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -405,6 +432,7 @@ func (s *Server) handleUndeleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 	_, _ = s.bumpHead(r.Context(), name)
 	w.Header().Set("ETag", etag(ver))
+	s.auditEmit(r, "file.undelete", name, path, nil)
 	writeJSON(w, http.StatusOK, map[string]any{"version": string(ver)})
 }
 
@@ -433,6 +461,7 @@ func (s *Server) handleDestroyFileVersion(w http.ResponseWriter, r *http.Request
 		writeErr(w, r, http.StatusInternalServerError, "internal", err.Error(), nil)
 		return
 	}
+	s.auditEmit(r, "file.version.destroy", name, path+"?version="+v, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -463,6 +492,7 @@ func (s *Server) handlePutFile(w http.ResponseWriter, r *http.Request) {
 	}
 	_, _ = s.bumpHead(r.Context(), name)
 	w.Header().Set("ETag", etag(ver))
+	s.auditEmit(r, "file.write", name, path, &audit.Diff{Ops: 1})
 	writeJSON(w, http.StatusOK, map[string]any{"version": string(ver)})
 }
 
@@ -491,6 +521,7 @@ func (s *Server) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = s.bumpHead(r.Context(), name)
+	s.auditEmit(r, "file.delete", name, path, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -547,6 +578,11 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, "invalid_request", err.Error(), nil)
 		return
 	}
+	ops := 0
+	if res != nil {
+		ops = res.Applied
+	}
+	s.auditEmit(r, "space.push", name, "", &audit.Diff{Ops: ops})
 	writeJSON(w, http.StatusOK, res)
 }
 
@@ -587,6 +623,7 @@ func (s *Server) handleTakeSnapshot(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusInternalServerError, "internal", err.Error(), nil)
 		return
 	}
+	s.auditEmit(r, "space.snapshot", name, body.Message, nil)
 	writeJSON(w, http.StatusCreated, meta)
 }
 
