@@ -1,0 +1,10 @@
+id: claude-code
+display: Claude Code
+detect:
+  - path: ~/.claude/
+  - bin: claude
+mechanism: command-hook
+target: ~/.claude/settings.json
+merge: json-block
+command: contextd context inject --format claude-hook
+notes: live inject; resolves active project from cwd

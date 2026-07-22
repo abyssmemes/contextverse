@@ -2,17 +2,34 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}} · ContextVerse</title>
+<script>
+(function(){try{var t=localStorage.getItem("contextverse-theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Georama:ital,wght@0,400..800;1,400..800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/ui/static/app.css">
+<script defer src="/ui/static/theme.js"></script>
+{{end}}
+
+{{define "theme-btn"}}
+<button type="button" class="theme-toggle" data-theme-toggle aria-pressed="false" title="Toggle theme">
+  <span class="sr-only">Toggle color theme</span>
+  <span aria-hidden="true">◐</span>
+</button>
+{{end}}
+
+{{define "flash"}}
+{{if .Flash}}<div class="flash ok" role="status">{{.Flash}}</div>{{end}}
+{{if .FlashError}}<div class="flash err" role="alert">{{.FlashError}}</div>{{end}}
 {{end}}
 
 {{define "topbar"}}
+<a class="skip-link" href="#main">Skip to content</a>
 <header class="topbar">
   <a class="brand" href="/">ContextVerse</a>
   {{if .User}}
-  <nav class="nav">
+  <nav class="nav" aria-label="Primary">
     <a href="/" class="{{if eq .Active "dash"}}active{{end}}">Dashboard</a>
     <a href="/ui/spaces" class="{{if eq .Active "spaces"}}active{{end}}">Spaces</a>
     <a href="/ui/users" class="{{if eq .Active "users"}}active{{end}}">Users</a>
@@ -20,9 +37,49 @@
     <a href="/ui/backends" class="{{if eq .Active "backends"}}active{{end}}">Backends</a>
     <a href="/ui/logout">Logout</a>
   </nav>
-  <div class="who">{{.User}} · {{.Role}}</div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <div class="who">{{.User}} · {{.Role}}</div>
+    {{template "theme-btn" .}}
+  </div>
+  {{else}}
+  <div class="auth-top">{{template "theme-btn" .}}</div>
   {{end}}
 </header>
-{{if .Flash}}<div class="flash ok">{{.Flash}}</div>{{end}}
-{{if .FlashError}}<div class="flash err">{{.FlashError}}</div>{{end}}
+{{template "flash" .}}
+{{end}}
+
+{{define "app-open"}}
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="mobile-bar">
+  <button type="button" class="btn ghost" data-nav-toggle aria-label="Open menu">Menu</button>
+  <a class="brand" href="/">ContextVerse</a>
+  {{template "theme-btn" .}}
+</div>
+<div class="app-frame">
+  <aside class="app-sidebar" aria-label="Sidebar">
+    <a class="brand" href="/">ContextVerse</a>
+    <nav class="app-nav">
+      <a href="/" class="{{if eq .Active "dash"}}active{{end}}">Dashboard</a>
+      <a href="/ui/spaces" class="{{if eq .Active "spaces"}}active{{end}}">Spaces</a>
+      <a href="/ui/users" class="{{if eq .Active "users"}}active{{end}}">Users</a>
+      <a href="/ui/policies" class="{{if eq .Active "policies"}}active{{end}}">Policies</a>
+      <a href="/ui/backends" class="{{if eq .Active "backends"}}active{{end}}">Backends</a>
+    </nav>
+    <div class="app-side-foot">
+      <div class="who"><strong>{{.User}}</strong><br>{{.Role}}</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        {{template "theme-btn" .}}
+        <a class="btn secondary" href="/ui/logout" style="flex:1;text-align:center;padding:8px 12px;font-size:0.85rem;">Logout</a>
+      </div>
+      <div class="muted" style="font-size:0.75rem;">Theme <span class="kbd">d</span></div>
+    </div>
+  </aside>
+  <div class="app-main" id="main">
+    {{template "flash" .}}
+{{end}}
+
+{{define "app-close"}}
+    <div class="footer">contextd {{.Version}} · CLI wrapper UI</div>
+  </div>
+</div>
 {{end}}

@@ -25,11 +25,24 @@ type ServerConfig struct {
 	CreatedAt time.Time `yaml:"created_at"`
 	UpdatedAt time.Time `yaml:"updated_at"`
 
-	Listen ListenConfig `yaml:"listen"`
-	TLS    TLSConfig    `yaml:"tls"`
-	Backend Backend     `yaml:"backend"`
+	Listen   ListenConfig   `yaml:"listen"`
+	TLS      TLSConfig      `yaml:"tls"`
+	Backend  Backend        `yaml:"backend"`
 	Defaults ServerDefaults `yaml:"defaults"`
-	Auth   ServerAuth   `yaml:"auth"`
+	Auth     ServerAuth     `yaml:"auth"`
+	TUI      TUIConfig      `yaml:"tui,omitempty"`
+}
+
+// TUIConfig holds server TUI / Wish SSH options (Model B).
+type TUIConfig struct {
+	SSH TUISSHConfig `yaml:"ssh"`
+}
+
+// TUISSHConfig is contextd's own SSH listener for the admin TUI.
+type TUISSHConfig struct {
+	Enabled    bool   `yaml:"enabled"`
+	Listen     string `yaml:"listen"`      // default 127.0.0.1:2222
+	AutoLaunch bool   `yaml:"auto_launch"` // reserved; MVP always launches TUI
 }
 
 // ListenConfig is bind address/port.
@@ -105,7 +118,25 @@ func LoadServer(dataDir string) (*ServerConfig, error) {
 	if cfg.Backend.Driver == "" {
 		cfg.Backend.Driver = "local"
 	}
+	if cfg.TUI.SSH.Listen == "" {
+		cfg.TUI.SSH.Listen = DefaultTUISSHListen
+	}
 	return &cfg, nil
+}
+
+const (
+	// DefaultTUISSHListen is the Model B Wish bind address.
+	DefaultTUISSHListen = "127.0.0.1:2222"
+)
+
+// TUISSHHostKeyPath returns <dataDir>/auth/tui_host_ed25519.
+func TUISSHHostKeyPath(dataDir string) string {
+	return filepath.Join(dataDir, "auth", "tui_host_ed25519")
+}
+
+// TUISSHAuthorizedKeysPath returns <dataDir>/auth/tui_authorized_keys.
+func TUISSHAuthorizedKeysPath(dataDir string) string {
+	return filepath.Join(dataDir, "auth", "tui_authorized_keys")
 }
 
 // SaveServer writes server config atomically.

@@ -2,32 +2,47 @@
 <!doctype html>
 <html lang="en">
 <head>{{template "head" .}}</head>
-<body>
-  <div class="shell">
-    {{template "topbar" .}}
-    <h2>Policies</h2>
-    <p class="muted">Path ACL policies. Built-in presets expand <span class="mono">{{`{{default}}`}}</span> to default space <strong>{{.Data.DefaultSpace}}</strong>.</p>
-    <div class="panel">
-      <ul>
+<body class="app">
+  {{template "app-open" .}}
+  <header class="page-head">
+    <div>
+      <h1>Policies</h1>
+      <p class="lede">Path ACL policies. Built-in presets expand <span class="mono">{{`{{default}}`}}</span> to default space <strong>{{.Data.DefaultSpace}}</strong>.</p>
+    </div>
+  </header>
+  <div class="panel">
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>Description</th></tr></thead>
+        <tbody>
         {{range .Data.Policies}}
-        <li><a class="mono" href="/ui/policies/{{.Name}}">{{.Name}}</a> {{if .Builtin}}<span class="muted">(builtin)</span>{{end}} — {{.Description}}</li>
+          <tr>
+            <td>
+              <a class="mono" href="/ui/policies/{{.Name}}">{{.Name}}</a>
+              {{if .Builtin}}<span class="badge">builtin</span>{{end}}
+            </td>
+            <td class="muted">{{.Description}}</td>
+          </tr>
+        {{else}}
+          <tr><td colspan="2"><div class="empty"><strong>No policies</strong></div></td></tr>
         {{end}}
-      </ul>
+        </tbody>
+      </table>
     </div>
-    <div class="panel">
-      <h2 style="font-size:1.1rem">Write / update policy</h2>
-      <form method="post" action="/ui/policies">
-        <label>Name</label>
-        <input name="name" required placeholder="eng-writers">
-        <label>YAML body</label>
-        <textarea name="body" rows="16" required></textarea>
-        <div class="actions">
-          <button class="btn accent" type="submit">Save policy</button>
-        </div>
-      </form>
-    </div>
-    <div class="footer">contextd {{.Version}}</div>
   </div>
+  <div class="panel">
+    <h2 class="section-title">Write / update policy</h2>
+    <form method="post" action="/ui/policies">
+      <label for="pname">Name</label>
+      <input id="pname" name="name" required placeholder="eng-writers">
+      <label for="pbody">YAML body</label>
+      <textarea id="pbody" name="body" rows="16" required></textarea>
+      <div class="actions">
+        <button class="btn accent" type="submit">Save policy</button>
+      </div>
+    </form>
+  </div>
+  {{template "app-close" .}}
 </body>
 </html>
 {{end}}

@@ -2,27 +2,35 @@
 <!doctype html>
 <html lang="en">
 <head>{{template "head" .}}</head>
-<body>
-  <div class="shell">
-    {{template "topbar" .}}
-    <h2>Dashboard</h2>
-    <div class="grid">
-      <div class="panel stat"><strong>{{.Data.Spaces}}</strong><span>Spaces</span></div>
-      <div class="panel stat"><strong>{{.Data.Users}}</strong><span>Users</span></div>
-      <div class="panel stat"><strong>{{.Data.Backend}}</strong><span>Backend</span></div>
+<body class="app">
+  {{template "app-open" .}}
+  <header class="page-head">
+    <div>
+      <h1>Dashboard</h1>
+      <p class="lede">Server health and shortcuts — same ops as the CLI, in a browser.</p>
     </div>
-    <div class="panel" style="margin-top:16px;">
-      <h2>Server</h2>
-      <p class="muted">Listen <span class="mono">{{.Data.Listen}}</span></p>
-      <p class="muted mono">{{.Data.DataDir}}</p>
-      <p>Health: <strong style="color:var(--ok)">ok</strong> · default space <strong>{{.Data.DefaultSpace}}</strong></p>
-      <div class="actions">
-        <a class="btn secondary" href="/ui/spaces">Browse spaces</a>
-        <a class="btn secondary" href="/ui/users">Manage users</a>
-      </div>
+    <div class="actions" style="margin:0;">
+      <a class="btn secondary" href="/ui/spaces">Spaces</a>
+      <a class="btn accent" href="/ui/backends">Backends</a>
     </div>
-    <div class="footer">contextd {{.Version}}</div>
+  </header>
+  <div class="grid">
+    <div class="panel stat"><strong>{{.Data.Spaces}}</strong><span>Spaces</span></div>
+    <div class="panel stat"><strong>{{.Data.Users}}</strong><span>Users</span></div>
+    <div class="panel stat"><strong class="mono" style="font-size:1.35rem;">{{.Data.Backend}}</strong><span>Backend</span></div>
   </div>
+  <div class="panel" style="margin-top:14px;">
+    <h2 class="section-title">Server</h2>
+    <p class="muted">Listen <span class="mono">{{.Data.Listen}}</span></p>
+    <p class="muted mono">{{.Data.DataDir}}</p>
+    <p>Health <span class="badge ok">ok</span> · default space <strong>{{.Data.DefaultSpace}}</strong></p>
+    <div class="actions">
+      <a class="btn secondary" href="/ui/spaces">Browse spaces</a>
+      <a class="btn secondary" href="/ui/users">Manage users</a>
+      <a class="btn secondary" href="/ui/policies">Policies</a>
+    </div>
+  </div>
+  {{template "app-close" .}}
 </body>
 </html>
 {{end}}

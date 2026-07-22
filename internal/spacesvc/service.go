@@ -185,13 +185,21 @@ func (s *Service) Head(ctx context.Context, name string) (storage.Version, error
 	return b.Head(ctx, storage.SpaceScope)
 }
 
-// Tree lists non-internal objects.
-func (s *Service) Tree(ctx context.Context, name string) ([]storage.Entry, error) {
+func (s *Service) fileLog(name string) (*storage.FileLog, error) {
 	b, err := s.OpenBackend(name)
 	if err != nil {
 		return nil, err
 	}
-	entries, err := b.List(ctx, "")
+	return &storage.FileLog{Backend: b}, nil
+}
+
+// Tree lists non-internal objects with FileLog integer versions.
+func (s *Service) Tree(ctx context.Context, name string) ([]storage.Entry, error) {
+	fl, err := s.fileLog(name)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := fl.Backend.List(ctx, "")
 	if err != nil {
 		return nil, err
 	}
@@ -200,8 +208,14 @@ func (s *Service) Tree(ctx context.Context, name string) ([]storage.Entry, error
 		if strings.HasPrefix(e.Path, storage.SnapshotPrefix) {
 			continue
 		}
+		if storage.IsFileLogInternal(e.Path) {
+			continue
+		}
 		if strings.HasPrefix(e.Path, "_health/") {
 			continue
+		}
+		if ver, verr := fl.LiveVersion(ctx, e.Path); verr == nil {
+			e.Version = ver
 		}
 		out = append(out, e)
 	}
@@ -209,22 +223,40 @@ func (s *Service) Tree(ctx context.Context, name string) ([]storage.Entry, error
 	return out, nil
 }
 
-// GetFile reads a blob.
+// GetFile reads the live blob (integer file version as CAS token).
 func (s *Service) GetFile(ctx context.Context, name, path string) ([]byte, storage.Version, error) {
-	b, err := s.OpenBackend(name)
+	fl, err := s.fileLog(name)
 	if err != nil {
 		return nil, "", err
 	}
-	return b.Get(ctx, path)
+	return fl.Get(ctx, path)
 }
 
-// PutFile writes with CAS and mirrors to the working tree.
+// GetFileVersion reads a historical version body.
+func (s *Service) GetFileVersion(ctx context.Context, name, path string, n int) ([]byte, *storage.FileVersionInfo, error) {
+	fl, err := s.fileLog(name)
+	if err != nil {
+		return nil, nil, err
+	}
+	return fl.GetVersion(ctx, path, n)
+}
+
+// ListFileVersions returns per-file version metadata (newest first).
+func (s *Service) ListFileVersions(ctx context.Context, name, path string) (*storage.FileMeta, []storage.FileVersionInfo, error) {
+	fl, err := s.fileLog(name)
+	if err != nil {
+		return nil, nil, err
+	}
+	return fl.ListVersions(ctx, path)
+}
+
+// PutFile writes with CAS (integer version) and mirrors to the working tree.
 func (s *Service) PutFile(ctx context.Context, name, path string, data []byte, expected storage.Version) (storage.Version, error) {
-	b, err := s.OpenBackend(name)
+	fl, err := s.fileLog(name)
 	if err != nil {
 		return "", err
 	}
-	ver, err := b.Put(ctx, path, data, expected)
+	ver, err := fl.Put(ctx, path, data, expected)
 	if err != nil {
 		return "", err
 	}
@@ -234,17 +266,46 @@ func (s *Service) PutFile(ctx context.Context, name, path string, data []byte, e
 	return ver, nil
 }
 
-// DeleteFile deletes with CAS and removes from tree.
+// DeleteFile soft-deletes with CAS (history retained) and removes from tree.
 func (s *Service) DeleteFile(ctx context.Context, name, path string, expected storage.Version) error {
-	b, err := s.OpenBackend(name)
+	fl, err := s.fileLog(name)
 	if err != nil {
 		return err
 	}
-	if err := b.Delete(ctx, path, expected); err != nil {
+	if err := fl.SoftDelete(ctx, path, expected); err != nil {
 		return err
 	}
 	_ = os.Remove(filepath.Join(s.SpaceRoot(name), filepath.FromSlash(path)))
 	return nil
+}
+
+// UndeleteFile restores the latest non-destroyed version to live.
+func (s *Service) UndeleteFile(ctx context.Context, name, path string) (storage.Version, error) {
+	fl, err := s.fileLog(name)
+	if err != nil {
+		return "", err
+	}
+	ver, err := fl.Undelete(ctx, path)
+	if err != nil {
+		return "", err
+	}
+	data, _, err := fl.Get(ctx, path)
+	if err != nil {
+		return ver, err
+	}
+	if err := writeTreeFile(s.SpaceRoot(name), path, data); err != nil {
+		return ver, err
+	}
+	return ver, nil
+}
+
+// DestroyFileVersion permanently removes one historical version.
+func (s *Service) DestroyFileVersion(ctx context.Context, name, path string, n int) error {
+	fl, err := s.fileLog(name)
+	if err != nil {
+		return err
+	}
+	return fl.Destroy(ctx, path, n)
 }
 
 // Change is one entry in a changes listing.
@@ -315,6 +376,7 @@ func (s *Service) Push(ctx context.Context, name string, req PushRequest) (*Push
 		}
 	}
 
+	fl := &storage.FileLog{Backend: b}
 	applied := 0
 	for _, op := range req.Ops {
 		switch op.Op {
@@ -326,13 +388,13 @@ func (s *Service) Push(ctx context.Context, name string, req PushRequest) (*Push
 			expected := storage.Version(op.Expected)
 			if op.Expected == "" {
 				// infer: create if absent, else require current
-				if _, ver, gerr := b.Get(ctx, op.Path); gerr == nil {
+				if _, ver, gerr := fl.Get(ctx, op.Path); gerr == nil {
 					expected = ver
 				} else if !errors.Is(gerr, storage.ErrNotFound) {
 					return nil, gerr
 				}
 			}
-			if _, err := b.Put(ctx, op.Path, data, expected); err != nil {
+			if _, err := fl.Put(ctx, op.Path, data, expected); err != nil {
 				return nil, err
 			}
 			if err := writeTreeFile(s.SpaceRoot(name), op.Path, data); err != nil {
@@ -342,13 +404,13 @@ func (s *Service) Push(ctx context.Context, name string, req PushRequest) (*Push
 		case "delete":
 			expected := storage.Version(op.Expected)
 			if expected == "" {
-				_, ver, gerr := b.Get(ctx, op.Path)
+				_, ver, gerr := fl.Get(ctx, op.Path)
 				if gerr != nil {
 					return nil, gerr
 				}
 				expected = ver
 			}
-			if err := b.Delete(ctx, op.Path, expected); err != nil {
+			if err := fl.SoftDelete(ctx, op.Path, expected); err != nil {
 				return nil, err
 			}
 			_ = os.Remove(filepath.Join(s.SpaceRoot(name), filepath.FromSlash(op.Path)))

@@ -2,29 +2,34 @@
 <!doctype html>
 <html lang="en">
 <head>{{template "head" .}}</head>
-<body>
-  <div class="shell">
-    {{template "topbar" .}}
-    <h2>{{.Data.Name}}</h2>
-    <p class="muted">head <span class="mono">{{.Data.Head}}</span> · template {{.Data.Template}}</p>
-    <div class="panel">
-      <h2>Files</h2>
+<body class="app">
+  {{template "app-open" .}}
+  <header class="page-head">
+    <div>
+      <h1>{{.Data.Name}}</h1>
+      <p class="lede">head <span class="mono">{{.Data.Head}}</span> · template {{.Data.Template}}</p>
+    </div>
+    <a class="btn secondary" href="/ui/spaces">All spaces</a>
+  </header>
+  <div class="panel">
+    <h2 class="section-title">Files</h2>
+    <div class="table-wrap">
       <table>
         <thead><tr><th>Path</th><th>Version</th></tr></thead>
         <tbody>
         {{range .Data.Files}}
           <tr>
             <td><a href="/ui/spaces/{{$.Data.Name}}/files/{{.Path}}">{{.Path}}</a></td>
-            <td class="mono muted">{{.Version}}</td>
+            <td class="mono muted">v{{.Version}}</td>
           </tr>
         {{else}}
-          <tr><td colspan="2" class="muted">Empty</td></tr>
+          <tr><td colspan="2"><div class="empty"><strong>Empty space</strong>No files yet.</div></td></tr>
         {{end}}
         </tbody>
       </table>
     </div>
-    <div class="footer">contextd {{.Version}}</div>
   </div>
+  {{template "app-close" .}}
 </body>
 </html>
 {{end}}

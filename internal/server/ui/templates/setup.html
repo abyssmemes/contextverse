@@ -1,70 +1,131 @@
 {{define "setup.html"}}
 <!doctype html>
 <html lang="en">
-<head>{{template "head" .}}</head>
-<body>
-  <div class="shell">
+<head>
+{{template "head" .}}
+<script defer src="/ui/static/setup.js"></script>
+</head>
+<body class="auth">
+  <div class="shell setup">
+    <div class="auth-top">{{template "theme-btn" .}}</div>
     <section class="hero">
       <span class="brand">ContextVerse</span>
       <h1>Install the server</h1>
-      <p>One form. Local storage by default. You can connect git / S3 / SQL here or switch later in Backends.</p>
+      <p>Four short steps. Local storage by default — advanced backends are optional.</p>
     </section>
-    {{if .FlashError}}<div class="flash err" style="max-width:640px;margin:0 auto 16px;">{{.FlashError}}</div>{{end}}
-    <div class="panel" style="max-width:640px;margin:0 auto;">
-      <form method="post" action="/setup">
-        <label>Data directory</label>
-        <input name="data_dir" value="{{.Data.DataDir}}" required>
-        <label>Listen address</label>
-        <input name="address" value="{{.Data.Address}}" required>
-        <label>Port</label>
-        <input name="port" type="number" value="{{.Data.Port}}" required>
-        <label>Default space name</label>
-        <input name="space" value="{{.Data.Space}}" required>
-        <label>Admin username</label>
-        <input name="admin" value="{{.Data.Admin}}" required>
-        <label>Admin password (optional — enables userpass login)</label>
-        <input name="password" type="password" autocomplete="new-password" placeholder="min 8 chars">
-        <label>Template</label>
-        <input name="template" value="{{.Data.Template}}" required>
-        <label>Storage backend</label>
-        <select name="backend">
-          <option value="local" selected>local (filesystem)</option>
-          <option value="git">git</option>
-          <option value="s3">s3 / MinIO</option>
-          <option value="sql">sql (Postgres)</option>
-        </select>
 
-        <label>Git remote</label>
-        <input name="git_remote" placeholder="https://… or git@… (git driver)">
-        <label>Git user (HTTPS)</label>
-        <input name="git_user" placeholder="git">
-        <label>Git token (HTTPS PAT)</label>
-        <input name="git_token" type="password" autocomplete="off" placeholder="or CONTEXTVERSE_GIT_TOKEN / GITHUB_TOKEN">
-        <label>Git SSH private key path</label>
-        <input name="git_ssh_key" placeholder="~/.ssh/id_ed25519">
+    <ol class="wizard-steps" aria-label="Setup progress">
+      <li class="is-active" data-step-indicator="1"><span>1</span> Server</li>
+      <li data-step-indicator="2"><span>2</span> Admin</li>
+      <li data-step-indicator="3"><span>3</span> Storage</li>
+      <li data-step-indicator="4"><span>4</span> Review</li>
+    </ol>
 
-        <label>S3 endpoint</label>
-        <input name="s3_endpoint" placeholder="http://127.0.0.1:9000">
-        <label>S3 bucket</label>
-        <input name="s3_bucket">
-        <label>S3 region</label>
-        <input name="s3_region" value="us-east-1">
-        <label>S3 prefix</label>
-        <input name="s3_prefix">
-        <label>S3 access key</label>
-        <input name="s3_access_key" autocomplete="off">
-        <label>S3 secret key</label>
-        <input name="s3_secret_key" type="password" autocomplete="off">
+    {{if .FlashError}}<div class="flash err" role="alert">{{.FlashError}}</div>{{end}}
 
-        <label>Postgres DSN</label>
-        <input name="sql_dsn" type="password" autocomplete="off" placeholder="postgres://user:pass@host:5432/db?sslmode=disable">
+    <div class="panel wizard">
+      <form id="setup-form" method="post" action="/setup" novalidate
+            data-start-step="{{if .Data.Step}}{{.Data.Step}}{{else}}1{{end}}">
 
-        <div class="actions">
-          <button class="btn accent" type="submit">Create server</button>
-        </div>
+        <section class="wizard-pane is-active" data-step="1" aria-labelledby="step1-title">
+          <h2 id="step1-title" class="section-title">Server location</h2>
+          <p class="muted step-lede">Where data lives and which address the HTTP API binds to.</p>
+          <label for="data_dir">Data directory</label>
+          <input id="data_dir" name="data_dir" value="{{.Data.DataDir}}" required autocomplete="off">
+          <label for="address">Listen address</label>
+          <input id="address" name="address" value="{{.Data.Address}}" required>
+          <label for="port">Port</label>
+          <input id="port" name="port" type="number" value="{{.Data.Port}}" required min="1" max="65535">
+          <div class="actions wizard-nav">
+            <span></span>
+            <button type="button" class="btn accent" data-next>Continue</button>
+          </div>
+        </section>
+
+        <section class="wizard-pane" data-step="2" hidden aria-labelledby="step2-title">
+          <h2 id="step2-title" class="section-title">Admin &amp; default space</h2>
+          <p class="muted step-lede">First admin account and the space seeded on install.</p>
+          <label for="admin">Admin username</label>
+          <input id="admin" name="admin" value="{{.Data.Admin}}" required autocomplete="username">
+          <label for="password">Admin password <span class="muted">(optional — enables userpass login)</span></label>
+          <input id="password" name="password" type="password" autocomplete="new-password" placeholder="min 8 chars" value="{{.Data.Password}}">
+          <label for="space">Default space name</label>
+          <input id="space" name="space" value="{{.Data.Space}}" required pattern="[a-zA-Z0-9_-]+">
+          <label for="template">Template</label>
+          <input id="template" name="template" value="{{.Data.Template}}" required>
+          <div class="actions wizard-nav">
+            <button type="button" class="btn secondary" data-prev>Back</button>
+            <button type="button" class="btn accent" data-next>Continue</button>
+          </div>
+        </section>
+
+        <section class="wizard-pane" data-step="3" hidden aria-labelledby="step3-title">
+          <h2 id="step3-title" class="section-title">Storage</h2>
+          <p class="muted step-lede">Start with local filesystem. You can connect git / S3 / SQL later in Backends.</p>
+          <label for="backend">Backend</label>
+          <select id="backend" name="backend" data-backend-select>
+            <option value="local" {{if or (eq .Data.Backend "") (eq .Data.Backend "local")}}selected{{end}}>local (recommended)</option>
+            <option value="git" {{if eq .Data.Backend "git"}}selected{{end}}>git</option>
+            <option value="s3" {{if eq .Data.Backend "s3"}}selected{{end}}>s3 / MinIO</option>
+            <option value="sql" {{if eq .Data.Backend "sql"}}selected{{end}}>sql (Postgres)</option>
+          </select>
+
+          <div class="backend-fields" data-backend-panel="git" hidden>
+            <label for="git_remote">Git remote</label>
+            <input id="git_remote" name="git_remote" value="{{.Data.GitRemote}}" placeholder="https://… or git@…">
+            <label for="git_user">Git user (HTTPS)</label>
+            <input id="git_user" name="git_user" value="{{.Data.GitUser}}" placeholder="git">
+            <label for="git_token">Git token (HTTPS PAT)</label>
+            <input id="git_token" name="git_token" type="password" autocomplete="off" placeholder="or CONTEXTVERSE_GIT_TOKEN">
+            <label for="git_ssh_key">Git SSH private key path</label>
+            <input id="git_ssh_key" name="git_ssh_key" value="{{.Data.GitSSHKey}}" placeholder="~/.ssh/id_ed25519">
+          </div>
+
+          <div class="backend-fields" data-backend-panel="s3" hidden>
+            <label for="s3_endpoint">S3 endpoint</label>
+            <input id="s3_endpoint" name="s3_endpoint" value="{{.Data.S3Endpoint}}" placeholder="http://127.0.0.1:9000">
+            <label for="s3_bucket">S3 bucket</label>
+            <input id="s3_bucket" name="s3_bucket" value="{{.Data.S3Bucket}}">
+            <label for="s3_region">S3 region</label>
+            <input id="s3_region" name="s3_region" value="{{if .Data.S3Region}}{{.Data.S3Region}}{{else}}us-east-1{{end}}">
+            <label for="s3_prefix">S3 prefix</label>
+            <input id="s3_prefix" name="s3_prefix" value="{{.Data.S3Prefix}}">
+            <label for="s3_access_key">S3 access key</label>
+            <input id="s3_access_key" name="s3_access_key" value="{{.Data.S3AccessKey}}" autocomplete="off">
+            <label for="s3_secret_key">S3 secret key</label>
+            <input id="s3_secret_key" name="s3_secret_key" type="password" autocomplete="off">
+          </div>
+
+          <div class="backend-fields" data-backend-panel="sql" hidden>
+            <label for="sql_dsn">Postgres DSN</label>
+            <input id="sql_dsn" name="sql_dsn" type="password" autocomplete="off" value="{{.Data.SQLDSN}}" placeholder="postgres://user:pass@host:5432/db?sslmode=disable">
+          </div>
+
+          <div class="actions wizard-nav">
+            <button type="button" class="btn secondary" data-prev>Back</button>
+            <button type="button" class="btn accent" data-next>Continue</button>
+          </div>
+        </section>
+
+        <section class="wizard-pane" data-step="4" hidden aria-labelledby="step4-title">
+          <h2 id="step4-title" class="section-title">Review</h2>
+          <p class="muted step-lede">Confirm, then create the server. The admin API token is shown once.</p>
+          <dl class="review-list">
+            <div><dt>Data dir</dt><dd class="mono" data-review="data_dir"></dd></div>
+            <div><dt>Listen</dt><dd class="mono"><span data-review="address"></span>:<span data-review="port"></span></dd></div>
+            <div><dt>Admin</dt><dd data-review="admin"></dd></div>
+            <div><dt>Password</dt><dd data-review="password_set"></dd></div>
+            <div><dt>Space</dt><dd><span data-review="space"></span> · <span data-review="template"></span></dd></div>
+            <div><dt>Backend</dt><dd data-review="backend"></dd></div>
+          </dl>
+          <div class="actions wizard-nav">
+            <button type="button" class="btn secondary" data-prev>Back</button>
+            <button class="btn accent" type="submit">Create server</button>
+          </div>
+        </section>
       </form>
     </div>
-    <div class="footer" style="max-width:640px;margin:24px auto 0;">contextd {{.Version}}</div>
+    <div class="footer">Theme <span class="kbd">d</span> · contextd {{.Version}}</div>
   </div>
 </body>
 </html>

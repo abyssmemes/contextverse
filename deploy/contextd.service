@@ -1,0 +1,29 @@
+[Unit]
+Description=ContextVerse server (contextd)
+Documentation=https://github.com/abyssmemes/contextverse
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=contextd
+Group=contextd
+# Prefer: contextd server unit --server-dir /srv/contextverse | tee …
+ExecStart=/usr/local/bin/contextd server start --server-dir /srv/contextverse --open=false
+Restart=always
+RestartSec=3
+TimeoutStopSec=30
+KillSignal=SIGTERM
+KillMode=mixed
+LimitNOFILE=65536
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/srv/contextverse
+
+# Readiness: GET /health and GET /api/v1/health → HTTP 200 JSON {"status":"ok","version":"…"}
+
+[Install]
+WantedBy=multi-user.target

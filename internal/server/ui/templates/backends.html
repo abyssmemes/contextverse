@@ -2,94 +2,102 @@
 <!doctype html>
 <html lang="en">
 <head>{{template "head" .}}</head>
-<body>
-  <div class="shell">
-    {{template "topbar" .}}
-    <h2>Storage backend</h2>
-    {{if .Flash}}<div class="flash ok">{{.Flash}}</div>{{end}}
-    {{if .FlashError}}<div class="flash err">{{.FlashError}}</div>{{end}}
-
-    <div class="panel">
-      <p>Active driver: <strong>{{.Data.Driver}}</strong></p>
-      {{if .Data.GitRemote}}<p class="muted">git remote: <span class="mono">{{.Data.GitRemote}}</span></p>{{end}}
-      {{if .Data.S3Bucket}}<p class="muted">s3: <span class="mono">{{.Data.S3Bucket}}</span> {{.Data.S3Endpoint}}</p>{{end}}
-      {{if .Data.SQLDSN}}<p class="muted">sql dsn configured</p>{{end}}
-      <p>Status: <strong>{{.Data.Status}}</strong></p>
-      <div class="actions">
-        <form method="post" action="/ui/backends/test" style="display:inline">
-          <button class="btn secondary" type="submit">Test connectivity + CAS</button>
-        </form>
-      </div>
+<body class="app">
+  {{template "app-open" .}}
+  <header class="page-head">
+    <div>
+      <h1>Storage backend</h1>
+      <p class="lede">Connect, test, or migrate — same capabilities as <span class="mono">contextd backend</span>.</p>
     </div>
+  </header>
 
-    <div class="panel">
-      <h2 style="font-size:1.1rem">Connect / switch</h2>
-      <p class="muted">Saves connection settings and sets the active driver. Does <strong>not</strong> copy existing objects — use migrate for that.</p>
-      <form method="post" action="/ui/backends/set">
-        <label>Driver</label>
-        <select name="driver">
-          {{range .Data.Drivers}}
-          <option value="{{.}}" {{if eq . $.Data.Driver}}selected{{end}}>{{.}}</option>
-          {{end}}
-        </select>
-
-        <label>Git remote</label>
-        <input name="git_remote" value="{{.Data.GitRemote}}" placeholder="https://… or git@…">
-        <label>Git user (HTTPS)</label>
-        <input name="git_user" value="{{.Data.GitUser}}" placeholder="git">
-        <label>Git token (HTTPS PAT)</label>
-        <input name="git_token" type="password" autocomplete="off" placeholder="{{if .Data.HasGitToken}}leave blank to keep{{else}}CONTEXTVERSE_GIT_TOKEN / GITHUB_TOKEN also work{{end}}">
-        <label>Git SSH private key path</label>
-        <input name="git_ssh_key" value="{{.Data.GitSSHKey}}" placeholder="~/.ssh/id_ed25519">
-
-        <label>S3 endpoint</label>
-        <input name="s3_endpoint" value="{{.Data.S3Endpoint}}" placeholder="http://127.0.0.1:9000">
-        <label>S3 bucket</label>
-        <input name="s3_bucket" value="{{.Data.S3Bucket}}">
-        <label>S3 region</label>
-        <input name="s3_region" value="{{.Data.S3Region}}" placeholder="us-east-1">
-        <label>S3 prefix</label>
-        <input name="s3_prefix" value="{{.Data.S3Prefix}}">
-        <label>S3 access key</label>
-        <input name="s3_access_key" value="{{.Data.S3AccessKey}}" autocomplete="off">
-        <label>S3 secret key</label>
-        <input name="s3_secret_key" type="password" autocomplete="off" placeholder="{{if .Data.HasS3Secret}}leave blank to keep{{end}}">
-
-        <label>Postgres DSN</label>
-        <input name="sql_dsn" type="password" autocomplete="off" placeholder="{{if .Data.SQLDSN}}leave blank to keep{{else}}postgres://user:pass@host:5432/db?sslmode=disable{{end}}">
-
-        <div class="actions">
-          <button class="btn accent" type="submit">Save &amp; switch</button>
-        </div>
+  <div class="panel">
+    <h2 class="section-title">Active</h2>
+    <p>Driver: <strong>{{.Data.Driver}}</strong> · Status: <strong>{{.Data.Status}}</strong></p>
+    {{if .Data.GitRemote}}<p class="muted">git remote: <span class="mono">{{.Data.GitRemote}}</span></p>{{end}}
+    {{if .Data.S3Bucket}}<p class="muted">s3: <span class="mono">{{.Data.S3Bucket}}</span> {{.Data.S3Endpoint}}</p>{{end}}
+    {{if .Data.SQLDSN}}<p class="muted">sql dsn configured</p>{{end}}
+    <div class="actions">
+      <form method="post" action="/ui/backends/test" style="display:inline">
+        <button class="btn secondary" type="submit">Test connectivity + CAS</button>
       </form>
     </div>
-
-    <div class="panel">
-      <h2 style="font-size:1.1rem">Migrate &amp; switch</h2>
-      <p class="muted">Copies all stored objects for every space from the current backend to the target, then switches config. Destructive to the destination if keys already exist (overwritten).</p>
-      <form method="post" action="/ui/backends/migrate">
-        <label>Target driver</label>
-        <select name="driver">
-          {{range .Data.Drivers}}
-          <option value="{{.}}">{{.}}</option>
-          {{end}}
-        </select>
-        <label>Git remote (if target = git)</label>
-        <input name="git_remote" value="{{.Data.GitRemote}}" placeholder="required when migrating to git">
-        <label>S3 / SQL fields</label>
-        <p class="muted">Uses the connection settings already saved above (or fill Save &amp; switch first).</p>
-        <label class="check">
-          <input type="checkbox" name="confirm" value="migrate" required>
-          I understand this copies all space objects and switches the active backend
-        </label>
-        <div class="actions">
-          <button class="btn danger" type="submit">Migrate &amp; switch</button>
-        </div>
-      </form>
-    </div>
-
-    <div class="footer">contextd {{.Version}}</div>
   </div>
+
+  <div class="panel">
+    <h2 class="section-title">Connect / switch</h2>
+    <p class="muted">Saves connection settings and sets the active driver. Does <strong>not</strong> copy existing objects — use migrate for that.</p>
+    <form method="post" action="/ui/backends/set">
+      <label for="driver">Driver</label>
+      <select id="driver" name="driver">
+        {{range .Data.Drivers}}
+        <option value="{{.}}" {{if eq . $.Data.Driver}}selected{{end}}>{{.}}</option>
+        {{end}}
+      </select>
+
+      <fieldset>
+        <legend>Git</legend>
+        <label for="git_remote">Remote</label>
+        <input id="git_remote" name="git_remote" value="{{.Data.GitRemote}}" placeholder="https://… or git@…">
+        <label for="git_user">User (HTTPS)</label>
+        <input id="git_user" name="git_user" value="{{.Data.GitUser}}" placeholder="git">
+        <label for="git_token">Token (HTTPS PAT)</label>
+        <input id="git_token" name="git_token" type="password" autocomplete="off" placeholder="{{if .Data.HasGitToken}}leave blank to keep{{else}}CONTEXTVERSE_GIT_TOKEN / GITHUB_TOKEN also work{{end}}">
+        <label for="git_ssh_key">SSH private key path</label>
+        <input id="git_ssh_key" name="git_ssh_key" value="{{.Data.GitSSHKey}}" placeholder="~/.ssh/id_ed25519">
+      </fieldset>
+
+      <fieldset>
+        <legend>S3 / MinIO</legend>
+        <label for="s3_endpoint">Endpoint</label>
+        <input id="s3_endpoint" name="s3_endpoint" value="{{.Data.S3Endpoint}}" placeholder="http://127.0.0.1:9000">
+        <label for="s3_bucket">Bucket</label>
+        <input id="s3_bucket" name="s3_bucket" value="{{.Data.S3Bucket}}">
+        <label for="s3_region">Region</label>
+        <input id="s3_region" name="s3_region" value="{{.Data.S3Region}}" placeholder="us-east-1">
+        <label for="s3_prefix">Prefix</label>
+        <input id="s3_prefix" name="s3_prefix" value="{{.Data.S3Prefix}}">
+        <label for="s3_access_key">Access key</label>
+        <input id="s3_access_key" name="s3_access_key" value="{{.Data.S3AccessKey}}" autocomplete="off">
+        <label for="s3_secret_key">Secret key</label>
+        <input id="s3_secret_key" name="s3_secret_key" type="password" autocomplete="off" placeholder="{{if .Data.HasS3Secret}}leave blank to keep{{end}}">
+      </fieldset>
+
+      <fieldset>
+        <legend>SQL</legend>
+        <label for="sql_dsn">Postgres DSN</label>
+        <input id="sql_dsn" name="sql_dsn" type="password" autocomplete="off" placeholder="{{if .Data.SQLDSN}}leave blank to keep{{else}}postgres://user:pass@host:5432/db?sslmode=disable{{end}}">
+      </fieldset>
+
+      <div class="actions">
+        <button class="btn accent" type="submit">Save &amp; switch</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h2 class="section-title">Migrate &amp; switch</h2>
+    <p class="muted">Copies all stored objects for every space from the current backend to the target, then switches config. Destination keys may be overwritten.</p>
+    <form method="post" action="/ui/backends/migrate">
+      <label for="mig_driver">Target driver</label>
+      <select id="mig_driver" name="driver">
+        {{range .Data.Drivers}}
+        <option value="{{.}}">{{.}}</option>
+        {{end}}
+      </select>
+      <label for="mig_git">Git remote (if target = git)</label>
+      <input id="mig_git" name="git_remote" value="{{.Data.GitRemote}}" placeholder="required when migrating to git">
+      <p class="muted">S3 / SQL use the connection settings saved above.</p>
+      <label class="check">
+        <input type="checkbox" name="confirm" value="migrate" required>
+        I understand this copies all space objects and switches the active backend
+      </label>
+      <div class="actions">
+        <button class="btn danger" type="submit">Migrate &amp; switch</button>
+      </div>
+    </form>
+  </div>
+  {{template "app-close" .}}
 </body>
 </html>
 {{end}}

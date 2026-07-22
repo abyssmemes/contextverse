@@ -59,19 +59,25 @@ func (s *Server) requireLegacy(w http.ResponseWriter, r *http.Request, p *auth.P
 }
 
 func (s *Server) requireFileWrite(w http.ResponseWriter, r *http.Request, space, filePath string) bool {
+	if s.canFileWrite(principalFrom(r.Context()), space, filePath) {
+		return true
+	}
+	s.deny(w, r, fmt.Sprintf("missing create/update on spaces/%s/files/%s", space, strings.TrimPrefix(filePath, "/")))
+	return false
+}
+
+func (s *Server) canFileWrite(p *auth.Principal, space, filePath string) bool {
+	if p == nil {
+		return false
+	}
 	acl := fmt.Sprintf("spaces/%s/files/%s", space, strings.TrimPrefix(filePath, "/"))
-	p := principalFrom(r.Context())
-	if p == nil || s.Authz == nil {
-		return s.requireCap(w, r, acl, authz.CapUpdate)
+	if s.Authz == nil {
+		return auth.CanWrite(p.Role)
 	}
 	pols := p.Policies
 	if len(pols) == 0 && p.Role != "" {
 		pols = []string{string(p.Role)}
 	}
 	vars := s.authzVars()
-	if s.Authz.Allow(pols, acl, authz.CapUpdate, vars) || s.Authz.Allow(pols, acl, authz.CapCreate, vars) {
-		return true
-	}
-	s.deny(w, r, fmt.Sprintf("missing create/update on %s", acl))
-	return false
+	return s.Authz.Allow(pols, acl, authz.CapUpdate, vars) || s.Authz.Allow(pols, acl, authz.CapCreate, vars)
 }

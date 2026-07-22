@@ -1,0 +1,10 @@
+id: cursor
+display: Cursor
+detect:
+  - path: ~/.cursor/
+  - bin: cursor
+mechanism: rules-slot
+target: "{{cwd}}/.cursor/rules/contextverse.mdc"
+merge: marked-block
+payload: payload.tmpl
+notes: static snapshot refreshed on activate; project-local rules slot

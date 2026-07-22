@@ -2,10 +2,12 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
 
@@ -39,6 +41,7 @@ func (s *Server) registerUI(mux *http.ServeMux) {
 	mux.Handle("POST /ui/spaces", s.uiAuth(s.handleUICreateSpace))
 	mux.Handle("GET /ui/spaces/{space}", s.uiAuth(s.handleUISpace))
 	mux.Handle("GET /ui/spaces/{space}/files/{path...}", s.uiAuth(s.handleUIFile))
+	mux.Handle("POST /ui/spaces/{space}/files/{path...}", s.uiAuth(s.handleUIFileSave))
 	mux.Handle("GET /ui/users", s.uiAuth(s.handleUIUsers))
 	mux.Handle("POST /ui/users", s.uiAuth(s.handleUIAddUser))
 	mux.Handle("GET /ui/backends", s.uiAuth(s.handleUIBackends))
@@ -107,21 +110,31 @@ func (s *Server) handleSetupGet(w http.ResponseWriter, r *http.Request) {
 	pg := ui.Page{
 		Title:   "Setup",
 		Version: version.Version,
-		Data: map[string]any{
-			"DataDir":  s.setupDataDir,
-			"Address":  s.setupAddr,
-			"Port":     s.setupPort,
-			"Space":    "team",
-			"Admin":    "admin",
-			"Template": "solo-default",
-		},
+		Data:    s.setupDefaults(nil),
 	}
 	_ = ui.Render(w, "setup.html", pg)
 }
 
+func (s *Server) setupDefaults(override map[string]any) map[string]any {
+	d := map[string]any{
+		"DataDir":  s.setupDataDir,
+		"Address":  s.setupAddr,
+		"Port":     s.setupPort,
+		"Space":    "team",
+		"Admin":    "admin",
+		"Template": "solo-default",
+		"Backend":  "local",
+		"Step":     1,
+	}
+	for k, v := range override {
+		d[k] = v
+	}
+	return d
+}
+
 func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		s.setupErr(w, "invalid form")
+		s.setupErr(w, r, "invalid form", 1)
 		return
 	}
 	dataDir := strings.TrimSpace(r.FormValue("data_dir"))
@@ -131,8 +144,12 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 	adminName := strings.TrimSpace(r.FormValue("admin"))
 	templateName := strings.TrimSpace(r.FormValue("template"))
 	backend := strings.TrimSpace(r.FormValue("backend"))
-	if dataDir == "" || address == "" || port == 0 || spaceName == "" || adminName == "" {
-		s.setupErr(w, "all fields are required")
+	if dataDir == "" || address == "" || port == 0 {
+		s.setupErr(w, r, "server location fields are required", 1)
+		return
+	}
+	if spaceName == "" || adminName == "" {
+		s.setupErr(w, r, "admin and space are required", 2)
 		return
 	}
 	if templateName == "" {
@@ -142,7 +159,7 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 		backend = "local"
 	}
 	if config.ServerExists(dataDir) {
-		s.setupErr(w, "server already initialized at "+dataDir)
+		s.setupErr(w, r, "server already initialized at "+dataDir, 1)
 		return
 	}
 
@@ -154,32 +171,32 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 		Defaults: config.ServerDefaults{Space: spaceName},
 	}
 	if err := config.SaveServer(cfg); err != nil {
-		s.setupErr(w, err.Error())
+		s.setupErr(w, r, err.Error(), 4)
 		return
 	}
 	store, err := auth.OpenStore(dataDir)
 	if err != nil {
-		s.setupErr(w, err.Error())
+		s.setupErr(w, r, err.Error(), 4)
 		return
 	}
 	if err := store.AddUser(adminName, auth.RoleAdmin); err != nil {
-		s.setupErr(w, err.Error())
+		s.setupErr(w, r, err.Error(), 2)
 		return
 	}
 	if pw := r.FormValue("password"); strings.TrimSpace(pw) != "" {
 		if err := store.SetPassword(adminName, pw); err != nil {
-			s.setupErr(w, err.Error())
+			s.setupErr(w, r, err.Error(), 2)
 			return
 		}
 	}
 	token, _, err := store.CreateToken(adminName, "setup-ui")
 	if err != nil {
-		s.setupErr(w, err.Error())
+		s.setupErr(w, r, err.Error(), 4)
 		return
 	}
 	svc := &spacesvc.Service{DataDir: dataDir, Backend: cfg.Backend}
 	if _, err := svc.Create(r.Context(), spaceName, templateName, true); err != nil {
-		s.setupErr(w, err.Error())
+		s.setupErr(w, r, err.Error(), 4)
 		return
 	}
 
@@ -208,19 +225,54 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 	_ = ui.Render(w, "setup_done.html", pg)
 }
 
-func (s *Server) setupErr(w http.ResponseWriter, msg string) {
+func (s *Server) setupErr(w http.ResponseWriter, r *http.Request, msg string, step int) {
+	if step < 1 {
+		step = 1
+	}
+	vals := s.setupDefaults(map[string]any{
+		"Step":       step,
+		"DataDir":    strings.TrimSpace(r.FormValue("data_dir")),
+		"Address":    strings.TrimSpace(r.FormValue("address")),
+		"Port":       r.FormValue("port"),
+		"Space":      strings.TrimSpace(r.FormValue("space")),
+		"Admin":      strings.TrimSpace(r.FormValue("admin")),
+		"Template":   strings.TrimSpace(r.FormValue("template")),
+		"Backend":    strings.TrimSpace(r.FormValue("backend")),
+		"GitRemote":  r.FormValue("git_remote"),
+		"GitUser":    r.FormValue("git_user"),
+		"GitSSHKey":  r.FormValue("git_ssh_key"),
+		"S3Endpoint": r.FormValue("s3_endpoint"),
+		"S3Bucket":   r.FormValue("s3_bucket"),
+		"S3Region":   r.FormValue("s3_region"),
+		"S3Prefix":   r.FormValue("s3_prefix"),
+		"S3AccessKey": r.FormValue("s3_access_key"),
+	})
+	if vals["DataDir"] == "" {
+		vals["DataDir"] = s.setupDataDir
+	}
+	if vals["Address"] == "" {
+		vals["Address"] = s.setupAddr
+	}
+	if vals["Port"] == "" || vals["Port"] == "0" {
+		vals["Port"] = s.setupPort
+	}
+	if vals["Space"] == "" {
+		vals["Space"] = "team"
+	}
+	if vals["Admin"] == "" {
+		vals["Admin"] = "admin"
+	}
+	if vals["Template"] == "" {
+		vals["Template"] = "solo-default"
+	}
+	if vals["Backend"] == "" {
+		vals["Backend"] = "local"
+	}
 	pg := ui.Page{
 		Title:      "Setup",
 		Version:    version.Version,
 		FlashError: msg,
-		Data: map[string]any{
-			"DataDir":  s.setupDataDir,
-			"Address":  s.setupAddr,
-			"Port":     s.setupPort,
-			"Space":    "team",
-			"Admin":    "admin",
-			"Template": "solo-default",
-		},
+		Data:       vals,
 	}
 	w.WriteHeader(http.StatusBadRequest)
 	_ = ui.Render(w, "setup.html", pg)
@@ -359,21 +411,131 @@ func (s *Server) handleUISpace(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUIFile(w http.ResponseWriter, r *http.Request) {
+	s.renderUIFile(w, r, "", "")
+}
+
+func (s *Server) handleUIFileSave(w http.ResponseWriter, r *http.Request) {
 	p := principalFrom(r.Context())
 	spaceName := r.PathValue("space")
 	path := r.PathValue("path")
-	data, ver, err := s.Spaces.GetFile(r.Context(), spaceName, path)
+	if !s.canFileWrite(p, spaceName, path) {
+		s.renderUIFile(w, r, "", "permission denied — your policy cannot write this path")
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		s.renderUIFile(w, r, "", "invalid form")
+		return
+	}
+	expected := storage.Version(strings.TrimSpace(r.FormValue("version")))
+
+	if r.FormValue("action") == "restore" {
+		n, err := strconv.Atoi(strings.TrimSpace(r.FormValue("restore_version")))
+		if err != nil || n < 1 {
+			s.renderUIFile(w, r, "", "invalid restore version")
+			return
+		}
+		data, _, err := s.Spaces.GetFileVersion(r.Context(), spaceName, path, n)
+		if errors.Is(err, storage.ErrNotFound) {
+			s.renderUIFile(w, r, "", "version not found")
+			return
+		}
+		if err != nil {
+			s.renderUIFile(w, r, "", err.Error())
+			return
+		}
+		ver, err := s.Spaces.PutFile(r.Context(), spaceName, path, data, expected)
+		if errors.Is(err, storage.ErrConflict) {
+			s.renderUIFile(w, r, "", "version conflict — reload and try again")
+			return
+		}
+		if err != nil {
+			s.renderUIFile(w, r, "", err.Error())
+			return
+		}
+		_, _ = s.bumpHead(r.Context(), spaceName)
+		logx.L().Info("ui file restored", "space", spaceName, "path", path, "from", n, "user", p.User, "version", string(ver))
+		http.Redirect(w, r, "/ui/spaces/"+spaceName+"/files/"+path, http.StatusSeeOther)
+		return
+	}
+
+	content := r.FormValue("content")
+	ver, err := s.Spaces.PutFile(r.Context(), spaceName, path, []byte(content), expected)
+	if errors.Is(err, storage.ErrConflict) {
+		s.renderUIFile(w, r, "", "version conflict — reload and try again")
+		return
+	}
 	if err != nil {
+		s.renderUIFile(w, r, "", err.Error())
+		return
+	}
+	_, _ = s.bumpHead(r.Context(), spaceName)
+	logx.L().Info("ui file saved", "space", spaceName, "path", path, "user", p.User, "version", string(ver))
+	http.Redirect(w, r, "/ui/spaces/"+spaceName+"/files/"+path+"?flash=saved", http.StatusSeeOther)
+}
+
+func (s *Server) renderUIFile(w http.ResponseWriter, r *http.Request, flash, flashErr string) {
+	p := principalFrom(r.Context())
+	spaceName := r.PathValue("space")
+	path := r.PathValue("path")
+	if flash == "" {
+		flash = r.URL.Query().Get("flash")
+	}
+
+	meta, versions, _ := s.Spaces.ListFileVersions(r.Context(), spaceName, path)
+	current := 0
+	if meta != nil {
+		current = meta.Current
+	}
+
+	var (
+		data    []byte
+		ver     storage.Version
+		err     error
+		viewing int
+	)
+	if vq := strings.TrimSpace(r.URL.Query().Get("version")); vq != "" {
+		n, aerr := strconv.Atoi(vq)
+		if aerr != nil || n < 1 {
+			http.Error(w, "invalid version", http.StatusBadRequest)
+			return
+		}
+		var info *storage.FileVersionInfo
+		data, info, err = s.Spaces.GetFileVersion(r.Context(), spaceName, path, n)
+		if err == nil && info != nil {
+			viewing = info.Version
+			ver = storage.FormatFileVersion(info.Version)
+		}
+	} else {
+		data, ver, err = s.Spaces.GetFile(r.Context(), spaceName, path)
+	}
+	if errors.Is(err, storage.ErrNotFound) {
 		http.NotFound(w, r)
 		return
 	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	historical := viewing > 0 && viewing != current
+	canWrite := s.canFileWrite(p, spaceName, path)
+	editable := utf8.Valid(data) && !historical && canWrite
+
 	pg := s.pageBase("spaces", p)
 	pg.Title = path
+	pg.Flash = flash
+	pg.FlashError = flashErr
 	pg.Data = map[string]any{
-		"Space":   spaceName,
-		"Path":    path,
-		"Version": string(ver),
-		"Content": string(data),
+		"Space":       spaceName,
+		"Path":        path,
+		"Version":     string(ver),
+		"Current":     current,
+		"Viewing":     viewing,
+		"Historical":  historical,
+		"Content":     string(data),
+		"CanWrite":    canWrite,
+		"Editable":    editable,
+		"Versions":    versions,
 	}
 	_ = ui.Render(w, "file.html", pg)
 }

@@ -2,15 +2,16 @@
 <!doctype html>
 <html lang="en">
 <head>{{template "head" .}}</head>
-<body>
-  <div class="shell">
+<body class="auth">
+  <div class="shell setup">
+    <div class="auth-top">{{template "theme-btn" .}}</div>
     <section class="hero">
       <span class="brand">ContextVerse</span>
       <h1>Server ready</h1>
       <p>Copy the admin token now — it is shown once. Then open the dashboard.</p>
     </section>
-    <div class="panel" style="max-width:640px;margin:0 auto;">
-      <h2>Admin token</h2>
+    <div class="panel">
+      <h2 class="section-title">Admin token</h2>
       <div class="token-box mono">{{.Data.Token}}</div>
       <p class="muted">Space <strong>{{.Data.Space}}</strong> · listen <strong>{{.Data.Listen}}</strong></p>
       <p class="muted mono">{{.Data.DataDir}}</p>
@@ -18,6 +19,7 @@
         <a class="btn accent" href="/">Open dashboard</a>
       </div>
     </div>
+    <div class="footer">contextd {{.Version}}</div>
   </div>
 </body>
 </html>

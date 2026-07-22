@@ -2,11 +2,16 @@
 <!doctype html>
 <html lang="en">
 <head>{{template "head" .}}</head>
-<body>
-  <div class="shell">
-    {{template "topbar" .}}
-    <h2>Spaces</h2>
-    <div class="panel">
+<body class="app">
+  {{template "app-open" .}}
+  <header class="page-head">
+    <div>
+      <h1>Spaces</h1>
+      <p class="lede">Context spaces on this server. Open one to browse files.</p>
+    </div>
+  </header>
+  <div class="panel">
+    <div class="table-wrap">
       <table>
         <thead><tr><th>Name</th><th>Head</th><th></th></tr></thead>
         <tbody>
@@ -14,28 +19,33 @@
           <tr>
             <td><strong>{{.Name}}</strong></td>
             <td class="mono muted">{{.Head}}</td>
-            <td><a href="/ui/spaces/{{.Name}}">Open</a></td>
+            <td><a class="btn secondary" style="padding:6px 12px;font-size:0.85rem;" href="/ui/spaces/{{.Name}}">Open</a></td>
           </tr>
         {{else}}
-          <tr><td colspan="3" class="muted">No spaces yet</td></tr>
+          <tr><td colspan="3">
+            <div class="empty">
+              <strong>No spaces yet</strong>
+              Create one below{{if ne .Role "admin"}} or ask an admin{{end}}.
+            </div>
+          </td></tr>
         {{end}}
         </tbody>
       </table>
     </div>
-    {{if eq .Role "admin"}}
-    <div class="panel">
-      <h2>Create space</h2>
-      <form method="post" action="/ui/spaces">
-        <label>Name</label>
-        <input name="name" required pattern="[a-zA-Z0-9_-]+">
-        <label>Template</label>
-        <input name="template" value="solo-default">
-        <div class="actions"><button class="btn accent" type="submit">Create</button></div>
-      </form>
-    </div>
-    {{end}}
-    <div class="footer">contextd {{.Version}}</div>
   </div>
+  {{if eq .Role "admin"}}
+  <div class="panel">
+    <h2 class="section-title">Create space</h2>
+    <form method="post" action="/ui/spaces">
+      <label for="name">Name</label>
+      <input id="name" name="name" required pattern="[a-zA-Z0-9_-]+" placeholder="team">
+      <label for="template">Template</label>
+      <input id="template" name="template" value="solo-default">
+      <div class="actions"><button class="btn accent" type="submit">Create</button></div>
+    </form>
+  </div>
+  {{end}}
+  {{template "app-close" .}}
 </body>
 </html>
 {{end}}

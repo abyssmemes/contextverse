@@ -3,14 +3,18 @@ package cli
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -20,6 +24,7 @@ import (
 	"github.com/abyssmemes/contextverse/internal/logx"
 	"github.com/abyssmemes/contextverse/internal/server"
 	"github.com/abyssmemes/contextverse/internal/spacesvc"
+	"github.com/abyssmemes/contextverse/internal/tui"
 )
 
 var flagServerDir string
@@ -200,6 +205,7 @@ func newServerCmd() *cobra.Command {
 	cmd.AddCommand(newServerStatusCmd())
 	cmd.AddCommand(newServerHealthCmd())
 	cmd.AddCommand(newServerLogsCmd())
+	cmd.AddCommand(newServerUnitCmd())
 	return cmd
 }
 
@@ -242,9 +248,23 @@ func newServerStartCmd() *cobra.Command {
 			if daemon {
 				return fmt.Errorf("daemon mode not yet implemented — run in foreground (or use systemd/launchd)")
 			}
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				return err
+			}
 			pidPath := filepath.Join(dir, "pid")
 			_ = os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644)
 			defer os.Remove(pidPath)
+			listenAddr := address
+			listenPort := port
+			if config.ServerExists(dir) {
+				if cfg, err := config.LoadServer(dir); err == nil {
+					listenAddr = cfg.Listen.Address
+					listenPort = cfg.Listen.Port
+				}
+			}
+			if err := checkListenFree(listenAddr, listenPort); err != nil {
+				return err
+			}
 			if openUI {
 				url := srv.Cfg.BaseURL()
 				if !config.ServerExists(dir) {
@@ -255,14 +275,71 @@ func newServerStartCmd() *cobra.Command {
 					_ = execOpen(url)
 				}()
 			}
-			return srv.ListenAndServe()
+
+			wishCtx, wishCancel := context.WithCancel(context.Background())
+			defer wishCancel()
+			if config.ServerExists(dir) {
+				if cfg, err := config.LoadServer(dir); err == nil && cfg.TUI.SSH.Enabled {
+					listen := cfg.TUI.SSH.Listen
+					if listen == "" {
+						listen = config.DefaultTUISSHListen
+					}
+					go func() {
+						logx.L().Info("tui ssh (Wish) listening", "addr", listen)
+						if err := tui.ListenAndServeSSH(wishCtx, tui.SSHOptions{DataDir: dir, Listen: listen}); err != nil && wishCtx.Err() == nil {
+							logx.L().Error("tui ssh stopped", "err", err)
+						}
+					}()
+				}
+			}
+
+			return runServerUntilSignal(srv, wishCancel)
 		},
 	}
-	cmd.Flags().BoolVar(&daemon, "daemon", false, "run as daemon (not yet implemented)")
+	cmd.Flags().BoolVar(&daemon, "daemon", false, "run as daemon (not yet implemented — use systemd/launchd)")
 	cmd.Flags().StringVar(&address, "address", config.DefaultListenAddr, "listen address when running setup UI")
 	cmd.Flags().IntVar(&port, "port", config.DefaultListenPort, "listen port when running setup UI")
 	cmd.Flags().BoolVar(&openUI, "open", true, "open setup/dashboard in a browser (default on)")
 	return cmd
+}
+
+// runServerUntilSignal serves until SIGINT/SIGTERM, then graceful Shutdown.
+func runServerUntilSignal(srv *server.Server, onStop func()) error {
+	ignoreTerminalStopSignals()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- srv.ListenAndServe()
+	}()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+
+	select {
+	case err := <-errCh:
+		if err == nil || errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	case sig := <-sigCh:
+		logx.L().Info("shutdown signal", "signal", sig.String())
+		if onStop != nil {
+			onStop()
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(ctx); err != nil {
+			logx.L().Error("graceful shutdown failed", "err", err)
+			return err
+		}
+		err := <-errCh
+		if err == nil || errors.Is(err, http.ErrServerClosed) {
+			logx.L().Info("server stopped")
+			return nil
+		}
+		return err
+	}
 }
 
 func execOpen(url string) error {
@@ -279,10 +356,37 @@ func execOpen(url string) error {
 	}
 }
 
+func checkListenFree(address string, port int) error {
+	if port <= 0 {
+		return nil
+	}
+	addr := fmt.Sprintf("%s:%d", address, port)
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		hint := fmt.Sprintf("port %d is busy", port)
+		if raw, rerr := os.ReadFile(filepath.Join(mustServerDir(), "pid")); rerr == nil {
+			hint += fmt.Sprintf(" (pid file says %s — try: contextd server stop)", strings.TrimSpace(string(raw)))
+		} else {
+			hint += " — another contextd may still be listening; try: contextd server stop, or: lsof -iTCP:" + strconv.Itoa(port) + " -sTCP:LISTEN"
+		}
+		return fmt.Errorf("cannot bind %s: %w\n%s", addr, err, hint)
+	}
+	_ = ln.Close()
+	return nil
+}
+
+func mustServerDir() string {
+	dir, err := resolveServerDir()
+	if err != nil {
+		return ""
+	}
+	return dir
+}
+
 func newServerStopCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "stop",
-		Short: "Stop a daemonized server (via pid file)",
+		Short: "Stop a server started under this data dir (via pid file)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir, err := resolveServerDir()
 			if err != nil {
@@ -290,7 +394,7 @@ func newServerStopCmd() *cobra.Command {
 			}
 			raw, err := os.ReadFile(filepath.Join(dir, "pid"))
 			if err != nil {
-				return fmt.Errorf("no pid file — is the server running under this data dir?")
+				return fmt.Errorf("no pid file — is the server running under this data dir?\nTry: lsof -iTCP:8743 -sTCP:LISTEN")
 			}
 			pid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
 			if err != nil {
@@ -300,10 +404,14 @@ func newServerStopCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := proc.Signal(os.Interrupt); err != nil {
-				return fmt.Errorf("signal pid %d: %w", pid, err)
+			if err := proc.Signal(syscall.SIGTERM); err != nil {
+				// Suspended / already exiting — last resort.
+				if err2 := proc.Kill(); err2 != nil {
+					return fmt.Errorf("signal pid %d: %v (kill: %w)", pid, err, err2)
+				}
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "sent interrupt to pid %d\n", pid)
+			_ = os.Remove(filepath.Join(dir, "pid"))
+			fmt.Fprintf(cmd.OutOrStdout(), "stopped pid %d\n", pid)
 			return nil
 		},
 	}
@@ -397,6 +505,89 @@ func newServerLogsCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func newServerUnitCmd() *cobra.Command {
+	var (
+		outPath string
+		binPath string
+		user     string
+	)
+	cmd := &cobra.Command{
+		Use:   "unit",
+		Short: "Print a systemd unit for this server (install under /etc/systemd/system/)",
+		Long: `Writes a Type=simple unit with Restart=always, SIGTERM graceful stop,
+and --open=false. Pipe to a file or use --out.
+
+  contextd server unit --server-dir /srv/contextverse | sudo tee /etc/systemd/system/contextd.service
+  sudo systemctl daemon-reload && sudo systemctl enable --now contextd
+
+Upgrade one node: install new binary, then systemctl restart contextd.
+Fleet: drain from LB → restart → wait for GET /health 200 → undrain.
+Never use kill -9 for upgrades.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dir, err := resolveServerDir()
+			if err != nil {
+				return err
+			}
+			if binPath == "" {
+				binPath, err = os.Executable()
+				if err != nil {
+					binPath = "contextd"
+				}
+			}
+			if user == "" {
+				user = "contextd"
+			}
+			unit := renderSystemdUnit(binPath, dir, user)
+			if outPath == "" {
+				_, err = fmt.Fprint(cmd.OutOrStdout(), unit)
+				return err
+			}
+			if err := os.WriteFile(outPath, []byte(unit), 0o644); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "wrote %s\n", outPath)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&outPath, "out", "", "write unit file to path instead of stdout")
+	cmd.Flags().StringVar(&binPath, "bin", "", "contextd binary path (default: this executable)")
+	cmd.Flags().StringVar(&user, "user", "contextd", "User=/Group= in the unit")
+	return cmd
+}
+
+func renderSystemdUnit(bin, dataDir, user string) string {
+	return fmt.Sprintf(`[Unit]
+Description=ContextVerse server (contextd)
+Documentation=https://github.com/abyssmemes/contextverse
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%s
+Group=%s
+ExecStart=%s server start --server-dir %s --open=false
+Restart=always
+RestartSec=3
+TimeoutStopSec=30
+KillSignal=SIGTERM
+KillMode=mixed
+LimitNOFILE=65536
+
+# Hardening (relax ReadWritePaths if your data dir differs)
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=%s
+
+# Readiness for LB / orchestrators: GET http://<listen>/health → 200 {"status":"ok"}
+
+[Install]
+WantedBy=multi-user.target
+`, user, user, bin, dataDir, dataDir)
 }
 
 func newUserCmd() *cobra.Command {

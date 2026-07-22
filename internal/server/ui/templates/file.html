@@ -2,15 +2,99 @@
 <!doctype html>
 <html lang="en">
 <head>{{template "head" .}}</head>
-<body>
-  <div class="shell">
-    {{template "topbar" .}}
-    <p><a href="/ui/spaces/{{.Data.Space}}">← {{.Data.Space}}</a></p>
-    <h2 class="mono">{{.Data.Path}}</h2>
-    <p class="muted">etag <span class="mono">{{.Data.Version}}</span></p>
-    <pre class="file-pre">{{.Data.Content}}</pre>
-    <div class="footer">contextd {{.Version}}</div>
+<body class="app">
+  {{template "app-open" .}}
+  <header class="page-head">
+    <div>
+      <h1 class="mono" style="font-size:1.25rem;">{{.Data.Path}}</h1>
+      <p class="lede">
+        <a href="/ui/spaces/{{.Data.Space}}">← {{.Data.Space}}</a>
+        · current <span class="mono">v{{.Data.Current}}</span>
+        {{if .Data.Historical}}
+        · viewing <span class="mono">v{{.Data.Viewing}}</span>
+        {{else}}
+        · version <span class="mono">v{{.Data.Version}}</span>
+        {{end}}
+      </p>
+    </div>
+  </header>
+
+  {{if .Data.Historical}}
+  <div class="flash err">Viewing historical version v{{.Data.Viewing}} (read-only). Restore to make it current.</div>
+  {{end}}
+
+  <div class="file-layout">
+    <div class="file-main">
+      {{if and .Data.CanWrite .Data.Editable}}
+      <form method="post" action="/ui/spaces/{{.Data.Space}}/files/{{.Data.Path}}">
+        <input type="hidden" name="version" value="{{.Data.Version}}">
+        <label for="content" class="sr-only">File contents</label>
+        <textarea id="content" name="content" class="file-editor" rows="28" spellcheck="false">{{.Data.Content}}</textarea>
+        <div class="actions">
+          <button class="btn accent" type="submit">Save</button>
+          <a class="btn secondary" href="/ui/spaces/{{.Data.Space}}">Cancel</a>
+          <span class="muted">CAS write — conflict if version changed.</span>
+        </div>
+      </form>
+      {{else if not (or .Data.Editable .Data.Historical)}}
+        {{if not .Data.CanWrite}}
+        <div class="flash err">Read-only for your role/policy on this path.</div>
+        {{else}}
+        <div class="flash err">Binary file — view only in the UI. Use the API/CLI to replace it.</div>
+        {{end}}
+        <pre class="file-pre">{{.Data.Content}}</pre>
+      {{else}}
+        <pre class="file-pre">{{.Data.Content}}</pre>
+        {{if and .Data.CanWrite .Data.Historical}}
+        <form method="post" action="/ui/spaces/{{.Data.Space}}/files/{{.Data.Path}}" class="actions">
+          <input type="hidden" name="action" value="restore">
+          <input type="hidden" name="restore_version" value="{{.Data.Viewing}}">
+          <input type="hidden" name="version" value="{{.Data.Current}}">
+          <button class="btn accent" type="submit">Restore v{{.Data.Viewing}} as current</button>
+          <a class="btn secondary" href="/ui/spaces/{{.Data.Space}}/files/{{.Data.Path}}">Back to current</a>
+        </form>
+        {{end}}
+      {{end}}
+    </div>
+
+    <aside class="file-versions">
+      <h2>Versions</h2>
+      <p class="muted" style="margin:0 0 12px;">Newest first. Restore writes a new version (history kept).</p>
+      {{if .Data.Versions}}
+      <table class="table compact">
+        <thead>
+          <tr><th>Ver</th><th>When</th><th></th></tr>
+        </thead>
+        <tbody>
+          {{range .Data.Versions}}
+          <tr class="{{if eq .Version $.Data.Current}}is-current{{end}}{{if .Destroyed}} is-destroyed{{end}}">
+            <td class="mono">v{{.Version}}{{if eq .Version $.Data.Current}} ·{{end}}</td>
+            <td class="muted">{{.CreatedAt.Format "2006-01-02 15:04"}}{{if .Destroyed}} · gone{{end}}</td>
+            <td class="row-actions">
+              {{if not .Destroyed}}
+              <a href="/ui/spaces/{{$.Data.Space}}/files/{{$.Data.Path}}?version={{.Version}}">View</a>
+              {{if and $.Data.CanWrite (ne .Version $.Data.Current)}}
+              <form method="post" action="/ui/spaces/{{$.Data.Space}}/files/{{$.Data.Path}}" style="display:inline">
+                <input type="hidden" name="action" value="restore">
+                <input type="hidden" name="restore_version" value="{{.Version}}">
+                <input type="hidden" name="version" value="{{$.Data.Current}}">
+                <button type="submit" class="linkish">Restore</button>
+              </form>
+              {{end}}
+              {{else}}
+              <span class="muted">—</span>
+              {{end}}
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+      {{else}}
+      <p class="muted">No version history yet — save once to start.</p>
+      {{end}}
+    </aside>
   </div>
+  {{template "app-close" .}}
 </body>
 </html>
 {{end}}

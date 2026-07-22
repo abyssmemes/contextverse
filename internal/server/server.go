@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -96,6 +97,9 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle("GET /api/v1/spaces/{space}/files/{path...}", s.auth(s.handleGetFile))
 		mux.Handle("PUT /api/v1/spaces/{space}/files/{path...}", s.auth(s.handlePutFile))
 		mux.Handle("DELETE /api/v1/spaces/{space}/files/{path...}", s.auth(s.handleDeleteFile))
+		mux.Handle("GET /api/v1/spaces/{space}/versions/{path...}", s.auth(s.handleListFileVersions))
+		mux.Handle("DELETE /api/v1/spaces/{space}/versions/{path...}", s.auth(s.handleDestroyFileVersion))
+		mux.Handle("POST /api/v1/spaces/{space}/undelete/{path...}", s.auth(s.handleUndeleteFile))
 		mux.Handle("GET /api/v1/spaces/{space}/head", s.auth(s.handleHead))
 		mux.Handle("GET /api/v1/spaces/{space}/changes", s.auth(s.handleChanges))
 		mux.Handle("POST /api/v1/spaces/{space}/push", s.auth(s.handlePush))
@@ -115,11 +119,12 @@ func (s *Server) ListenAndServe() error {
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-	logx.L().Info("server listening", "addr", s.Cfg.Addr(), "data_dir", s.Cfg.DataDir, "setup", s.NeedsSetup)
 	ln, err := net.Listen("tcp", s.Cfg.Addr())
 	if err != nil {
-		return err
+		return fmt.Errorf("listen %s: %w\nHint: another contextd may still be running. Try: lsof -iTCP:%d -sTCP:LISTEN then contextd server stop (or kill <pid>)",
+			s.Cfg.Addr(), err, s.Cfg.Listen.Port)
 	}
+	logx.L().Info("server listening", "addr", s.Cfg.Addr(), "data_dir", s.Cfg.DataDir, "setup", s.NeedsSetup)
 	if s.Cfg.TLS.Enabled {
 		return s.http.ServeTLS(ln, s.Cfg.TLS.CertFile, s.Cfg.TLS.KeyFile)
 	}
@@ -316,6 +321,28 @@ func (s *Server) handleGetFile(w http.ResponseWriter, r *http.Request) {
 	if !s.requireCap(w, r, fmt.Sprintf("spaces/%s/files/%s", name, path), authz.CapRead) {
 		return
 	}
+	if v := strings.TrimSpace(r.URL.Query().Get("version")); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			writeErr(w, r, http.StatusBadRequest, "invalid_request", "version must be a positive integer", nil)
+			return
+		}
+		data, info, err := s.Spaces.GetFileVersion(r.Context(), name, path, n)
+		if errors.Is(err, storage.ErrNotFound) {
+			writeErr(w, r, http.StatusNotFound, "not_found", "version not found", nil)
+			return
+		}
+		if err != nil {
+			writeErr(w, r, http.StatusInternalServerError, "internal", err.Error(), nil)
+			return
+		}
+		w.Header().Set("ETag", etag(storage.FormatFileVersion(info.Version)))
+		w.Header().Set("X-ContextVerse-File-Version", strconv.Itoa(info.Version))
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(data)
+		return
+	}
 	data, ver, err := s.Spaces.GetFile(r.Context(), name, path)
 	if errors.Is(err, storage.ErrNotFound) {
 		writeErr(w, r, http.StatusNotFound, "not_found", "file not found", nil)
@@ -329,6 +356,72 @@ func (s *Server) handleGetFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
+}
+
+func (s *Server) handleListFileVersions(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("space")
+	path := r.PathValue("path")
+	if !s.requireCap(w, r, fmt.Sprintf("spaces/%s/files/%s", name, path), authz.CapRead) {
+		return
+	}
+	meta, versions, err := s.Spaces.ListFileVersions(r.Context(), name, path)
+	if err != nil {
+		writeErr(w, r, http.StatusInternalServerError, "internal", err.Error(), nil)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"path":     path,
+		"current":  meta.Current,
+		"versions": versions,
+	})
+}
+
+func (s *Server) handleUndeleteFile(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("space")
+	path := r.PathValue("path")
+	if !s.requireFileWrite(w, r, name, path) {
+		return
+	}
+	ver, err := s.Spaces.UndeleteFile(r.Context(), name, path)
+	if errors.Is(err, storage.ErrNotFound) {
+		writeErr(w, r, http.StatusNotFound, "not_found", "nothing to undelete", nil)
+		return
+	}
+	if err != nil {
+		writeErr(w, r, http.StatusInternalServerError, "internal", err.Error(), nil)
+		return
+	}
+	_, _ = s.bumpHead(r.Context(), name)
+	w.Header().Set("ETag", etag(ver))
+	writeJSON(w, http.StatusOK, map[string]any{"version": string(ver)})
+}
+
+func (s *Server) handleDestroyFileVersion(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("space")
+	path := r.PathValue("path")
+	if !s.requireCap(w, r, fmt.Sprintf("spaces/%s/files/%s", name, path), authz.CapDelete) {
+		return
+	}
+	v := strings.TrimSpace(r.URL.Query().Get("version"))
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 {
+		writeErr(w, r, http.StatusBadRequest, "invalid_request", "query version=N required", nil)
+		return
+	}
+	err = s.Spaces.DestroyFileVersion(r.Context(), name, path, n)
+	if errors.Is(err, storage.ErrNotFound) {
+		writeErr(w, r, http.StatusNotFound, "not_found", "version not found", nil)
+		return
+	}
+	if errors.Is(err, storage.ErrInvalidArgument) {
+		writeErr(w, r, http.StatusBadRequest, "invalid_request", err.Error(), nil)
+		return
+	}
+	if err != nil {
+		writeErr(w, r, http.StatusInternalServerError, "internal", err.Error(), nil)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handlePutFile(w http.ResponseWriter, r *http.Request) {

@@ -54,10 +54,14 @@ func newRoot() *cobra.Command {
 	root.AddCommand(newSpaceCmd())
 	root.AddCommand(newBackendCmd())
 	root.AddCommand(newHistoryCmd())
+	root.AddCommand(newFileCmd())
 	root.AddCommand(newServerCmd())
 	root.AddCommand(newUserCmd())
 	root.AddCommand(newAuthCmd())
 	root.AddCommand(newPolicyCmd())
+	root.AddCommand(newContextCmd())
+	root.AddCommand(newPluginCmd())
+	root.AddCommand(newTUICmd())
 	root.AddCommand(newPullCmd())
 	root.AddCommand(newPushCmd())
 	root.AddCommand(newMCPCmd())
@@ -205,7 +209,7 @@ func newActivateCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "activate",
-		Short: "Generate AI entry points (CLAUDE.md, .cursor/rules) in the current directory",
+		Short: "Generate AI entry points and wire session-start delivery for detected clients",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			root, err := resolveSpaceRoot()
 			if err != nil {
@@ -235,7 +239,17 @@ func newActivateCmd() *cobra.Command {
 				Project:   project,
 				Silent:    silent,
 			})
-			return err
+			if err != nil {
+				return err
+			}
+			// Session-start delivery: wire detected client slots (Claude hook, Cursor rules, …).
+			if err := applySessionStartPlugins(root, cwd, project, silent); err != nil {
+				logx.L().Warn("session-start plugins", "err", err)
+				if !silent {
+					fmt.Fprintf(os.Stderr, "session-start plugins: %v\n", err)
+				}
+			}
+			return nil
 		},
 	}
 	cmd.Flags().StringVar(&project, "project", "", "active project name under projects/")

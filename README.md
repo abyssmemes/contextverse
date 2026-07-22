@@ -59,22 +59,26 @@ Optional: seed from a community template — see [`contextverse-templates`](http
 ## Key ideas
 
 - **Context space model** — layered `identity / team / projects` with entry files and freshness/importance metadata.
-- **Entry-point generation** — one space compiles to `CLAUDE.md`, `.cursor/rules/*`, MCP, and more.
-- **Pluggable storage backend** — local FS, S3, or git remote now; SQL/NoSQL later.
-- **Pull-based sync** — clients pull on activate; optional live pings over SSE.
-- **path-based access control** (server) — deny-by-default, explicit-deny-wins, most-specific-path.
+- **Entry-point generation** — one space compiles to `CLAUDE.md`, `.cursor/rules/*`, MCP, and more; session-start hooks via `client-integration` templates.
+- **Pluggable storage backend** — local FS, git, S3/MinIO, SQL — dumb blob+CAS; **core** owns semantics.
+- **Per-file versioning** — Vault KV v2-style (`FileLog`): integer versions displayed as `vN` in CLI, Web UI, and TUI; soft-delete / undelete / destroy.
+- **Pull-based sync** — clients pull on activate; batched push with space head CAS.
+- **Path-based access control** (server) — Vault-style policies + capabilities.
 
 ## Repository layout
 
 ```
 cmd/contextd/          # binary entrypoint
+deploy/                # example systemd unit
 internal/
-  cli/                 # Cobra commands
-  config/              # YAML config + mode detection
-  space/               # space model + embedded templates
-  entrypoint/          # CLAUDE.md + .cursor/rules generation
-  logx/                # structured logging
-scripts/               # install.sh / install.ps1 (Phase 0 install path)
+  cli/                 # Cobra commands (incl. file, tui, server)
+  storage/             # backends + FileLog + space snapshots
+  spacesvc/            # server space ops
+  server/              # HTTP API + admin Web UI
+  tui/                 # Bubble Tea client + server admin
+  plugins/             # session-start delivery
+  auth/ authz/         # tokens + path ACL
+scripts/               # install.sh / install.ps1
 ```
 
 Related repos:

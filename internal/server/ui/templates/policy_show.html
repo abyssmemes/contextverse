@@ -2,16 +2,18 @@
 <!doctype html>
 <html lang="en">
 <head>{{template "head" .}}</head>
-<body>
-  <div class="shell">
-    {{template "topbar" .}}
-    <h2>Policy <span class="mono">{{.Data.Name}}</span></h2>
-    <p><a href="/ui/policies">← all policies</a></p>
-    <div class="panel">
-      <pre class="mono" style="white-space:pre-wrap;margin:0">{{.Data.Body}}</pre>
+<body class="app">
+  {{template "app-open" .}}
+  <header class="page-head">
+    <div>
+      <h1>Policy <span class="mono">{{.Data.Name}}</span></h1>
+      <p class="lede"><a href="/ui/policies">← all policies</a></p>
     </div>
-    <div class="footer">contextd {{.Version}}</div>
+  </header>
+  <div class="panel">
+    <pre class="file-pre" style="max-height:none;">{{.Data.Body}}</pre>
   </div>
+  {{template "app-close" .}}
 </body>
 </html>
 {{end}}

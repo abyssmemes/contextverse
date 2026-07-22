@@ -2,28 +2,30 @@
 <!doctype html>
 <html lang="en">
 <head>{{template "head" .}}</head>
-<body>
-  <div class="shell">
+<body class="auth">
+  <div class="shell narrow">
+    <div class="auth-top">{{template "theme-btn" .}}</div>
     <section class="hero">
       <span class="brand">ContextVerse</span>
       <h1>Sign in</h1>
-      <p>Username + password, or paste an API token (key).</p>
+      <p>Username + password, or paste an API token. Same auth as the CLI.</p>
     </section>
-    {{if .FlashError}}<div class="flash err" style="max-width:480px;margin:0 auto 16px;">{{.FlashError}}</div>{{end}}
-    <div class="panel" style="max-width:480px;margin:0 auto;">
+    {{if .FlashError}}<div class="flash err" role="alert">{{.FlashError}}</div>{{end}}
+    <div class="panel">
       <form method="post" action="/ui/login">
-        <label>Username</label>
-        <input name="username" autocomplete="username" placeholder="admin">
-        <label>Password</label>
-        <input name="password" type="password" autocomplete="current-password">
-        <p class="muted" style="margin:16px 0 8px;">— or —</p>
-        <label>API token</label>
-        <input name="token" type="password" autocomplete="off" placeholder="cv-admin-…">
+        <label for="username">Username</label>
+        <input id="username" name="username" autocomplete="username" placeholder="admin" autofocus>
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password">
+        <div class="divider">or</div>
+        <label for="token">API token</label>
+        <input id="token" name="token" type="password" autocomplete="off" placeholder="cv-admin-…">
         <div class="actions">
           <button class="btn accent" type="submit">Enter dashboard</button>
         </div>
       </form>
     </div>
+    <div class="footer">Theme <span class="kbd">d</span> · contextd {{.Version}}</div>
   </div>
 </body>
 </html>
