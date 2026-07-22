@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -12,6 +13,7 @@ import (
 	"github.com/abyssmemes/contextverse/internal/entrypoint"
 	"github.com/abyssmemes/contextverse/internal/logx"
 	"github.com/abyssmemes/contextverse/internal/space"
+	templatepkg "github.com/abyssmemes/contextverse/internal/template"
 	"github.com/abyssmemes/contextverse/internal/version"
 )
 
@@ -45,6 +47,8 @@ func newRoot() *cobra.Command {
 	root.AddCommand(newActivateCmd())
 	root.AddCommand(newStatusCmd())
 	root.AddCommand(newIndexCmd())
+	root.AddCommand(newTemplateCmd())
+	root.AddCommand(newSpaceCmd())
 	return root
 }
 
@@ -91,14 +95,15 @@ func newInitCmd() *cobra.Command {
 
 func newInitSoloCmd() *cobra.Command {
 	var (
-		name         string
-		role         string
-		language     string
-		tools        string
-		templateName string
-		templatePath string
+		name           string
+		role           string
+		language       string
+		tools          string
+		templateName   string
+		templatePath   string
 		nonInteractive bool
-		force        bool
+		force          bool
+		refreshTpl     bool
 	)
 
 	cmd := &cobra.Command{
@@ -131,9 +136,10 @@ func newInitSoloCmd() *cobra.Command {
 			}
 
 			if err := space.Create(space.CreateOptions{
-				SpaceRoot:    root,
-				TemplateName: templateName,
-				TemplatePath: templatePath,
+				SpaceRoot:       root,
+				TemplateName:    templateName,
+				TemplatePath:    templatePath,
+				RefreshTemplate: refreshTpl,
 				Identity: space.IdentityFields{
 					Name:     name,
 					Role:     role,
@@ -180,8 +186,9 @@ func newInitSoloCmd() *cobra.Command {
 	cmd.Flags().StringVar(&role, "role", "", "your role")
 	cmd.Flags().StringVar(&language, "language", "", "preferred language")
 	cmd.Flags().StringVar(&tools, "tools", "", "tools you use")
-	cmd.Flags().StringVar(&templateName, "template", "solo-default", "embedded template name")
+	cmd.Flags().StringVar(&templateName, "template", "solo-default", "template name from contextverse-templates catalog")
 	cmd.Flags().StringVar(&templatePath, "template-path", "", "path to a local template directory (overrides --template)")
+	cmd.Flags().BoolVar(&refreshTpl, "refresh-template", false, "re-fetch catalog template (ignore cache)")
 	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "do not prompt; require flags")
 	cmd.Flags().BoolVar(&force, "force", false, "overwrite an existing space")
 	return cmd
@@ -284,6 +291,85 @@ func newIndexCmd() *cobra.Command {
 			return nil
 		},
 	})
+	return cmd
+}
+
+func newTemplateCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "template",
+		Short: "Browse context-space templates",
+	}
+	cmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List templates in the public catalog (contextverse-templates)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			entries, err := templatepkg.List("", "", nil)
+			if err != nil {
+				return err
+			}
+			if len(entries) == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "(no templates found)")
+				return nil
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Catalog: github.com/%s\n\n", templatepkg.DefaultRepo)
+			for _, e := range entries {
+				fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", e.Name)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "\nUse: contextd init solo --template <name>\n")
+			return nil
+		},
+	})
+	return cmd
+}
+
+func newSpaceCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "space",
+		Short: "Manage the context space",
+	}
+
+	var (
+		templateName string
+		templatePath string
+		force        bool
+		refreshTpl   bool
+	)
+	seed := &cobra.Command{
+		Use:   "seed",
+		Short: "Re-seed space files from a template (keeps identity/me.md)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			root, err := resolveSpaceRoot()
+			if err != nil {
+				return err
+			}
+			if !force {
+				if _, err := os.Stat(filepath.Join(root, "context-entry.md")); err == nil {
+					return fmt.Errorf("space already has files at %s (pass --force to overwrite from template; identity/me.md is kept)", root)
+				}
+			}
+			if err := space.Create(space.CreateOptions{
+				SpaceRoot:       root,
+				TemplateName:    templateName,
+				TemplatePath:    templatePath,
+				RefreshTemplate: refreshTpl,
+				Force:           true,
+				SkipIdentity:    true,
+			}); err != nil {
+				return err
+			}
+			_ = os.Remove(filepath.Join(root, "template.yaml"))
+			if err := space.UpdateIndex(root); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Seeded %s from template %s\n", root, orDefault(templateName, "solo-default"))
+			return nil
+		},
+	}
+	seed.Flags().StringVar(&templateName, "template", "solo-default", "template name from catalog")
+	seed.Flags().StringVar(&templatePath, "template-path", "", "local template directory")
+	seed.Flags().BoolVar(&refreshTpl, "refresh-template", false, "re-fetch catalog template")
+	seed.Flags().BoolVar(&force, "force", false, "overwrite existing space files (keeps identity)")
+	cmd.AddCommand(seed)
 	return cmd
 }
 

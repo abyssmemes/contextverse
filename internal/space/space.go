@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/abyssmemes/contextverse/internal/logx"
+	"github.com/abyssmemes/contextverse/internal/template"
 )
 
 //go:embed embed/solo-default/**
@@ -29,13 +30,15 @@ type IdentityFields struct {
 // CreateOptions controls space creation.
 type CreateOptions struct {
 	SpaceRoot    string
-	TemplateName string // "solo-default" or empty → embedded default
-	TemplatePath string // if set, copy from this directory instead of embed
+	TemplateName string // catalog name (default solo-default)
+	TemplatePath string // if set, copy from this directory instead of catalog/embed
 	Identity     IdentityFields
-	Force        bool // overwrite existing non-config files carefully — refuse if space already exists unless Force
+	Force        bool
+	RefreshTemplate bool // re-fetch remote template, ignore cache
+	SkipIdentity    bool // used by space seed — don't rewrite identity/me.md
 }
 
-// Create seeds a new context space from a template and writes identity.
+// Create seeds a new context space from a template and optionally writes identity.
 func Create(opts CreateOptions) error {
 	if opts.SpaceRoot == "" {
 		return fmt.Errorf("space root is required")
@@ -52,34 +55,69 @@ func Create(opts CreateOptions) error {
 		return fmt.Errorf("create space root: %w", err)
 	}
 
-	switch {
-	case opts.TemplatePath != "":
-		log.Info("seeding space from local template", "path", opts.TemplatePath, "root", opts.SpaceRoot)
-		if err := copyDir(opts.TemplatePath, opts.SpaceRoot); err != nil {
-			return err
-		}
-	default:
-		name := opts.TemplateName
-		if name == "" {
-			name = "solo-default"
-		}
-		if name != "solo-default" {
-			return fmt.Errorf("unknown embedded template %q (use --template-path for custom templates; remote catalog wiring comes next)", name)
-		}
-		log.Info("seeding space from embedded template", "template", name, "root", opts.SpaceRoot)
-		if err := copyEmbedded(embeddedSoloDefault, opts.SpaceRoot); err != nil {
-			return err
-		}
+	if err := seedFromTemplate(opts); err != nil {
+		return err
 	}
 
 	// template.yaml is meta for the catalog — not part of a live space
 	_ = os.Remove(filepath.Join(opts.SpaceRoot, "template.yaml"))
 
-	if err := writeIdentity(opts.SpaceRoot, opts.Identity); err != nil {
-		return err
+	if !opts.SkipIdentity {
+		if err := writeIdentity(opts.SpaceRoot, opts.Identity); err != nil {
+			return err
+		}
 	}
 
 	log.Info("space created", "root", opts.SpaceRoot)
+	return nil
+}
+
+func seedFromTemplate(opts CreateOptions) error {
+	log := logx.L()
+	name := opts.TemplateName
+	if name == "" {
+		name = "solo-default"
+	}
+
+	var preservedIdentity []byte
+	identityPath := filepath.Join(opts.SpaceRoot, "identity", "me.md")
+	if opts.SkipIdentity {
+		if data, err := os.ReadFile(identityPath); err == nil {
+			preservedIdentity = data
+			log.Info("preserving existing identity during seed", "path", identityPath)
+		}
+	}
+
+	resolved, err := template.Resolve(template.ResolveOptions{
+		Name:    name,
+		Path:    opts.TemplatePath,
+		Refresh: opts.RefreshTemplate,
+	})
+	if err == nil {
+		log.Info("seeding space from template", "name", resolved.Name, "source", string(resolved.Source), "path", resolved.DiskPath)
+		if err := copyDir(resolved.DiskPath, opts.SpaceRoot); err != nil {
+			return err
+		}
+	} else {
+		// Offline / network failure: only solo-default has an embedded copy.
+		log.Warn("catalog template unavailable; trying embedded fallback", "template", name, "err", err)
+		if name != "solo-default" && opts.TemplatePath == "" {
+			return fmt.Errorf("template %q unavailable: %w (and no embedded copy; use --template-path or fix network)", name, err)
+		}
+		log.Info("seeding space from embedded template", "template", "solo-default", "root", opts.SpaceRoot)
+		if err := copyEmbedded(embeddedSoloDefault, opts.SpaceRoot); err != nil {
+			return err
+		}
+	}
+
+	if len(preservedIdentity) > 0 {
+		if err := os.MkdirAll(filepath.Dir(identityPath), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(identityPath, preservedIdentity, 0o644); err != nil {
+			return fmt.Errorf("restore identity: %w", err)
+		}
+	}
 	return nil
 }
 
