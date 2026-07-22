@@ -10,12 +10,15 @@ importance: high
 
 ## Who I am
 
-<!-- name, role, how you work -->
+- **Name:** <!-- filled by `contextd init solo` -->
+- **Role:** <!-- filled by `contextd init solo` -->
 
 ## Tools
 
-<!-- AI tools, editors, preferred stack -->
+<!-- editors, AI clients, languages, infra — filled/edited after init -->
 
 ## Preferences
 
-<!-- communication style, constraints, non-negotiables -->
+- **Preferred language:** <!-- filled by `contextd init solo` -->
+- Communication style:
+- Non-negotiables:

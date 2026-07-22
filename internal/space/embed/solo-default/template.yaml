@@ -1,5 +1,5 @@
 name: solo-default
-version: 0.1.0
-description: Minimal solo context space — identity plus empty team/projects scaffolding.
-tags: [solo, starter, official]
+version: 0.2.0
+description: Official solo starter — full space-model layout (identity / team / projects) with one example project scaffold.
+tags: [solo, starter, official, space-model]
 author: ContextVerse
