@@ -148,8 +148,7 @@ Write-Host "  Install:  $dest"
 Write-Host ""
 
 if (-not (Get-GitHubToken)) {
-    Write-Warn "no GitHub token found — private release download / go install may fail"
-    Write-Warn "set GITHUB_TOKEN or run: gh auth login"
+    # public releases don't require a token
 }
 
 Ensure-Dir $dest

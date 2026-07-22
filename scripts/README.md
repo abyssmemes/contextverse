@@ -9,7 +9,16 @@ Cross-platform installers for the `contextd` binary.
 
 ## Quick install
 
-**macOS / Linux**
+**macOS (Homebrew — recommended)**
+
+```bash
+brew tap abyssmemes/tap
+brew install abyssmemes/tap/contextd
+```
+
+Own tap: [`homebrew-tap`](https://github.com/abyssmemes/homebrew-tap) (not `homebrew-core`).
+
+**macOS / Linux (script)**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/abyssmemes/contextverse/main/scripts/install.sh | bash
@@ -37,15 +46,7 @@ CONTEXTD_VERSION=v0.0.1 bash scripts/install.sh
 
 ## Private repo note
 
-While this repository is **private**, release downloads and `go install` need auth:
-
-```bash
-gh auth login
-# or
-export GITHUB_TOKEN=ghp_...
-```
-
-The script picks up `GITHUB_TOKEN`, `GH_TOKEN`, or `gh auth token`.
+OSS repos are public. A token is only needed if you pin a private fork or use `go install` against a private mirror (`GITHUB_TOKEN` / `gh auth login`).
 
 ## Releases
 

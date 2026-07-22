@@ -280,12 +280,12 @@ main() {
   log "  Version:  ${VERSION}"
   log "  Install:  ${dest}"
   detect_ai_tools
-  log ""
-
-  if [[ -z "$(github_token)" ]]; then
-    warn "no GitHub token found — private release download / go install may fail"
-    warn "set GITHUB_TOKEN or run: gh auth login"
+  if [[ "$os" == "darwin" ]] && command -v brew >/dev/null 2>&1; then
+    log ""
+    log "  Tip: on macOS you can also use Homebrew:"
+    log "    brew tap abyssmemes/tap && brew install abyssmemes/tap/contextd"
   fi
+  log ""
 
   tag="$(resolve_tag "$VERSION" || true)"
   local installed=0

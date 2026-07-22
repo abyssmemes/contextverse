@@ -18,7 +18,14 @@ Every AI tool keeps your context in its own silo. Switch tools and you start ove
 
 ## Install
 
-**macOS / Linux**
+**macOS (Homebrew — recommended)**
+
+```bash
+brew tap abyssmemes/tap
+brew install abyssmemes/tap/contextd
+```
+
+**macOS / Linux (install script)**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/abyssmemes/contextverse/main/scripts/install.sh | bash
@@ -36,9 +43,7 @@ irm https://raw.githubusercontent.com/abyssmemes/contextverse/main/scripts/insta
 go install github.com/abyssmemes/contextverse/cmd/contextd@latest
 ```
 
-While the repo is private, set `GITHUB_TOKEN` or run `gh auth login` first. Details: [`scripts/README.md`](./scripts/README.md).
-
-Package managers (Homebrew, apt, scoop, winget) come later.
+Details: [`scripts/README.md`](./scripts/README.md). We ship our own Homebrew tap ([`homebrew-tap`](https://github.com/abyssmemes/homebrew-tap)); not submitted to `homebrew-core`.
 
 ## Quickstart (solo)
 
@@ -76,6 +81,7 @@ Related repos:
 | Repo | Role |
 |---|---|
 | [`contextverse-templates`](https://github.com/abyssmemes/contextverse-templates) | Community context-space templates |
+| [`homebrew-tap`](https://github.com/abyssmemes/homebrew-tap) | Homebrew tap (`brew tap abyssmemes/tap`) |
 | [`contextverse-cloud`](https://github.com/abyssmemes/contextverse-cloud) | Managed cloud (proprietary, private) |
 
 ## Building from source
