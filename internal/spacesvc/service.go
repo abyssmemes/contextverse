@@ -13,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/abyssmemes/contextverse/internal/config"
+	"github.com/abyssmemes/contextverse/internal/hooks"
 	"github.com/abyssmemes/contextverse/internal/logx"
 	"github.com/abyssmemes/contextverse/internal/space"
 	"github.com/abyssmemes/contextverse/internal/storage"
@@ -42,6 +43,7 @@ type SyncRule struct {
 type Service struct {
 	DataDir string
 	Backend config.Backend
+	Hooks   hooks.Config
 }
 
 func (s *Service) spacesRoot() string {
@@ -253,6 +255,9 @@ func (s *Service) ListFileVersions(ctx context.Context, name, path string) (*sto
 
 // PutFile writes with CAS (integer version) and mirrors to the working tree.
 func (s *Service) PutFile(ctx context.Context, name, path string, data []byte, expected storage.Version) (storage.Version, error) {
+	if err := s.Hooks.CheckPut(path, data); err != nil {
+		return "", err
+	}
 	fl, err := s.fileLog(name)
 	if err != nil {
 		return "", err
@@ -385,6 +390,9 @@ func (s *Service) Push(ctx context.Context, name string, req PushRequest) (*Push
 			data, err := decodeB64(op.ContentB64)
 			if err != nil {
 				return nil, fmt.Errorf("op put %s: %w", op.Path, err)
+			}
+			if err := s.Hooks.CheckPut(op.Path, data); err != nil {
+				return nil, err
 			}
 			expected := storage.Version(op.Expected)
 			if op.Expected == "" {

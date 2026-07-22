@@ -16,6 +16,7 @@ import (
 	"github.com/abyssmemes/contextverse/internal/auth"
 	"github.com/abyssmemes/contextverse/internal/authz"
 	"github.com/abyssmemes/contextverse/internal/config"
+	"github.com/abyssmemes/contextverse/internal/hooks"
 	"github.com/abyssmemes/contextverse/internal/logx"
 	"github.com/abyssmemes/contextverse/internal/server/ui"
 	"github.com/abyssmemes/contextverse/internal/spacesvc"
@@ -472,6 +473,12 @@ func (s *Server) handleUIFileSave(w http.ResponseWriter, r *http.Request) {
 	ver, err := s.Spaces.PutFile(r.Context(), spaceName, path, []byte(content), expected)
 	if errors.Is(err, storage.ErrConflict) {
 		s.renderUIFile(w, r, "", "version conflict — reload and try again")
+		return
+	}
+	var blocked *hooks.BlockedError
+	if errors.As(err, &blocked) {
+		s.auditWrite(r, "secret.blocked", spaceName, path, audit.ResultDenied, blocked.Error(), nil)
+		s.renderUIFile(w, r, "", "secret-scan blocked: "+blocked.Error())
 		return
 	}
 	if err != nil {

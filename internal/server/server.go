@@ -18,6 +18,7 @@ import (
 	"github.com/abyssmemes/contextverse/internal/auth"
 	"github.com/abyssmemes/contextverse/internal/authz"
 	"github.com/abyssmemes/contextverse/internal/config"
+	"github.com/abyssmemes/contextverse/internal/hooks"
 	"github.com/abyssmemes/contextverse/internal/logx"
 	"github.com/abyssmemes/contextverse/internal/spacesvc"
 	"github.com/abyssmemes/contextverse/internal/storage"
@@ -57,11 +58,15 @@ func New(cfg *config.ServerConfig, authStore *auth.Store) *Server {
 	if err != nil {
 		logx.L().Error("open webhooks", "err", err)
 	}
+	hookCfg, err := hooks.Load(cfg.DataDir)
+	if err != nil {
+		logx.L().Warn("load hooks.yaml", "err", err)
+	}
 	return &Server{
 		Cfg:      cfg,
 		Auth:     authStore,
 		Authz:    eng,
-		Spaces:   &spacesvc.Service{DataDir: cfg.DataDir, Backend: cfg.Backend},
+		Spaces:   &spacesvc.Service{DataDir: cfg.DataDir, Backend: cfg.Backend, Hooks: hookCfg},
 		Audit:    al,
 		Hooks:    wh,
 		Dispatch: webhooks.NewDispatcher(wh),
@@ -486,6 +491,27 @@ func (s *Server) handlePutFile(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusPreconditionFailed, "version_conflict", err.Error(), nil)
 		return
 	}
+	var blocked *hooks.BlockedError
+	if errors.As(err, &blocked) {
+		s.auditWrite(r, "secret.blocked", name, path, audit.ResultDenied, blocked.Error(), nil)
+		if s.Dispatch != nil {
+			s.Dispatch.Emit(webhooks.Event{
+				Type:  "secret.blocked",
+				Space: name,
+				Scope: path,
+				Actor: actorFrom(r, principalFrom(r.Context())).Username,
+				Data: map[string]any{
+					"path":     path,
+					"rule":     blocked.Findings[0].Rule,
+					"findings": blocked.Findings,
+				},
+			})
+		}
+		writeErr(w, r, http.StatusUnprocessableEntity, "secret_blocked", blocked.Error(), map[string]any{
+			"findings": blocked.Findings,
+		})
+		return
+	}
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, "internal", err.Error(), nil)
 		return
@@ -572,6 +598,26 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 	res, err := s.Spaces.Push(r.Context(), name, req)
 	if errors.Is(err, storage.ErrConflict) {
 		writeErr(w, r, http.StatusPreconditionFailed, "version_conflict", err.Error(), nil)
+		return
+	}
+	var blocked *hooks.BlockedError
+	if errors.As(err, &blocked) {
+		s.auditWrite(r, "secret.blocked", name, blocked.Findings[0].Path, audit.ResultDenied, blocked.Error(), nil)
+		if s.Dispatch != nil {
+			s.Dispatch.Emit(webhooks.Event{
+				Type:  "secret.blocked",
+				Space: name,
+				Actor: actorFrom(r, principalFrom(r.Context())).Username,
+				Data: map[string]any{
+					"path":     blocked.Findings[0].Path,
+					"rule":     blocked.Findings[0].Rule,
+					"findings": blocked.Findings,
+				},
+			})
+		}
+		writeErr(w, r, http.StatusUnprocessableEntity, "secret_blocked", blocked.Error(), map[string]any{
+			"findings": blocked.Findings,
+		})
 		return
 	}
 	if err != nil {

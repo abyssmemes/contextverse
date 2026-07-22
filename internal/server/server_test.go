@@ -160,6 +160,39 @@ func TestServerPushPullFlow(t *testing.T) {
 		t.Fatal("expected authz.deny audit entry")
 	}
 
+	// secret-scan blocks known patterns
+	head2 := headBody.Space
+	// refresh head after push
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/spaces/team/head", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	res, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = json.NewDecoder(res.Body).Decode(&headBody)
+	res.Body.Close()
+	head2 = headBody.Space
+	leak, _ := json.Marshal(map[string]any{
+		"expected_head": head2,
+		"ops": []map[string]string{{
+			"op":          "put",
+			"path":        "leak.md",
+			"content_b64": "QUtJQUlPU0ZPRE5ON0VYQU1QTEUK", // AKIAIOSFODNN7EXAMPLE\n base64
+		}},
+	})
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/api/v1/spaces/team/push", bytes.NewReader(leak))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	res, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusUnprocessableEntity {
+		b, _ := io.ReadAll(res.Body)
+		t.Fatalf("secret scan want 422 got %d %s", res.StatusCode, b)
+	}
+
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/audit?limit=20", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	res, err = http.DefaultClient.Do(req)
