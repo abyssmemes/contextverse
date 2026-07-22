@@ -59,8 +59,9 @@ func Create(opts CreateOptions) error {
 		return err
 	}
 
-	// template.yaml is meta for the catalog — not part of a live space
+	// catalog meta — not part of a live space
 	_ = os.Remove(filepath.Join(opts.SpaceRoot, "template.yaml"))
+	_ = os.Remove(filepath.Join(opts.SpaceRoot, "TEMPLATE.md"))
 
 	if !opts.SkipIdentity {
 		if err := writeIdentity(opts.SpaceRoot, opts.Identity); err != nil {

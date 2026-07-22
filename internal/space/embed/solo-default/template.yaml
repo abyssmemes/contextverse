@@ -1,5 +1,8 @@
 name: solo-default
-version: 0.2.0
-description: Official solo starter — full space-model layout (identity / team / projects) with one example project scaffold.
-tags: [solo, starter, official, space-model]
+version: 0.3.0
+description: Solo AI power user — canonical space model with one example project.
+tags: [solo, starter, official, personal]
 author: ContextVerse
+use_cases:
+  - "Personal portable context across Claude/Cursor/Copilot"
+  - "First install / learning the space model"

@@ -360,6 +360,7 @@ func newSpaceCmd() *cobra.Command {
 				return err
 			}
 			_ = os.Remove(filepath.Join(root, "template.yaml"))
+			_ = os.Remove(filepath.Join(root, "TEMPLATE.md"))
 			if err := space.UpdateIndex(root); err != nil {
 				return err
 			}
