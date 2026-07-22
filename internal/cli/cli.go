@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -42,6 +43,7 @@ func newRoot() *cobra.Command {
 	}
 	root.PersistentFlags().BoolVar(&flagDebug, "debug", false, "enable debug logging")
 	root.PersistentFlags().StringVar(&flagSpaceRoot, "dir", "", "context space root (default: ~/.context)")
+	root.PersistentFlags().StringVar(&flagServerDir, "server-dir", "", "server data directory (default: ~/.contextverse-server)")
 
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newInitCmd())
@@ -50,6 +52,14 @@ func newRoot() *cobra.Command {
 	root.AddCommand(newIndexCmd())
 	root.AddCommand(newTemplateCmd())
 	root.AddCommand(newSpaceCmd())
+	root.AddCommand(newBackendCmd())
+	root.AddCommand(newHistoryCmd())
+	root.AddCommand(newServerCmd())
+	root.AddCommand(newUserCmd())
+	root.AddCommand(newAuthCmd())
+	root.AddCommand(newPolicyCmd())
+	root.AddCommand(newPullCmd())
+	root.AddCommand(newPushCmd())
 	root.AddCommand(newMCPCmd())
 	return root
 }
@@ -78,20 +88,8 @@ func newInitCmd() *cobra.Command {
 		Long:  "Create and configure a context space. Solo is available now; server and client land with sync (Phase 2).",
 	}
 	cmd.AddCommand(newInitSoloCmd())
-	cmd.AddCommand(&cobra.Command{
-		Use:   "server",
-		Short: "Initialize a ContextVerse server (not yet implemented)",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("init server is not implemented yet — arrives with Phase 2 (sync)")
-		},
-	})
-	cmd.AddCommand(&cobra.Command{
-		Use:   "client",
-		Short: "Initialize a ContextVerse client (not yet implemented)",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("init client is not implemented yet — arrives with Phase 2 (sync)")
-		},
-	})
+	cmd.AddCommand(newInitServerCmd())
+	cmd.AddCommand(newInitClientCmd())
 	return cmd
 }
 
@@ -166,6 +164,7 @@ func newInitSoloCmd() *cobra.Command {
 					Language: language,
 				},
 				Template: orDefault(templateName, "solo-default"),
+				Backend:  config.Backend{Driver: "local"},
 			}
 			if templatePath != "" {
 				cfg.Template = templatePath
@@ -198,8 +197,11 @@ func newInitSoloCmd() *cobra.Command {
 
 func newActivateCmd() *cobra.Command {
 	var (
-		project string
-		silent  bool
+		project     string
+		silent      bool
+		offline     bool
+		pullTimeout time.Duration
+		requireSync bool
 	)
 	cmd := &cobra.Command{
 		Use:   "activate",
@@ -213,6 +215,19 @@ func newActivateCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("get cwd: %w", err)
 			}
+			if config.Exists(root) && !offline {
+				if cfg, err := config.Load(root); err == nil && cfg.Mode == config.ModeClient {
+					if warn := softPull(cmd.Context(), cfg, pullTimeout); warn != "" {
+						logx.L().Warn("sync skipped; activating from local cache", "err", warn)
+						if !silent {
+							fmt.Fprintf(os.Stderr, "sync skipped: %s; generating from local space\n", warn)
+						}
+						if requireSync {
+							return fmt.Errorf("sync required: %s", warn)
+						}
+					}
+				}
+			}
 			logx.L().Info("activate", "space_root", root, "target", cwd, "project", project)
 			_, err = entrypoint.Generate(entrypoint.Options{
 				SpaceRoot: root,
@@ -225,6 +240,9 @@ func newActivateCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&project, "project", "", "active project name under projects/")
 	cmd.Flags().BoolVar(&silent, "silent", false, "suppress stdout (logs still go to stderr)")
+	cmd.Flags().BoolVar(&offline, "offline", false, "skip pull even in client mode")
+	cmd.Flags().DurationVar(&pullTimeout, "pull-timeout", 2*time.Second, "max time to wait for soft-pull")
+	cmd.Flags().BoolVar(&requireSync, "require-sync", false, "fail if soft-pull cannot reach the server")
 	return cmd
 }
 
@@ -254,6 +272,16 @@ func newStatusCmd() *cobra.Command {
 					fmt.Fprintf(cmd.OutOrStdout(), "config:     %s\n", config.Path(root))
 					fmt.Fprintf(cmd.OutOrStdout(), "identity:   %s (%s)\n", cfg.Identity.Name, cfg.Identity.Role)
 					fmt.Fprintf(cmd.OutOrStdout(), "template:   %s\n", cfg.Template)
+					driver := cfg.Backend.Driver
+					if driver == "" {
+						driver = "local"
+					}
+					fmt.Fprintf(cmd.OutOrStdout(), "backend:    %s\n", driver)
+					if cfg.Mode == config.ModeClient {
+						fmt.Fprintf(cmd.OutOrStdout(), "server:     %s\n", cfg.Server.URL)
+						fmt.Fprintf(cmd.OutOrStdout(), "space:      %s\n", cfg.Server.Space)
+						fmt.Fprintf(cmd.OutOrStdout(), "last_head:  %s\n", cfg.Sync.LastHead)
+					}
 				}
 			} else if st.IdentityName != "" {
 				fmt.Fprintf(cmd.OutOrStdout(), "identity:   %s\n", st.IdentityName)

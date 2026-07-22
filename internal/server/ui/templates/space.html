@@ -1,0 +1,30 @@
+{{define "space.html"}}
+<!doctype html>
+<html lang="en">
+<head>{{template "head" .}}</head>
+<body>
+  <div class="shell">
+    {{template "topbar" .}}
+    <h2>{{.Data.Name}}</h2>
+    <p class="muted">head <span class="mono">{{.Data.Head}}</span> · template {{.Data.Template}}</p>
+    <div class="panel">
+      <h2>Files</h2>
+      <table>
+        <thead><tr><th>Path</th><th>Version</th></tr></thead>
+        <tbody>
+        {{range .Data.Files}}
+          <tr>
+            <td><a href="/ui/spaces/{{$.Data.Name}}/files/{{.Path}}">{{.Path}}</a></td>
+            <td class="mono muted">{{.Version}}</td>
+          </tr>
+        {{else}}
+          <tr><td colspan="2" class="muted">Empty</td></tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+    <div class="footer">contextd {{.Version}}</div>
+  </div>
+</body>
+</html>
+{{end}}

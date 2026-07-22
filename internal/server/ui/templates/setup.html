@@ -1,0 +1,71 @@
+{{define "setup.html"}}
+<!doctype html>
+<html lang="en">
+<head>{{template "head" .}}</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <span class="brand">ContextVerse</span>
+      <h1>Install the server</h1>
+      <p>One form. Local storage by default. You can connect git / S3 / SQL here or switch later in Backends.</p>
+    </section>
+    {{if .FlashError}}<div class="flash err" style="max-width:640px;margin:0 auto 16px;">{{.FlashError}}</div>{{end}}
+    <div class="panel" style="max-width:640px;margin:0 auto;">
+      <form method="post" action="/setup">
+        <label>Data directory</label>
+        <input name="data_dir" value="{{.Data.DataDir}}" required>
+        <label>Listen address</label>
+        <input name="address" value="{{.Data.Address}}" required>
+        <label>Port</label>
+        <input name="port" type="number" value="{{.Data.Port}}" required>
+        <label>Default space name</label>
+        <input name="space" value="{{.Data.Space}}" required>
+        <label>Admin username</label>
+        <input name="admin" value="{{.Data.Admin}}" required>
+        <label>Admin password (optional — enables userpass login)</label>
+        <input name="password" type="password" autocomplete="new-password" placeholder="min 8 chars">
+        <label>Template</label>
+        <input name="template" value="{{.Data.Template}}" required>
+        <label>Storage backend</label>
+        <select name="backend">
+          <option value="local" selected>local (filesystem)</option>
+          <option value="git">git</option>
+          <option value="s3">s3 / MinIO</option>
+          <option value="sql">sql (Postgres)</option>
+        </select>
+
+        <label>Git remote</label>
+        <input name="git_remote" placeholder="https://… or git@… (git driver)">
+        <label>Git user (HTTPS)</label>
+        <input name="git_user" placeholder="git">
+        <label>Git token (HTTPS PAT)</label>
+        <input name="git_token" type="password" autocomplete="off" placeholder="or CONTEXTVERSE_GIT_TOKEN / GITHUB_TOKEN">
+        <label>Git SSH private key path</label>
+        <input name="git_ssh_key" placeholder="~/.ssh/id_ed25519">
+
+        <label>S3 endpoint</label>
+        <input name="s3_endpoint" placeholder="http://127.0.0.1:9000">
+        <label>S3 bucket</label>
+        <input name="s3_bucket">
+        <label>S3 region</label>
+        <input name="s3_region" value="us-east-1">
+        <label>S3 prefix</label>
+        <input name="s3_prefix">
+        <label>S3 access key</label>
+        <input name="s3_access_key" autocomplete="off">
+        <label>S3 secret key</label>
+        <input name="s3_secret_key" type="password" autocomplete="off">
+
+        <label>Postgres DSN</label>
+        <input name="sql_dsn" type="password" autocomplete="off" placeholder="postgres://user:pass@host:5432/db?sslmode=disable">
+
+        <div class="actions">
+          <button class="btn accent" type="submit">Create server</button>
+        </div>
+      </form>
+    </div>
+    <div class="footer" style="max-width:640px;margin:24px auto 0;">contextd {{.Version}}</div>
+  </div>
+</body>
+</html>
+{{end}}

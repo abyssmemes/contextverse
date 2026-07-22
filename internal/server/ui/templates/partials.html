@@ -1,0 +1,28 @@
+{{define "head"}}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · ContextVerse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/ui/static/app.css">
+{{end}}
+
+{{define "topbar"}}
+<header class="topbar">
+  <a class="brand" href="/">ContextVerse</a>
+  {{if .User}}
+  <nav class="nav">
+    <a href="/" class="{{if eq .Active "dash"}}active{{end}}">Dashboard</a>
+    <a href="/ui/spaces" class="{{if eq .Active "spaces"}}active{{end}}">Spaces</a>
+    <a href="/ui/users" class="{{if eq .Active "users"}}active{{end}}">Users</a>
+    <a href="/ui/policies" class="{{if eq .Active "policies"}}active{{end}}">Policies</a>
+    <a href="/ui/backends" class="{{if eq .Active "backends"}}active{{end}}">Backends</a>
+    <a href="/ui/logout">Logout</a>
+  </nav>
+  <div class="who">{{.User}} · {{.Role}}</div>
+  {{end}}
+</header>
+{{if .Flash}}<div class="flash ok">{{.Flash}}</div>{{end}}
+{{if .FlashError}}<div class="flash err">{{.FlashError}}</div>{{end}}
+{{end}}

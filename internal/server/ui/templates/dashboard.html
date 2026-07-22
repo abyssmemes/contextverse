@@ -1,0 +1,28 @@
+{{define "dashboard.html"}}
+<!doctype html>
+<html lang="en">
+<head>{{template "head" .}}</head>
+<body>
+  <div class="shell">
+    {{template "topbar" .}}
+    <h2>Dashboard</h2>
+    <div class="grid">
+      <div class="panel stat"><strong>{{.Data.Spaces}}</strong><span>Spaces</span></div>
+      <div class="panel stat"><strong>{{.Data.Users}}</strong><span>Users</span></div>
+      <div class="panel stat"><strong>{{.Data.Backend}}</strong><span>Backend</span></div>
+    </div>
+    <div class="panel" style="margin-top:16px;">
+      <h2>Server</h2>
+      <p class="muted">Listen <span class="mono">{{.Data.Listen}}</span></p>
+      <p class="muted mono">{{.Data.DataDir}}</p>
+      <p>Health: <strong style="color:var(--ok)">ok</strong> · default space <strong>{{.Data.DefaultSpace}}</strong></p>
+      <div class="actions">
+        <a class="btn secondary" href="/ui/spaces">Browse spaces</a>
+        <a class="btn secondary" href="/ui/users">Manage users</a>
+      </div>
+    </div>
+    <div class="footer">contextd {{.Version}}</div>
+  </div>
+</body>
+</html>
+{{end}}

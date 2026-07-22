@@ -35,6 +35,33 @@ type Config struct {
 	UpdatedAt time.Time `yaml:"updated_at"`
 	Identity  Identity  `yaml:"identity"`
 	Template  string    `yaml:"template,omitempty"`
+	Backend   Backend   `yaml:"backend,omitempty"`
+	Server    ClientServer `yaml:"server,omitempty"` // client mode
+	Sync      SyncState    `yaml:"sync,omitempty"`   // client sync markers
+}
+
+// Backend selects the storage driver (local|git|s3|sql).
+type Backend struct {
+	Driver string `yaml:"driver,omitempty"` // local|git|s3|sql (default: local)
+
+	// Git (driver=git)
+	GitRemote   string `yaml:"git_remote,omitempty"`
+	GitUser     string `yaml:"git_user,omitempty"`      // HTTPS username (often "git" or GitHub username)
+	GitToken    string `yaml:"git_token,omitempty"`     // HTTPS PAT / password; prefer env CONTEXTVERSE_GIT_TOKEN
+	GitSSHKey   string `yaml:"git_ssh_key,omitempty"`  // path to private key for SSH remotes
+	GitAutoPush bool   `yaml:"git_auto_push,omitempty"` // push after each write (default true when remote set)
+
+	// S3 (driver=s3) — works with AWS and MinIO / S3-compatible
+	S3Endpoint  string `yaml:"s3_endpoint,omitempty"` // e.g. http://127.0.0.1:9000
+	S3Region    string `yaml:"s3_region,omitempty"`
+	S3Bucket    string `yaml:"s3_bucket,omitempty"`
+	S3Prefix    string `yaml:"s3_prefix,omitempty"` // key prefix inside bucket
+	S3AccessKey string `yaml:"s3_access_key,omitempty"`
+	S3SecretKey string `yaml:"s3_secret_key,omitempty"`
+	S3PathStyle bool   `yaml:"s3_path_style,omitempty"` // required for MinIO
+
+	// SQL (driver=sql) — Postgres
+	SQLDSN string `yaml:"sql_dsn,omitempty"` // postgres://user:pass@localhost:5432/contextverse?sslmode=disable
 }
 
 // Identity is collected during init.

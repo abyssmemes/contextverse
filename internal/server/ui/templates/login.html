@@ -1,0 +1,30 @@
+{{define "login.html"}}
+<!doctype html>
+<html lang="en">
+<head>{{template "head" .}}</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <span class="brand">ContextVerse</span>
+      <h1>Sign in</h1>
+      <p>Username + password, or paste an API token (key).</p>
+    </section>
+    {{if .FlashError}}<div class="flash err" style="max-width:480px;margin:0 auto 16px;">{{.FlashError}}</div>{{end}}
+    <div class="panel" style="max-width:480px;margin:0 auto;">
+      <form method="post" action="/ui/login">
+        <label>Username</label>
+        <input name="username" autocomplete="username" placeholder="admin">
+        <label>Password</label>
+        <input name="password" type="password" autocomplete="current-password">
+        <p class="muted" style="margin:16px 0 8px;">— or —</p>
+        <label>API token</label>
+        <input name="token" type="password" autocomplete="off" placeholder="cv-admin-…">
+        <div class="actions">
+          <button class="btn accent" type="submit">Enter dashboard</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</body>
+</html>
+{{end}}

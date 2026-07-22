@@ -1,0 +1,24 @@
+{{define "setup_done.html"}}
+<!doctype html>
+<html lang="en">
+<head>{{template "head" .}}</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <span class="brand">ContextVerse</span>
+      <h1>Server ready</h1>
+      <p>Copy the admin token now — it is shown once. Then open the dashboard.</p>
+    </section>
+    <div class="panel" style="max-width:640px;margin:0 auto;">
+      <h2>Admin token</h2>
+      <div class="token-box mono">{{.Data.Token}}</div>
+      <p class="muted">Space <strong>{{.Data.Space}}</strong> · listen <strong>{{.Data.Listen}}</strong></p>
+      <p class="muted mono">{{.Data.DataDir}}</p>
+      <div class="actions">
+        <a class="btn accent" href="/">Open dashboard</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+{{end}}

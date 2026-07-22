@@ -1,0 +1,16 @@
+{{define "file.html"}}
+<!doctype html>
+<html lang="en">
+<head>{{template "head" .}}</head>
+<body>
+  <div class="shell">
+    {{template "topbar" .}}
+    <p><a href="/ui/spaces/{{.Data.Space}}">← {{.Data.Space}}</a></p>
+    <h2 class="mono">{{.Data.Path}}</h2>
+    <p class="muted">etag <span class="mono">{{.Data.Version}}</span></p>
+    <pre class="file-pre">{{.Data.Content}}</pre>
+    <div class="footer">contextd {{.Version}}</div>
+  </div>
+</body>
+</html>
+{{end}}

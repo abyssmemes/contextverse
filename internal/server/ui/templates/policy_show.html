@@ -1,0 +1,17 @@
+{{define "policy_show.html"}}
+<!doctype html>
+<html lang="en">
+<head>{{template "head" .}}</head>
+<body>
+  <div class="shell">
+    {{template "topbar" .}}
+    <h2>Policy <span class="mono">{{.Data.Name}}</span></h2>
+    <p><a href="/ui/policies">← all policies</a></p>
+    <div class="panel">
+      <pre class="mono" style="white-space:pre-wrap;margin:0">{{.Data.Body}}</pre>
+    </div>
+    <div class="footer">contextd {{.Version}}</div>
+  </div>
+</body>
+</html>
+{{end}}

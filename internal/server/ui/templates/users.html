@@ -1,0 +1,43 @@
+{{define "users.html"}}
+<!doctype html>
+<html lang="en">
+<head>{{template "head" .}}</head>
+<body>
+  <div class="shell">
+    {{template "topbar" .}}
+    <h2>Users</h2>
+    <div class="panel">
+      <table>
+        <thead><tr><th>Name</th><th>Role</th></tr></thead>
+        <tbody>
+        {{range .Data.Users}}
+          <tr><td>{{.Name}}</td><td>{{.Role}}</td></tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{if eq .Role "admin"}}
+    <div class="panel">
+      <h2>Add user</h2>
+      <form method="post" action="/ui/users">
+        <label>Username</label>
+        <input name="name" required>
+        <label>Role</label>
+        <select name="role">
+          <option value="contributor">contributor</option>
+          <option value="viewer">viewer</option>
+          <option value="admin">admin</option>
+        </select>
+        <div class="actions"><button class="btn accent" type="submit">Add + issue token</button></div>
+      </form>
+      {{if .Data.NewToken}}
+      <div class="flash ok">New token (once):</div>
+      <div class="token-box mono">{{.Data.NewToken}}</div>
+      {{end}}
+    </div>
+    {{end}}
+    <div class="footer">contextd {{.Version}}</div>
+  </div>
+</body>
+</html>
+{{end}}

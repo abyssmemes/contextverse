@@ -62,7 +62,7 @@ Optional: seed from a community template — see [`contextverse-templates`](http
 - **Entry-point generation** — one space compiles to `CLAUDE.md`, `.cursor/rules/*`, MCP, and more.
 - **Pluggable storage backend** — local FS, S3, or git remote now; SQL/NoSQL later.
 - **Pull-based sync** — clients pull on activate; optional live pings over SSE.
-- **Vault-style access control** (server) — deny-by-default, explicit-deny-wins, most-specific-path.
+- **path-based access control** (server) — deny-by-default, explicit-deny-wins, most-specific-path.
 
 ## Repository layout
 

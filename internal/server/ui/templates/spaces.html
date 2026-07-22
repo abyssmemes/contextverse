@@ -1,0 +1,41 @@
+{{define "spaces.html"}}
+<!doctype html>
+<html lang="en">
+<head>{{template "head" .}}</head>
+<body>
+  <div class="shell">
+    {{template "topbar" .}}
+    <h2>Spaces</h2>
+    <div class="panel">
+      <table>
+        <thead><tr><th>Name</th><th>Head</th><th></th></tr></thead>
+        <tbody>
+        {{range .Data.Spaces}}
+          <tr>
+            <td><strong>{{.Name}}</strong></td>
+            <td class="mono muted">{{.Head}}</td>
+            <td><a href="/ui/spaces/{{.Name}}">Open</a></td>
+          </tr>
+        {{else}}
+          <tr><td colspan="3" class="muted">No spaces yet</td></tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{if eq .Role "admin"}}
+    <div class="panel">
+      <h2>Create space</h2>
+      <form method="post" action="/ui/spaces">
+        <label>Name</label>
+        <input name="name" required pattern="[a-zA-Z0-9_-]+">
+        <label>Template</label>
+        <input name="template" value="solo-default">
+        <div class="actions"><button class="btn accent" type="submit">Create</button></div>
+      </form>
+    </div>
+    {{end}}
+    <div class="footer">contextd {{.Version}}</div>
+  </div>
+</body>
+</html>
+{{end}}

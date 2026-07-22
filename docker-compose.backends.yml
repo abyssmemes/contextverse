@@ -1,0 +1,54 @@
+# Local backends for ContextVerse storage driver tests.
+# Usage:
+#   docker compose -f docker-compose.backends.yml up -d
+#   export CONTEXTVERSE_S3_ENDPOINT=http://127.0.0.1:9000
+#   export CONTEXTVERSE_S3_ACCESS_KEY=minioadmin
+#   export CONTEXTVERSE_S3_SECRET_KEY=minioadmin
+#   export CONTEXTVERSE_S3_BUCKET=contextverse
+#   export CONTEXTVERSE_SQL_DSN='postgres://contextverse:contextverse@127.0.0.1:5432/contextverse?sslmode=disable'
+#   go test ./internal/storage/ -tags=integration -count=1
+
+services:
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 3;
+      mc alias set local http://minio:9000 minioadmin minioadmin;
+      mc mb -p local/contextverse || true;
+      exit 0;
+      "
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: contextverse
+      POSTGRES_PASSWORD: contextverse
+      POSTGRES_DB: contextverse
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U contextverse -d contextverse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  minio_data:
+  pg_data:
