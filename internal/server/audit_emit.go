@@ -47,6 +47,8 @@ func (s *Server) auditWrite(r *http.Request, action, space, target, result, errM
 	}
 	if err := s.Audit.Append(e); err != nil {
 		logx.L().Warn("audit append", "err", err, "action", action)
+	} else if s.Metrics != nil {
+		s.Metrics.AuditEntries.Inc()
 	}
 	if result == audit.ResultSuccess {
 		s.emitWebhook(r, action, space, target, diff)

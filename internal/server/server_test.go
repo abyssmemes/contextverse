@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/abyssmemes/contextverse/internal/config"
 	"github.com/abyssmemes/contextverse/internal/server"
 	"github.com/abyssmemes/contextverse/internal/spacesvc"
+	"github.com/abyssmemes/contextverse/internal/webhooks"
 )
 
 func TestServerPushPullFlow(t *testing.T) {
@@ -283,4 +285,94 @@ func TestQuotaAndRateLimit(t *testing.T) {
 	if res.StatusCode != http.StatusRequestEntityTooLarge {
 		t.Fatalf("quota want 413 got %d %s", res.StatusCode, body)
 	}
+}
+
+func TestMetricsAndSSE(t *testing.T) {
+	dir := t.TempDir()
+	cfg := &config.ServerConfig{
+		Mode:    config.ModeServer,
+		DataDir: dir,
+		Listen:  config.ListenConfig{Address: "127.0.0.1", Port: 0},
+		Backend: config.Backend{Driver: "local"},
+	}
+	if err := config.SaveServer(cfg); err != nil {
+		t.Fatal(err)
+	}
+	store, err := auth.OpenStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AddUser("admin", auth.RoleAdmin); err != nil {
+		t.Fatal(err)
+	}
+	token, _, err := store.CreateToken("admin", "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := &spacesvc.Service{DataDir: dir}
+	if _, err := svc.Create(context.Background(), "team", "solo-default", true); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := server.New(cfg, store)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	res, err := http.Get(ts.URL + "/metrics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != 200 || !bytes.Contains(body, []byte("contextd_up 1")) {
+		t.Fatalf("metrics %d %s", res.StatusCode, body)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+"/api/v1/events?scopes=team", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "text/event-stream")
+	res, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		b, _ := io.ReadAll(res.Body)
+		t.Fatalf("sse %d %s", res.StatusCode, b)
+	}
+
+	// publish via webhook path
+	srv.Dispatch.Emit(webhooks.Event{Type: "space.push", Space: "team", Scope: "team/x.md", Actor: "admin"})
+
+	done := make(chan string, 1)
+	go func() {
+		buf := make([]byte, 4096)
+		var got string
+		for {
+			n, readErr := res.Body.Read(buf)
+			if n > 0 {
+				got += string(buf[:n])
+				if strings.Contains(got, "space.push") {
+					done <- got
+					return
+				}
+			}
+			if readErr != nil {
+				done <- got
+				return
+			}
+		}
+	}()
+	select {
+	case got := <-done:
+		if !strings.Contains(got, "space.push") {
+			t.Fatalf("expected sse event, got %q", got)
+		}
+	case <-time.After(2 * time.Second):
+		cancel()
+		t.Fatal("timeout waiting for sse event")
+	}
+	cancel()
 }

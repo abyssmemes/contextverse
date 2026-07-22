@@ -18,8 +18,10 @@ import (
 	"github.com/abyssmemes/contextverse/internal/auth"
 	"github.com/abyssmemes/contextverse/internal/authz"
 	"github.com/abyssmemes/contextverse/internal/config"
+	"github.com/abyssmemes/contextverse/internal/events"
 	"github.com/abyssmemes/contextverse/internal/hooks"
 	"github.com/abyssmemes/contextverse/internal/logx"
+	"github.com/abyssmemes/contextverse/internal/metrics"
 	"github.com/abyssmemes/contextverse/internal/quotas"
 	"github.com/abyssmemes/contextverse/internal/ratelimit"
 	"github.com/abyssmemes/contextverse/internal/spacesvc"
@@ -38,6 +40,8 @@ type Server struct {
 	Hooks    *webhooks.Store
 	Dispatch *webhooks.Dispatcher
 	Limiter  *ratelimit.Limiter
+	Metrics  *metrics.Registry
+	Events   *events.Hub
 	http     *http.Server
 
 	mu           sync.Mutex
@@ -75,6 +79,20 @@ func New(cfg *config.ServerConfig, authStore *auth.Store) *Server {
 		RequestsPerMinute: cfg.RateLimit.RequestsPerMinute,
 		AuthPerMinute:     cfg.RateLimit.AuthPerMinute,
 	})
+	reg := metrics.New()
+	hub := events.NewHub()
+	disp := webhooks.NewDispatcher(wh)
+	disp.OnEmit = func(evt webhooks.Event) {
+		hub.Publish(evt)
+		reg.SSEEvents.Inc()
+	}
+	disp.OnDelivered = func(ok bool) {
+		if ok {
+			reg.WebhookFired.Inc()
+		} else {
+			reg.WebhookFailed.Inc()
+		}
+	}
 	return &Server{
 		Cfg:      cfg,
 		Auth:     authStore,
@@ -82,8 +100,10 @@ func New(cfg *config.ServerConfig, authStore *auth.Store) *Server {
 		Spaces:   &spacesvc.Service{DataDir: cfg.DataDir, Backend: cfg.Backend, Hooks: hookCfg, Quotas: ql},
 		Audit:    al,
 		Hooks:    wh,
-		Dispatch: webhooks.NewDispatcher(wh),
+		Dispatch: disp,
 		Limiter:  lim,
+		Metrics:  reg,
+		Events:   hub,
 	}
 }
 
@@ -118,6 +138,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
+	mux.HandleFunc("GET /metrics", s.handleMetrics)
 	s.registerUI(mux)
 
 	if !s.NeedsSetup {
@@ -150,9 +171,10 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle("POST /api/v1/webhooks/{id}/test", s.auth(s.handleWebhooksTest))
 		mux.Handle("GET /api/v1/webhooks/dead-letter", s.auth(s.handleWebhooksDeadLetter))
 		mux.Handle("GET /api/v1/spaces/{space}/freshness", s.auth(s.handleFreshness))
+		mux.Handle("GET /api/v1/events", s.auth(s.handleEvents))
 	}
 
-	return s.withRateLimit(s.withRequestID(mux))
+	return s.withAccessLog(s.withRateLimit(s.withRequestID(mux)))
 }
 
 // ListenAndServe starts the HTTP server (blocking).
@@ -198,7 +220,10 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 type ctxKey int
 
-const principalKey ctxKey = 1
+const (
+	principalKey ctxKey = 1
+	requestIDKey ctxKey = 2
+)
 
 func principalFrom(ctx context.Context) *auth.Principal {
 	p, _ := ctx.Value(principalKey).(*auth.Principal)
@@ -230,14 +255,67 @@ func (s *Server) withRequestID(next http.Handler) http.Handler {
 			id = fmt.Sprintf("%d", time.Now().UnixNano())
 		}
 		w.Header().Set("X-Request-Id", id)
-		next.ServeHTTP(w, r)
+		ctx := context.WithValue(r.Context(), requestIDKey, id)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func (s *Server) withAccessLog(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/metrics" || strings.HasPrefix(r.URL.Path, "/ui/static/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		start := time.Now()
+		sw := &statusWriter{ResponseWriter: w, code: 200}
+		next.ServeHTTP(sw, r)
+		dur := time.Since(start).Seconds()
+		if s.Metrics != nil {
+			s.Metrics.HTTPRequests.Inc(r.Method, strconv.Itoa(sw.code))
+			s.Metrics.HTTPDuration.Observe(dur)
+		}
+		rid, _ := r.Context().Value(requestIDKey).(string)
+		logx.L().Info("http",
+			"request_id", rid,
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", sw.code,
+			"dur_ms", int(dur*1000),
+		)
+	})
+}
+
+type statusWriter struct {
+	http.ResponseWriter
+	code        int
+	wroteHeader bool
+}
+
+func (w *statusWriter) WriteHeader(code int) {
+	if !w.wroteHeader {
+		w.code = code
+		w.wroteHeader = true
+	}
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *statusWriter) Write(b []byte) (int, error) {
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(b)
+}
+
+func (w *statusWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 func (s *Server) withRateLimit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
-		if path == "/health" || path == "/api/v1/health" || strings.HasPrefix(path, "/ui/static/") {
+		if path == "/health" || path == "/api/v1/health" || path == "/metrics" || strings.HasPrefix(path, "/ui/static/") {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -250,6 +328,9 @@ func (s *Server) withRateLimit(next http.Handler) http.Handler {
 			w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(reset, 10))
 		}
 		if !ok {
+			if s.Metrics != nil {
+				s.Metrics.RateLimited.Inc()
+			}
 			w.Header().Set("Retry-After", strconv.Itoa(retry))
 			writeErr(w, r, http.StatusTooManyRequests, "rate_limited", "rate limit exceeded", map[string]any{
 				"retry_after": retry,
@@ -721,6 +802,9 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 	}
 	s.auditEmit(r, "space.push", name, "", &audit.Diff{Ops: ops})
 	s.maybeQuotaWarning(r, name)
+	if s.Metrics != nil {
+		s.Metrics.PushTotal.Inc()
+	}
 	writeJSON(w, http.StatusOK, res)
 }
 

@@ -194,6 +194,10 @@ type Dispatcher struct {
 	Store  *Store
 	Client *http.Client
 	now    func() time.Time
+	// OnEmit is called synchronously after the event is stamped (SSE hub, metrics).
+	OnEmit func(Event)
+	// OnDelivered is called after a webhook attempt settles (success or dead-letter).
+	OnDelivered func(ok bool)
 }
 
 // NewDispatcher builds a dispatcher with sensible defaults.
@@ -209,7 +213,7 @@ func NewDispatcher(store *Store) *Dispatcher {
 
 // Emit fans out to matching hooks (non-blocking).
 func (d *Dispatcher) Emit(evt Event) {
-	if d == nil || d.Store == nil {
+	if d == nil {
 		return
 	}
 	if evt.ID == "" {
@@ -217,6 +221,12 @@ func (d *Dispatcher) Emit(evt Event) {
 	}
 	if evt.Created.IsZero() {
 		evt.Created = d.now().UTC()
+	}
+	if d.OnEmit != nil {
+		d.OnEmit(evt)
+	}
+	if d.Store == nil {
+		return
 	}
 	go d.deliverAll(evt)
 }
@@ -268,7 +278,13 @@ func (d *Dispatcher) deliverWithRetry(h Hook, evt Event) {
 			logx.L().Warn("webhook delivery", "hook", h.ID, "attempt", attempt+1, "err", err)
 			continue
 		}
+		if d.OnDelivered != nil {
+			d.OnDelivered(true)
+		}
 		return
+	}
+	if d.OnDelivered != nil {
+		d.OnDelivered(false)
 	}
 	_ = d.Store.appendDeadLetter(DeadLetter{
 		HookID:    h.ID,
