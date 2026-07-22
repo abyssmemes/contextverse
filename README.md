@@ -59,9 +59,14 @@ Optional: seed from a community template — see [`contextverse-templates`](http
 ## Repository layout
 
 ```
-cmd/contextd/     # binary entrypoint
-internal/         # packages (space, config, entrypoint, storage, …)
-scripts/          # install.sh / install.ps1
+cmd/contextd/          # binary entrypoint
+internal/
+  cli/                 # Cobra commands
+  config/              # YAML config + mode detection
+  space/               # space model + embedded templates
+  entrypoint/          # CLAUDE.md + .cursor/rules generation
+  logx/                # structured logging
+scripts/               # install.sh / install.ps1 (Phase 0 install path)
 ```
 
 Related repos:
@@ -74,10 +79,13 @@ Related repos:
 ## Building from source
 
 ```bash
-go build -o bin/contextd ./cmd/contextd
+make build                 # → bin/contextd
+./bin/contextd version
+./bin/contextd init solo   # interactive; or --non-interactive --name …
+cd <project> && ./bin/contextd activate
 ```
 
-Requires a recent Go toolchain.
+Requires a recent Go toolchain (`go test ./...` for checks).
 
 ## Documentation
 
