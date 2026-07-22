@@ -13,6 +13,8 @@ func TestMatchPath(t *testing.T) {
 		{"spaces/team/files/*", "spaces/other/files/a", false},
 		{"spaces/team", "spaces/team", true},
 		{"spaces/team", "spaces/team2", false},
+		{"spaces/+/files", "spaces/team/files", true},
+		{"spaces/+/files", "spaces/team/extra/files", false},
 	}
 	for _, c := range cases {
 		_, ok := matchPath(c.pat, c.path)
@@ -88,5 +90,59 @@ func TestAdminStar(t *testing.T) {
 	}
 	if !e.Allow([]string{"contributor"}, "spaces/team/push", CapUpdate, vars) {
 		t.Fatal("contributor should push")
+	}
+}
+
+func TestPerUserDenyWins(t *testing.T) {
+	dir := t.TempDir()
+	if err := SeedBuiltins(dir, "team"); err != nil {
+		t.Fatal(err)
+	}
+	e, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vars := Vars{"default": "team"}
+	path := "spaces/team/files/team/principles.md"
+	if !e.AllowUser("bob", []string{"contributor"}, path, CapUpdate, vars) {
+		t.Fatal("contributor bob should update before deny")
+	}
+	if err := e.AddUserRule("bob", Rule{Path: path, Capabilities: []Capability{CapDeny}}); err != nil {
+		t.Fatal(err)
+	}
+	if e.AllowUser("bob", []string{"contributor"}, path, CapUpdate, vars) {
+		t.Fatal("per-user deny must win")
+	}
+	if e.AllowUser("bob", []string{"contributor"}, path, CapRead, vars) {
+		t.Fatal("CapDeny blocks all caps on path")
+	}
+	// other users unaffected
+	if !e.AllowUser("alice", []string{"contributor"}, path, CapUpdate, vars) {
+		t.Fatal("alice should still update")
+	}
+}
+
+func TestPerUserAllowExtra(t *testing.T) {
+	dir := t.TempDir()
+	e, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = e.Write(Policy{Name: "viewer", Rules: []Rule{
+		{Path: "spaces/team/files/*", Capabilities: []Capability{CapRead, CapList}},
+	}})
+	vars := Vars{"default": "team"}
+	secret := "spaces/team/files/secret/x.md"
+	if e.AllowUser("alice", []string{"viewer"}, secret, CapUpdate, vars) {
+		t.Fatal("viewer must not update")
+	}
+	if err := e.AddUserRule("alice", Rule{
+		Path:         "spaces/team/files/secret/*",
+		Capabilities: []Capability{CapRead, CapUpdate},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !e.AllowUser("alice", []string{"viewer"}, secret, CapUpdate, vars) {
+		t.Fatal("per-user allow should grant update")
 	}
 }

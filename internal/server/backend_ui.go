@@ -24,8 +24,8 @@ func (s *Server) requireUIAdmin(w http.ResponseWriter, r *http.Request) *auth.Pr
 		pols = []string{string(p.Role)}
 	}
 	if s.Authz != nil {
-		if !s.Authz.Allow(pols, "sys/backends", authz.CapUpdate, s.authzVars()) &&
-			!s.Authz.Allow(pols, "sys/auth/users", authz.CapUpdate, s.authzVars()) {
+		if !s.Authz.AllowUser(p.User, pols, "sys/backends", authz.CapUpdate, s.authzVars()) &&
+			!s.Authz.AllowUser(p.User, pols, "sys/auth/users", authz.CapUpdate, s.authzVars()) {
 			http.Error(w, "admin required", http.StatusForbidden)
 			return nil
 		}

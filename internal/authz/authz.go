@@ -42,15 +42,19 @@ type Engine struct {
 	mu       sync.RWMutex
 	dir      string
 	policies map[string]*Policy
+	userACL  map[string][]Rule // per-user path rules from auth/acl.yaml
 }
 
-// Open loads all *.yaml from dir (creates dir if missing).
+// Open loads all *.yaml from dir (creates dir if missing) and sibling acl.yaml.
 func Open(dir string) (*Engine, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	e := &Engine{dir: dir, policies: map[string]*Policy{}}
+	e := &Engine{dir: dir, policies: map[string]*Policy{}, userACL: map[string][]Rule{}}
 	if err := e.Reload(); err != nil {
+		return nil, err
+	}
+	if err := e.ReloadUserACL(); err != nil {
 		return nil, err
 	}
 	return e, nil
@@ -163,8 +167,13 @@ func (e *Engine) Delete(name string, force bool) error {
 type Vars map[string]string
 
 // Allow reports whether the union of named policies grants cap on path.
-// Deny-by-default; explicit deny wins; longest matching rule path wins per policy then union.
+// Deny-by-default; explicit deny wins across all matches; most-specific grants win among non-deny.
 func (e *Engine) Allow(policyNames []string, path string, cap Capability, vars Vars) bool {
+	return e.AllowUser("", policyNames, path, cap, vars)
+}
+
+// AllowUser is Allow plus per-user ACL rules for username (from auth/acl.yaml).
+func (e *Engine) AllowUser(username string, policyNames []string, path string, cap Capability, vars Vars) bool {
 	if cap == CapDeny {
 		return false
 	}
@@ -177,14 +186,10 @@ func (e *Engine) Allow(policyNames []string, path string, cap Capability, vars V
 		caps  []Capability
 	}
 	var hits []hit
-	for _, name := range policyNames {
-		p, ok := e.policies[name]
-		if !ok {
-			continue
-		}
+	collect := func(rules []Rule) {
 		bestScore := -1
 		var bestCaps []Capability
-		for _, rule := range p.Rules {
+		for _, rule := range rules {
 			pat := expand(rule.Path, vars)
 			score, ok := matchPath(pat, path)
 			if !ok {
@@ -199,24 +204,23 @@ func (e *Engine) Allow(policyNames []string, path string, cap Capability, vars V
 			hits = append(hits, hit{score: bestScore, caps: bestCaps})
 		}
 	}
+
+	for _, name := range policyNames {
+		p, ok := e.policies[name]
+		if !ok {
+			continue
+		}
+		collect(p.Rules)
+	}
+	if username != "" {
+		if rules, ok := e.userACL[username]; ok {
+			collect(rules)
+		}
+	}
 	if len(hits) == 0 {
 		return false
 	}
-	// Most-specific matching rules win; deny in any matched rule denies.
-	max := -1
-	for _, h := range hits {
-		if h.score > max {
-			max = h.score
-		}
-	}
-	var union []Capability
-	for _, h := range hits {
-		if h.score != max {
-			continue
-		}
-		union = append(union, h.caps...)
-	}
-	// Deny from any matched rule.
+	// Explicit deny on ANY matching rule (any specificity) wins.
 	for _, h := range hits {
 		for _, c := range h.caps {
 			if c == CapDeny {
@@ -224,9 +228,21 @@ func (e *Engine) Allow(policyNames []string, path string, cap Capability, vars V
 			}
 		}
 	}
-	for _, c := range union {
-		if c == cap {
-			return true
+	// Most-specific matching rules union for grants.
+	max := -1
+	for _, h := range hits {
+		if h.score > max {
+			max = h.score
+		}
+	}
+	for _, h := range hits {
+		if h.score != max {
+			continue
+		}
+		for _, c := range h.caps {
+			if c == cap {
+				return true
+			}
 		}
 	}
 	return false
@@ -284,12 +300,15 @@ func expand(pat string, vars Vars) string {
 }
 
 // matchPath returns specificity score if pattern matches path.
-// Patterns: exact, prefix*, or * (all). Score = len(literal prefix).
+// Patterns: exact, prefix*, single-segment +, or * (all). Score = len(literal) (+ bonus for exact).
 func matchPath(pattern, path string) (int, bool) {
 	pattern = strings.TrimPrefix(pattern, "/")
 	path = strings.TrimPrefix(path, "/")
 	if pattern == "*" || pattern == "" {
 		return 0, true
+	}
+	if strings.Contains(pattern, "+") {
+		return matchPlus(pattern, path)
 	}
 	if strings.HasSuffix(pattern, "*") {
 		prefix := strings.TrimSuffix(pattern, "*")
@@ -302,6 +321,27 @@ func matchPath(pattern, path string) (int, bool) {
 		return len(pattern) + 1, true // exact beats same-length prefix
 	}
 	return 0, false
+}
+
+// matchPlus supports Vault-style + (one path segment).
+func matchPlus(pattern, path string) (int, bool) {
+	pp := strings.Split(pattern, "/")
+	ps := strings.Split(path, "/")
+	if len(pp) != len(ps) {
+		return 0, false
+	}
+	score := 0
+	for i := range pp {
+		if pp[i] == "+" {
+			score += 1
+			continue
+		}
+		if pp[i] != ps[i] {
+			return 0, false
+		}
+		score += len(pp[i]) + 1
+	}
+	return score, true
 }
 
 // SeedBuiltins writes default role presets if missing ({{default}} placeholders kept).
@@ -377,6 +417,7 @@ func BuiltinPolicies() []Policy {
 				{Path: "spaces/{{default}}", Capabilities: []Capability{CapRead}},
 				{Path: "spaces/{{default}}/files", Capabilities: []Capability{CapList}},
 				{Path: "spaces/{{default}}/files/*", Capabilities: []Capability{CapRead, CapList}},
+				{Path: "spaces/{{default}}/files/identity/*", Capabilities: []Capability{CapRead}},
 				{Path: "spaces/{{default}}/head", Capabilities: []Capability{CapRead}},
 				{Path: "sys/health", Capabilities: []Capability{CapRead}},
 			},

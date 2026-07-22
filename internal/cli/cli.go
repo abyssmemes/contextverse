@@ -59,6 +59,7 @@ func newRoot() *cobra.Command {
 	root.AddCommand(newUserCmd())
 	root.AddCommand(newAuthCmd())
 	root.AddCommand(newPolicyCmd())
+	root.AddCommand(newACLCmd())
 	root.AddCommand(newContextCmd())
 	root.AddCommand(newPluginCmd())
 	root.AddCommand(newTUICmd())

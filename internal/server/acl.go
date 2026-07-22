@@ -35,7 +35,7 @@ func (s *Server) requireCap(w http.ResponseWriter, r *http.Request, path string,
 	if len(pols) == 0 && p.Role != "" {
 		pols = []string{string(p.Role)}
 	}
-	if !s.Authz.Allow(pols, path, cap, s.authzVars()) {
+	if !s.Authz.AllowUser(p.User, pols, path, cap, s.authzVars()) {
 		s.auditDenied(r, "authz.deny", "", path, fmt.Sprintf("missing %s on %s", cap, path))
 		s.deny(w, r, fmt.Sprintf("missing %s on %s", cap, path))
 		return false
@@ -80,5 +80,5 @@ func (s *Server) canFileWrite(p *auth.Principal, space, filePath string) bool {
 		pols = []string{string(p.Role)}
 	}
 	vars := s.authzVars()
-	return s.Authz.Allow(pols, acl, authz.CapUpdate, vars) || s.Authz.Allow(pols, acl, authz.CapCreate, vars)
+	return s.Authz.AllowUser(p.User, pols, acl, authz.CapUpdate, vars) || s.Authz.AllowUser(p.User, pols, acl, authz.CapCreate, vars)
 }

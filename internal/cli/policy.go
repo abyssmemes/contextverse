@@ -131,7 +131,7 @@ func newPolicyCmd() *cobra.Command {
 			if cfg != nil && cfg.Defaults.Space != "" {
 				def = cfg.Defaults.Space
 			}
-			ok := eng.Allow(pols, path, authz.Capability(capName), authz.Vars{"default": def})
+			ok := eng.AllowUser(user, pols, path, authz.Capability(capName), authz.Vars{"default": def})
 			fmt.Fprintf(cmd.OutOrStdout(), "allow=%v user=%s policies=%v path=%s cap=%s\n", ok, user, pols, path, capName)
 			if !ok {
 				return fmt.Errorf("denied")

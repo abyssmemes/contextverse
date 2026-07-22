@@ -861,8 +861,8 @@ func (s *Server) canAuditRead(p *auth.Principal) bool {
 	if len(pols) == 0 && p.Role != "" {
 		pols = []string{string(p.Role)}
 	}
-	return s.Authz.Allow(pols, "sys/audit", authz.CapList, s.authzVars()) ||
-		s.Authz.Allow(pols, "sys/audit", authz.CapRead, s.authzVars())
+	return s.Authz.AllowUser(p.User, pols, "sys/audit", authz.CapList, s.authzVars()) ||
+		s.Authz.AllowUser(p.User, pols, "sys/audit", authz.CapRead, s.authzVars())
 }
 
 func (s *Server) handleUIWebhooks(w http.ResponseWriter, r *http.Request) {
