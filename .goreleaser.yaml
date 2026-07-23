@@ -72,5 +72,5 @@ nfpms:
         dst: /usr/share/doc/contextd/contextd.plist
         type: config
 
-# Scoop/Winget: manifests under packaging/ (see packaging/README.md).
-# Auto-PR to microsoft/winget-pkgs and a scoop bucket can be wired when those repos exist.
+# Scoop/Homebrew: bumped post-release by scripts/ci/publish-packages.sh (see packaging/README.md).
+# Winget: packaging/winget templates — manual PR to microsoft/winget-pkgs.

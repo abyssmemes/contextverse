@@ -1,21 +1,40 @@
-name: ci
+name: release-branch
 
 on:
-  pull_request:
-  push:
-    branches:
-      - main
-      - "test/**"
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "test = matrix+integration only; deploy = patch tag + GoReleaser + packages + new release branch"
+        required: true
+        type: choice
+        options:
+          - test
+          - deploy
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  group: release-branch-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require release/* branch
+        run: |
+          set -euo pipefail
+          ref="${GITHUB_REF#refs/heads/}"
+          if [[ ! "$ref" =~ ^release/[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Run this workflow from a release/X.Y.Z branch (got: $ref)" >&2
+            exit 1
+          fi
+          echo "branch_ok=1"
+
   test:
+    needs: [guard]
+    if: inputs.action == 'test' || inputs.action == 'deploy'
     strategy:
       fail-fast: false
       matrix:
@@ -34,17 +53,10 @@ jobs:
           out=contextd
           [[ "${RUNNER_OS}" == "Windows" ]] && out=contextd.exe
           go build -o "$out" ./cmd/contextd
-      - name: Shellcheck install.sh
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq shellcheck
-          shellcheck scripts/install.sh
-      - name: next-version self-test
-        if: runner.os == 'Linux'
-        run: bash scripts/ci/next-version_test.sh
 
   integration:
+    needs: [guard]
+    if: inputs.action == 'test' || inputs.action == 'deploy'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,10 +66,10 @@ jobs:
       - name: Integration (MinIO + Postgres)
         run: make test-integration
 
-  release:
-    name: release (minor)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [test, integration]
+  deploy:
+    name: deploy (patch)
+    needs: [guard, test, integration]
+    if: inputs.action == 'deploy'
     runs-on: ubuntu-latest
     concurrency:
       group: release-main
@@ -72,16 +84,22 @@ jobs:
         with:
           go-version: "1.25.x"
 
-      - name: Compute next minor version
+      - name: Compute next patch from branch base
         id: ver
         run: |
           set -euo pipefail
-          eval "$(bash scripts/ci/next-version.sh minor | sed 's/^/export /')"
+          ref="${GITHUB_REF#refs/heads/}"
+          base="${ref#release/}"
+          eval "$(NEXT_VERSION_LATEST="v${base}" bash scripts/ci/next-version.sh patch | sed 's/^/export /')"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "tag $TAG already exists" >&2
+            exit 1
+          fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "ver=${VER}" >> "$GITHUB_OUTPUT"
-          echo "Next release: ${TAG}"
+          echo "Hotfix release: ${TAG} (from ${ref})"
 
-      - name: Create tag and release branch
+      - name: Create tag and new release branch
         env:
           TAG: ${{ steps.ver.outputs.tag }}
         run: bash scripts/ci/create-release-refs.sh "$TAG"

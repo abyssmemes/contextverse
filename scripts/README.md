@@ -2,6 +2,8 @@
 
 Cross-platform installers for the `contextd` binary.
 
+CI release helpers live under [`ci/`](./ci/) (`next-version.sh`, `publish-packages.sh`, `create-release-refs.sh`) — see Immaterium `docs/planning/contextverse-ci-release-branches.md`.
+
 | File | Platform |
 |---|---|
 | [`install.sh`](./install.sh) | macOS / Linux |

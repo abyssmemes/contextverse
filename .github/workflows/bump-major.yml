@@ -1,21 +1,28 @@
-name: ci
+name: bump-major
 
 on:
-  pull_request:
-  push:
-    branches:
-      - main
-      - "test/**"
+  workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  group: release-main
+  cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require main
+        run: |
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "Bump major must be run from main (got ${GITHUB_REF})" >&2
+            exit 1
+          fi
+
   test:
+    needs: [guard]
     strategy:
       fail-fast: false
       matrix:
@@ -34,17 +41,9 @@ jobs:
           out=contextd
           [[ "${RUNNER_OS}" == "Windows" ]] && out=contextd.exe
           go build -o "$out" ./cmd/contextd
-      - name: Shellcheck install.sh
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq shellcheck
-          shellcheck scripts/install.sh
-      - name: next-version self-test
-        if: runner.os == 'Linux'
-        run: bash scripts/ci/next-version_test.sh
 
   integration:
+    needs: [guard]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -55,13 +54,9 @@ jobs:
         run: make test-integration
 
   release:
-    name: release (minor)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    name: release (major)
     needs: [test, integration]
     runs-on: ubuntu-latest
-    concurrency:
-      group: release-main
-      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
         with:
@@ -72,11 +67,11 @@ jobs:
         with:
           go-version: "1.25.x"
 
-      - name: Compute next minor version
+      - name: Compute next major version
         id: ver
         run: |
           set -euo pipefail
-          eval "$(bash scripts/ci/next-version.sh minor | sed 's/^/export /')"
+          eval "$(bash scripts/ci/next-version.sh major | sed 's/^/export /')"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "ver=${VER}" >> "$GITHUB_OUTPUT"
           echo "Next release: ${TAG}"
