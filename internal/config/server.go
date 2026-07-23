@@ -25,12 +25,12 @@ type ServerConfig struct {
 	CreatedAt time.Time `yaml:"created_at"`
 	UpdatedAt time.Time `yaml:"updated_at"`
 
-	Listen   ListenConfig   `yaml:"listen"`
-	TLS      TLSConfig      `yaml:"tls"`
-	Backend  Backend        `yaml:"backend"`
-	Defaults ServerDefaults `yaml:"defaults"`
-	Auth     ServerAuth     `yaml:"auth"`
-	TUI      TUIConfig      `yaml:"tui,omitempty"`
+	Listen    ListenConfig    `yaml:"listen"`
+	TLS       TLSConfig       `yaml:"tls"`
+	Backend   Backend         `yaml:"backend"`
+	Defaults  ServerDefaults  `yaml:"defaults"`
+	Auth      ServerAuth      `yaml:"auth"`
+	TUI       TUIConfig       `yaml:"tui,omitempty"`
 	RateLimit RateLimitConfig `yaml:"rate_limit,omitempty"`
 	Quotas    QuotasConfig    `yaml:"quotas,omitempty"`
 }
@@ -80,11 +80,21 @@ type ListenConfig struct {
 	Port    int    `yaml:"port"`
 }
 
-// TLSConfig optional TLS (disabled in 2a by default).
+// TLSConfig optional TLS (disabled by default).
 type TLSConfig struct {
-	Enabled  bool   `yaml:"enabled"`
-	CertFile string `yaml:"cert_file,omitempty"`
-	KeyFile  string `yaml:"key_file,omitempty"`
+	Enabled  bool       `yaml:"enabled"`
+	CertFile string     `yaml:"cert_file,omitempty"`
+	KeyFile  string     `yaml:"key_file,omitempty"`
+	ACME     ACMEConfig `yaml:"acme,omitempty"`
+}
+
+// ACMEConfig is Let's Encrypt (OSS). Mutual exclusion with cert_file/key_file.
+type ACMEConfig struct {
+	Enabled  bool     `yaml:"enabled"`
+	Email    string   `yaml:"email"`
+	Domains  []string `yaml:"domains"`
+	CacheDir string   `yaml:"cache_dir,omitempty"`
+	HTTPAddr string   `yaml:"http_addr,omitempty"` // default :80 for HTTP-01
 }
 
 // ServerDefaults holds init defaults.
@@ -93,8 +103,11 @@ type ServerDefaults struct {
 }
 
 // ServerAuth holds auth policy knobs.
+// OIDC/MFA keys are rejected on OSS LoadServer (cloud control plane only).
 type ServerAuth struct {
 	TokenTTLDays int `yaml:"token_ttl"` // 0 = no expiry in 2a
+	OIDC         any `yaml:"oidc,omitempty"`
+	MFA          any `yaml:"mfa,omitempty"`
 }
 
 // ClientServer points a client checkout at a remote.
@@ -168,7 +181,50 @@ func LoadServer(dataDir string) (*ServerConfig, error) {
 		cfg.Quotas.MaxSpaceSize = 100 << 20
 		cfg.Quotas.MaxFiles = 5000
 	}
+	if err := cfg.Auth.RejectCloudOnly(); err != nil {
+		return nil, err
+	}
+	if err := cfg.TLS.Validate(); err != nil {
+		return nil, err
+	}
 	return &cfg, nil
+}
+
+// RejectCloudOnly fails if cloud-only auth blocks appear in OSS config.
+func (a ServerAuth) RejectCloudOnly() error {
+	if a.OIDC != nil {
+		return fmt.Errorf("auth.oidc is a ContextVerse Cloud control-plane feature (SSO); remove it from server config — see docs/planning/contextverse-auth-cloud-modules.md")
+	}
+	if a.MFA != nil {
+		return fmt.Errorf("auth.mfa is a ContextVerse Cloud control-plane feature; remove it from server config — see docs/planning/contextverse-auth-cloud-modules.md")
+	}
+	return nil
+}
+
+// Validate checks TLS static vs ACME mutual exclusion.
+func (t TLSConfig) Validate() error {
+	if t.ACME.Enabled && !t.Enabled {
+		return fmt.Errorf("tls.acme.enabled requires tls.enabled")
+	}
+	if !t.Enabled {
+		return nil
+	}
+	if t.ACME.Enabled {
+		if t.CertFile != "" || t.KeyFile != "" {
+			return fmt.Errorf("tls.acme.enabled cannot be combined with tls.cert_file/key_file")
+		}
+		if t.ACME.Email == "" {
+			return fmt.Errorf("tls.acme.email is required when tls.acme.enabled")
+		}
+		if len(t.ACME.Domains) == 0 {
+			return fmt.Errorf("tls.acme.domains is required when tls.acme.enabled")
+		}
+		return nil
+	}
+	if t.CertFile == "" || t.KeyFile == "" {
+		return fmt.Errorf("tls.enabled requires tls.cert_file and tls.key_file (or tls.acme.enabled)")
+	}
+	return nil
 }
 
 const (

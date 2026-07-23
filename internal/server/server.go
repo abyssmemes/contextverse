@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/abyssmemes/contextverse/internal/acme"
 	"github.com/abyssmemes/contextverse/internal/audit"
 	"github.com/abyssmemes/contextverse/internal/auth"
 	"github.com/abyssmemes/contextverse/internal/authz"
@@ -42,7 +43,9 @@ type Server struct {
 	Limiter  *ratelimit.Limiter
 	Metrics  *metrics.Registry
 	Events   *events.Hub
+	Methods  *auth.Registry
 	http     *http.Server
+	acmeHTTP *http.Server // optional HTTP-01 challenge listener
 
 	mu           sync.Mutex
 	NeedsSetup   bool
@@ -104,6 +107,7 @@ func New(cfg *config.ServerConfig, authStore *auth.Store) *Server {
 		Limiter:  lim,
 		Metrics:  reg,
 		Events:   hub,
+		Methods:  auth.DefaultRegistry(),
 	}
 }
 
@@ -197,12 +201,46 @@ func (s *Server) ListenAndServe() error {
 			"address", s.Cfg.Listen.Address)
 	}
 	if s.Cfg.TLS.Enabled {
+		if s.Cfg.TLS.ACME.Enabled {
+			return s.serveACME(ln)
+		}
 		if s.Cfg.TLS.CertFile == "" || s.Cfg.TLS.KeyFile == "" {
-			return fmt.Errorf("tls.enabled requires tls.cert_file and tls.key_file")
+			return fmt.Errorf("tls.enabled requires tls.cert_file and tls.key_file (or tls.acme.enabled)")
 		}
 		return s.http.ServeTLS(ln, s.Cfg.TLS.CertFile, s.Cfg.TLS.KeyFile)
 	}
 	return s.http.Serve(ln)
+}
+
+func (s *Server) serveACME(ln net.Listener) error {
+	cache := acme.ResolveCacheDir(s.Cfg.DataDir, s.Cfg.TLS.ACME.CacheDir)
+	mgr, err := acme.New(acme.Config{
+		Enabled:  true,
+		Email:    s.Cfg.TLS.ACME.Email,
+		Domains:  s.Cfg.TLS.ACME.Domains,
+		CacheDir: s.Cfg.TLS.ACME.CacheDir,
+		HTTPAddr: s.Cfg.TLS.ACME.HTTPAddr,
+	}, cache)
+	if err != nil {
+		return err
+	}
+	s.http.TLSConfig = mgr.TLSConfig()
+	challengeAddr := mgr.ChallengeHTTPAddr()
+	if challengeAddr != "" && s.Cfg.Listen.Port != 80 {
+		s.acmeHTTP = &http.Server{
+			Addr:              challengeAddr,
+			Handler:           mgr.HTTPHandler(),
+			ReadHeaderTimeout: 5 * time.Second,
+		}
+		go func() {
+			logx.L().Info("acme http-01 challenge listener", "addr", challengeAddr)
+			if err := s.acmeHTTP.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				logx.L().Error("acme http-01 listener failed", "err", err)
+			}
+		}()
+	}
+	logx.L().Info("tls acme enabled", "domains", strings.Join(s.Cfg.TLS.ACME.Domains, ","), "cache", cache)
+	return s.http.ServeTLS(ln, "", "")
 }
 
 func isLoopbackListen(addr string) bool {
@@ -212,6 +250,9 @@ func isLoopbackListen(addr string) bool {
 
 // Shutdown stops the server gracefully.
 func (s *Server) Shutdown(ctx context.Context) error {
+	if s.acmeHTTP != nil {
+		_ = s.acmeHTTP.Shutdown(ctx)
+	}
 	if s.http == nil {
 		return nil
 	}
