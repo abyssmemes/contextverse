@@ -187,6 +187,7 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle("GET /api/v1/webhooks/dead-letter", s.auth(s.handleWebhooksDeadLetter))
 		mux.Handle("GET /api/v1/spaces/{space}/freshness", s.auth(s.handleFreshness))
 		mux.Handle("GET /api/v1/events", s.auth(s.handleEvents))
+		s.registerUsersAPI(mux)
 	}
 
 	return s.withAccessLog(s.withRateLimit(s.withRequestID(s.withTracing(mux))))

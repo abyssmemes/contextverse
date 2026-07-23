@@ -155,6 +155,10 @@ For scripts/CI or headless installs, pass --noui (and typically --non-interactiv
 			if err != nil {
 				return err
 			}
+			bootPath := filepath.Join(dataDir, "auth", "bootstrap_admin.token")
+			if err := os.WriteFile(bootPath, []byte(token+"\n"), 0o600); err != nil {
+				logx.L().Warn("write bootstrap token file", "path", bootPath, "err", err)
+			}
 			svc := &spacesvc.Service{DataDir: dataDir, Backend: cfg.Backend}
 			if _, err := svc.Create(cmd.Context(), spaceName, templateName, true); err != nil {
 				return err
