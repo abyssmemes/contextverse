@@ -3,7 +3,6 @@ package template
 import (
 	"archive/tar"
 	"compress/gzip"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -117,52 +116,7 @@ type Entry struct {
 
 // List returns template names from the remote catalog (GitHub contents API).
 func List(repo, ref string, client *http.Client) ([]Entry, error) {
-	if repo == "" {
-		repo = DefaultRepo
-	}
-	if ref == "" {
-		ref = DefaultRef
-	}
-	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
-	}
-	url := fmt.Sprintf("https://api.github.com/repos/%s/contents/templates?ref=%s", repo, ref)
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "contextd")
-	if tok := githubToken(); tok != "" {
-		req.Header.Set("Authorization", "Bearer "+tok)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("list templates: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		return nil, fmt.Errorf("list templates: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-
-	var items []struct {
-		Name string `json:"name"`
-		Type string `json:"type"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
-		return nil, fmt.Errorf("decode template list: %w", err)
-	}
-
-	var out []Entry
-	for _, it := range items {
-		if it.Type != "dir" {
-			continue
-		}
-		out = append(out, Entry{Name: it.Name})
-	}
-	return out, nil
+	return ListContents(repo, ref, "templates", client)
 }
 
 func cacheRoot() (string, error) {

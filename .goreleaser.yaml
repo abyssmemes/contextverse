@@ -49,3 +49,28 @@ release:
   draft: false
   replace_existing_draft: true
   name_template: "v{{.Version}}"
+
+nfpms:
+  - id: linux-packages
+    package_name: contextd
+    file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Arch }}"
+    homepage: https://github.com/abyssmemes/contextverse
+    maintainer: abyssmemes
+    description: Portable, vendor-neutral context for AI
+    license: BUSL-1.1
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/bin
+    section: utils
+    priority: optional
+    contents:
+      - src: deploy/contextd.service
+        dst: /usr/lib/systemd/system/contextd.service
+        type: config
+      - src: deploy/contextd.plist
+        dst: /usr/share/doc/contextd/contextd.plist
+        type: config
+
+# Scoop/Winget: manifests under packaging/ (see packaging/README.md).
+# Auto-PR to microsoft/winget-pkgs and a scoop bucket can be wired when those repos exist.

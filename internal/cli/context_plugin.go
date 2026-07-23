@@ -8,6 +8,7 @@ import (
 
 	"github.com/abyssmemes/contextverse/internal/logx"
 	"github.com/abyssmemes/contextverse/internal/plugins"
+	templatepkg "github.com/abyssmemes/contextverse/internal/template"
 )
 
 func newContextCmd() *cobra.Command {
@@ -64,15 +65,39 @@ func newPluginCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newPluginListCmd())
 	cmd.AddCommand(newPluginInstallCmd())
+	cmd.AddCommand(newPluginRefreshCmd())
 	return cmd
 }
 
-func newPluginListCmd() *cobra.Command {
+func newPluginRefreshCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list",
-		Short: "List known client-integration templates",
+		Use:   "refresh",
+		Short: "Re-fetch community client-integration templates from the catalog",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cat, err := plugins.DefaultCatalog("")
+			dir, err := templatepkg.SyncClientIntegrations("", "", true, nil)
+			if err != nil {
+				return err
+			}
+			cat, err := plugins.LoadCatalog(dir)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "refreshed %d community integration(s) → %s\n", len(cat), dir)
+			for _, in := range cat {
+				fmt.Fprintf(cmd.OutOrStdout(), "  %s\t%s\n", in.ID, in.Display)
+			}
+			return nil
+		},
+	}
+}
+
+func newPluginListCmd() *cobra.Command {
+	var refresh, offline bool
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List known client-integration templates (embedded + community)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cat, err := plugins.LoadDefaultCatalog(plugins.CatalogOpts{Refresh: refresh, Offline: offline})
 			if err != nil {
 				return err
 			}
@@ -94,12 +119,17 @@ func newPluginListCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&refresh, "refresh", false, "re-fetch community catalog before listing")
+	cmd.Flags().BoolVar(&offline, "offline", false, "embedded + local only (no network)")
+	return cmd
 }
 
 func newPluginInstallCmd() *cobra.Command {
 	var (
 		project        string
 		nonInteractive bool
+		refresh        bool
+		offline        bool
 	)
 	cmd := &cobra.Command{
 		Use:   "install [client-id...]",
@@ -120,7 +150,7 @@ func newPluginInstallCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			cat, err := plugins.DefaultCatalog("")
+			cat, err := plugins.LoadDefaultCatalog(plugins.CatalogOpts{Refresh: refresh, Offline: offline})
 			if err != nil {
 				return err
 			}
@@ -151,6 +181,8 @@ func newPluginInstallCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&project, "project", "", "active project name")
 	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "never prompt; print manual instructions if nothing detected")
+	cmd.Flags().BoolVar(&refresh, "refresh", false, "re-fetch community catalog before install")
+	cmd.Flags().BoolVar(&offline, "offline", false, "embedded + local only (no network)")
 	return cmd
 }
 
@@ -162,7 +194,7 @@ func applySessionStartPlugins(spaceRoot, cwd, project string, silent bool) error
 	if err != nil {
 		return err
 	}
-	cat, err := plugins.DefaultCatalog("")
+	cat, err := plugins.LoadDefaultCatalog(plugins.CatalogOpts{})
 	if err != nil {
 		return err
 	}

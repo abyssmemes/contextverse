@@ -10,6 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/abyssmemes/contextverse/internal/logx"
+	templatepkg "github.com/abyssmemes/contextverse/internal/template"
 )
 
 //go:embed embed/*
@@ -72,28 +73,61 @@ func materializeOne(efs fs.FS, id string) (string, error) {
 	return dir, nil
 }
 
-// DefaultCatalog loads embedded integrations, then optional extra on-disk root.
+// CatalogOpts controls embedded + community merge.
+type CatalogOpts struct {
+	ExtraDir string // optional on-disk root of integration dirs
+	Refresh  bool   // re-fetch community catalog
+	Offline  bool   // skip network
+}
+
+// DefaultCatalog loads embedded integrations, then community cache, then optional extra.
+// Embedded IDs win over community (offline-stable); community only adds new clients.
 func DefaultCatalog(extraDir string) ([]*Integration, error) {
+	return LoadDefaultCatalog(CatalogOpts{ExtraDir: extraDir})
+}
+
+// LoadDefaultCatalog is DefaultCatalog with refresh/offline controls.
+func LoadDefaultCatalog(opts CatalogOpts) ([]*Integration, error) {
 	out, err := loadFromEmbedFS(embeddedFS)
 	if err != nil {
 		return nil, err
-	}
-	if extraDir == "" {
-		return out, nil
-	}
-	more, err := LoadCatalog(extraDir)
-	if err != nil {
-		return out, err
 	}
 	seen := map[string]bool{}
 	for _, in := range out {
 		seen[in.ID] = true
 	}
-	for _, in := range more {
-		if seen[in.ID] {
-			continue
+
+	if !opts.Offline {
+		if dir, err := templatepkg.SyncClientIntegrations("", "", opts.Refresh, nil); err != nil {
+			logx.L().Warn("community client-integrations unavailable", "err", err)
+		} else {
+			more, err := LoadCatalog(dir)
+			if err != nil {
+				logx.L().Warn("load community integrations", "err", err)
+			} else {
+				for _, in := range more {
+					if seen[in.ID] {
+						continue
+					}
+					seen[in.ID] = true
+					out = append(out, in)
+				}
+			}
 		}
-		out = append(out, in)
+	}
+
+	if opts.ExtraDir != "" {
+		more, err := LoadCatalog(opts.ExtraDir)
+		if err != nil {
+			return out, err
+		}
+		for _, in := range more {
+			if seen[in.ID] {
+				continue
+			}
+			seen[in.ID] = true
+			out = append(out, in)
+		}
 	}
 	return out, nil
 }

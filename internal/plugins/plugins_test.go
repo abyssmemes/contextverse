@@ -77,7 +77,7 @@ func TestInjectClaudeHook(t *testing.T) {
 }
 
 func TestLoadEmbedded(t *testing.T) {
-	cat, err := DefaultCatalog("")
+	cat, err := LoadDefaultCatalog(CatalogOpts{Offline: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,6 +91,32 @@ func TestLoadEmbedded(t *testing.T) {
 		}
 	}
 }
+
+func TestMergeCommunityExtra(t *testing.T) {
+	extra := t.TempDir()
+	dir := filepath.Join(extra, "custom-ai")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	yaml := "id: custom-ai\ndisplay: Custom\nmechanism: manual\ntarget: /tmp/x\n"
+	if err := os.WriteFile(filepath.Join(dir, "integration.yaml"), []byte(yaml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cat, err := LoadDefaultCatalog(CatalogOpts{ExtraDir: extra, Offline: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, in := range cat {
+		if in.ID == "custom-ai" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected custom-ai from ExtraDir")
+	}
+}
+
 
 func TestAskWhich(t *testing.T) {
 	cat := []*Integration{
