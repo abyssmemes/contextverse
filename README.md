@@ -112,11 +112,18 @@ Requires a recent Go toolchain (`go test ./...` for checks).
 
 ## Documentation
 
-Public docs will ship as a **GitHub Wiki** on this repo alongside the first tagged release. Design notes currently live in the project knowledge base.
+**User docs (source of truth in this repo):** [`docs/`](./docs/) — published as MkDocs Material on GitHub Pages:
+
+**https://abyssmemes.github.io/contextverse/**
+
+```bash
+pip install -r requirements-docs.txt
+mkdocs serve
+```
 
 ## Contributing
 
-Early-stage — issues and design discussion welcome. Contribution guidelines and a CLA/DCO land with the first releases that accept external PRs.
+See [docs/contributing.md](./docs/contributing.md). Early-stage — issues and design discussion welcome. A CLA/DCO lands when the project formally accepts external PRs.
 
 ## License
 
