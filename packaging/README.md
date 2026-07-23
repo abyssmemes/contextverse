@@ -7,31 +7,15 @@
 | `.tar.gz` / `.zip` | archives (install scripts + brew) |
 | `.deb` / `.rpm` | `nfpms` in `.goreleaser.yaml` |
 
-**Manual / community buckets (templates here):**
+**Package manager taps / buckets (self-hosted):**
 
-| Manager | Path |
-|---|---|
-| Scoop | [`scoop/contextd.json`](./scoop/contextd.json) — add a bucket that vendors this manifest, or copy into your bucket |
-| Winget | [`winget/`](./winget/) — example manifest tree; PR to `microsoft/winget-pkgs` when cutting a release |
+| Manager | Repo | Install |
+|---|---|---|
+| Homebrew | [`abyssmemes/homebrew-tap`](https://github.com/abyssmemes/homebrew-tap) | `brew tap abyssmemes/tap && brew install abyssmemes/tap/contextd` |
+| Scoop | [`abyssmemes/scoop-bucket`](https://github.com/abyssmemes/scoop-bucket) | `scoop bucket add contextverse https://github.com/abyssmemes/scoop-bucket` then `scoop install contextd` |
+| Winget | [`packaging/winget/`](./winget/) templates | PR to `microsoft/winget-pkgs` on release cut |
 
-Homebrew remains the primary macOS path: [`abyssmemes/homebrew-tap`](https://github.com/abyssmemes/homebrew-tap).
+After each `v*` release:
 
-## Scoop (example)
-
-```powershell
-# After publishing a release, update Version + hashes in scoop/contextd.json, then:
-scoop bucket add contextverse https://github.com/abyssmemes/scoop-bucket   # when bucket exists
-scoop install contextd
-```
-
-Until `abyssmemes/scoop-bucket` exists, point Scoop at a local bucket:
-
-```powershell
-scoop bucket add local C:\path\to\contextverse\packaging\scoop-bucket
-# place contextd.json in that bucket root
-scoop install contextd
-```
-
-## Winget
-
-Validate locally with [wingetcreate](https://github.com/microsoft/winget-create) against `winget/`, then open a PR to `microsoft/winget-pkgs`.
+- Brew: `homebrew-tap/scripts/bump-formula.sh vX.Y.Z`
+- Scoop: `scoop-bucket/scripts/bump-manifest.sh vX.Y.Z`

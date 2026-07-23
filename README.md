@@ -31,7 +31,14 @@ brew install abyssmemes/tap/contextd
 curl -fsSL https://raw.githubusercontent.com/abyssmemes/contextverse/main/scripts/install.sh | bash
 ```
 
-**Windows (PowerShell)**
+**Windows (Scoop — recommended)**
+
+```powershell
+scoop bucket add contextverse https://github.com/abyssmemes/scoop-bucket
+scoop install contextd
+```
+
+**Windows (install script)**
 
 ```powershell
 irm https://raw.githubusercontent.com/abyssmemes/contextverse/main/scripts/install.ps1 | iex
@@ -43,7 +50,7 @@ irm https://raw.githubusercontent.com/abyssmemes/contextverse/main/scripts/insta
 go install github.com/abyssmemes/contextverse/cmd/contextd@latest
 ```
 
-Details: [`scripts/README.md`](./scripts/README.md). We ship our own Homebrew tap ([`homebrew-tap`](https://github.com/abyssmemes/homebrew-tap)); not submitted to `homebrew-core`.
+Details: [`scripts/README.md`](./scripts/README.md). Own taps/buckets: [`homebrew-tap`](https://github.com/abyssmemes/homebrew-tap), [`scoop-bucket`](https://github.com/abyssmemes/scoop-bucket) — not submitted to homebrew-core / main Scoop extras.
 
 ## Quickstart (solo)
 
