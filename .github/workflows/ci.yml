@@ -1,9 +1,10 @@
 name: ci
 
 # Product CI. Docs / Helm / README-only pushes do NOT trigger this workflow
-# (see docs.yml). Auto minor release runs only when product code changed
-# (not when this workflow file alone changed).
+# (see docs.yml). Auto minor release only when product code changed on main.
+# Manual Run workflow: skip the change gate → tests → build → minor release.
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - "**/*.go"
@@ -48,11 +49,12 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      product: ${{ steps.filter.outputs.product }}
+      product: ${{ steps.resolve.outputs.product }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: filter
+        if: github.event_name != 'workflow_dispatch'
         with:
           filters: |
             product:
@@ -64,6 +66,16 @@ jobs:
               - 'internal/**'
               - 'scripts/**'
               - '.goreleaser.yaml'
+      - name: Resolve product gate
+        id: resolve
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "product=true" >> "$GITHUB_OUTPUT"
+            echo "Manual run — skip change filter, full pipeline"
+          else
+            echo "product=${{ steps.filter.outputs.product }}" >> "$GITHUB_OUTPUT"
+          fi
 
   test:
     needs: [changes]
@@ -110,7 +122,15 @@ jobs:
 
   release:
     name: release (minor)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.product == 'true'
+    if: |
+      always() &&
+      needs.changes.outputs.product == 'true' &&
+      needs.test.result == 'success' &&
+      needs.integration.result == 'success' &&
+      (
+        (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+        github.event_name == 'workflow_dispatch'
+      )
     needs: [changes, test, integration]
     runs-on: ubuntu-latest
     concurrency:

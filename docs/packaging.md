@@ -28,14 +28,16 @@ GoReleaser produces:
 | `release/X.Y.Z` | none on push | manual **test** / **deploy** (patch) |
 | PRs | tests **if code paths changed** | no |
 | docs / deploy templates / README only | `docs.yml` or nothing | **no version bump** |
+| **Manual** Actions → **ci** → Run workflow | skip change gate → tests → **minor release** | yes |
 
-Code paths that start `ci.yml`: `**/*.go`, `go.mod`/`go.sum`, `Makefile`, `cmd/**`, `internal/**`, `scripts/**`, `.goreleaser.yaml`, release workflow YAML.
+Code paths that start `ci.yml` on push/PR: `**/*.go`, `go.mod`/`go.sum`, `Makefile`, `cmd/**`, `internal/**`, `scripts/**`, `.goreleaser.yaml`, release workflow YAML.
 
-**Version bump** only if product code (Go/Makefile/scripts/goreleaser) changed — not docs, deploy templates, README, or workflow-only edits.
+**Manual run** always does the full pipeline (tests + new minor + brew/scoop), even with no code diff.
 
 Version bumps:
 
-- **main** → next **minor** (`v0.1.0` → `v0.2.0`; first tag `v0.1.0` if none)
+- **main** (code change) → next **minor**
+- **Manual ci** → next **minor**
 - **Bump major** workflow → next **major**
 - **release-branch → deploy** → next **patch** + new `release/X.Y.Z` pin
 
@@ -43,11 +45,10 @@ Scripts: `scripts/ci/next-version.sh`, `publish-packages.sh`, `create-release-re
 
 ### Secret
 
-Repo secret `PACKAGING_TOKEN` — PAT with contents write on the Homebrew tap and Scoop bucket. Without it, the release job fails at the package-bump step.
+Repo secret `PACKAGING_TOKEN` — fine-grained PAT with **Contents: Read and write** on `homebrew-tap`, `scoop-bucket`, and `contextverse` (for checksum download).
 
 ## Local package bump
 
 ```bash
-# after a GitHub Release exists:
-PACKAGING_TOKEN=ghp_… ./scripts/ci/publish-packages.sh v0.2.0
+PACKAGING_TOKEN=github_pat_… ./scripts/ci/publish-packages.sh v0.2.0
 ```
