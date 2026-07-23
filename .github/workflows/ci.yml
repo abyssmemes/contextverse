@@ -1,7 +1,8 @@
 name: ci
 
-# Product CI + auto minor release. Docs / Helm / README-only pushes do NOT run this
-# workflow (docs.yml covers the docs site). Paths = code that ships in contextd.
+# Product CI. Docs / Helm / README-only pushes do NOT trigger this workflow
+# (see docs.yml). Auto minor release runs only when product code changed
+# (not when this workflow file alone changed).
 on:
   pull_request:
     paths:
@@ -41,9 +42,32 @@ concurrency:
 
 permissions:
   contents: write
+  pull-requests: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      product: ${{ steps.filter.outputs.product }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            product:
+              - '**/*.go'
+              - 'go.mod'
+              - 'go.sum'
+              - 'Makefile'
+              - 'cmd/**'
+              - 'internal/**'
+              - 'scripts/**'
+              - '.goreleaser.yaml'
+
   test:
+    needs: [changes]
+    if: needs.changes.outputs.product == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -73,6 +97,8 @@ jobs:
         run: bash scripts/ci/next-version_test.sh
 
   integration:
+    needs: [changes]
+    if: needs.changes.outputs.product == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -84,8 +110,8 @@ jobs:
 
   release:
     name: release (minor)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [test, integration]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.product == 'true'
+    needs: [changes, test, integration]
     runs-on: ubuntu-latest
     concurrency:
       group: release-main

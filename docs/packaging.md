@@ -29,7 +29,9 @@ GoReleaser produces:
 | PRs | tests **if code paths changed** | no |
 | docs / deploy templates / README only | `docs.yml` or nothing | **no version bump** |
 
-Code paths that trigger `ci.yml`: `**/*.go`, `go.mod`/`go.sum`, `Makefile`, `cmd/**`, `internal/**`, `scripts/**`, `.goreleaser.yaml`, release workflow YAML.
+Code paths that start `ci.yml`: `**/*.go`, `go.mod`/`go.sum`, `Makefile`, `cmd/**`, `internal/**`, `scripts/**`, `.goreleaser.yaml`, release workflow YAML.
+
+**Version bump** only if product code (Go/Makefile/scripts/goreleaser) changed — not docs, deploy templates, README, or workflow-only edits.
 
 Version bumps:
 
