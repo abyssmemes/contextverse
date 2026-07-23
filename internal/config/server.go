@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -33,6 +34,12 @@ type ServerConfig struct {
 	TUI       TUIConfig       `yaml:"tui,omitempty"`
 	RateLimit RateLimitConfig `yaml:"rate_limit,omitempty"`
 	Quotas    QuotasConfig    `yaml:"quotas,omitempty"`
+	Tracing   TracingConfig   `yaml:"tracing,omitempty"`
+}
+
+// TracingConfig is optional OpenTelemetry export (off by default).
+type TracingConfig struct {
+	OTLPEndpoint string `yaml:"otlp_endpoint,omitempty"` // e.g. http://localhost:4318 — empty = disabled
 }
 
 // RateLimitConfig is in-process API throttling.
@@ -90,11 +97,18 @@ type TLSConfig struct {
 
 // ACMEConfig is Let's Encrypt (OSS). Mutual exclusion with cert_file/key_file.
 type ACMEConfig struct {
-	Enabled  bool     `yaml:"enabled"`
-	Email    string   `yaml:"email"`
-	Domains  []string `yaml:"domains"`
-	CacheDir string   `yaml:"cache_dir,omitempty"`
-	HTTPAddr string   `yaml:"http_addr,omitempty"` // default :80 for HTTP-01
+	Enabled   bool          `yaml:"enabled"`
+	Email     string        `yaml:"email"`
+	Domains   []string      `yaml:"domains"`
+	CacheDir  string        `yaml:"cache_dir,omitempty"`
+	HTTPAddr  string        `yaml:"http_addr,omitempty"`  // default :80 for HTTP-01
+	Challenge string        `yaml:"challenge,omitempty"` // http-01 (default) | dns-01
+	DNS       ACMEDNSConfig `yaml:"dns,omitempty"`
+}
+
+// ACMEDNSConfig selects the DNS-01 provider.
+type ACMEDNSConfig struct {
+	Provider string `yaml:"provider,omitempty"` // cloudflare
 }
 
 // ServerDefaults holds init defaults.
@@ -219,7 +233,25 @@ func (t TLSConfig) Validate() error {
 		if len(t.ACME.Domains) == 0 {
 			return fmt.Errorf("tls.acme.domains is required when tls.acme.enabled")
 		}
-		return nil
+		ch := strings.ToLower(strings.TrimSpace(t.ACME.Challenge))
+		if ch == "" {
+			ch = "http-01"
+		}
+		switch ch {
+		case "http-01":
+			return nil
+		case "dns-01":
+			p := strings.ToLower(strings.TrimSpace(t.ACME.DNS.Provider))
+			if p == "" {
+				p = "cloudflare"
+			}
+			if p != "cloudflare" {
+				return fmt.Errorf("tls.acme.dns.provider %q is not supported (want cloudflare)", t.ACME.DNS.Provider)
+			}
+			return nil
+		default:
+			return fmt.Errorf("tls.acme.challenge must be http-01 or dns-01 (got %q)", t.ACME.Challenge)
+		}
 	}
 	if t.CertFile == "" || t.KeyFile == "" {
 		return fmt.Errorf("tls.enabled requires tls.cert_file and tls.key_file (or tls.acme.enabled)")

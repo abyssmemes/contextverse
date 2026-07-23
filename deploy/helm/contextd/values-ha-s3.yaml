@@ -1,0 +1,32 @@
+# Example: multi-replica HA behind shared S3 (no local PVC)
+#
+#   helm upgrade --install contextd ./deploy/helm/contextd \
+#     -f deploy/helm/contextd/values-ha-s3.yaml \
+#     --set image.repository=contextd --set image.tag=local \
+#     --set env.CONTEXTD_S3_ACCESS_KEY=… --set env.CONTEXTD_S3_SECRET_KEY=…
+#
+# You must bake or mount a server config that points backend.driver=s3 at an
+# external bucket. RWO persistence.enabled=false — emptyDir only for local
+# scratch; space durability is in S3. Do not use replicaCount>1 with local FS + RWO PVC.
+
+replicaCount: 2
+
+persistence:
+  enabled: false
+
+# Point the Deployment at your registry image once CI publish exists.
+image:
+  repository: contextd
+  tag: local
+  pullPolicy: IfNotPresent
+
+env:
+  CONTEXTD_DATA_DIR: /data
+  CONTEXTD_LISTEN_ADDRESS: "0.0.0.0"
+  CONTEXTD_LISTEN_PORT: "8743"
+  CONTEXTD_ADMIN: admin
+  CONTEXTD_SPACE: team
+  # Operator: after first boot, set server config backend to S3 (endpoint/bucket/keys).
+  # Or mount a ConfigMap with config.yaml already using driver: s3.
+
+# Prefer an Ingress / Service mesh that probes /health (sticky sessions not required).

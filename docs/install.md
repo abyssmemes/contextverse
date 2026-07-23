@@ -29,6 +29,20 @@ scoop bucket add contextverse https://github.com/abyssmemes/scoop-bucket
 scoop install contextd
 ```
 
+### Windows service
+
+After `contextd init server` (or UI setup), register with SCM (Administrator shell):
+
+```powershell
+contextd server service install --server-dir $env:USERPROFILE\.contextverse-server
+contextd server service start
+# stop / uninstall:
+contextd server service stop
+contextd server service uninstall
+```
+
+Details: [`deploy/contextd.winservice.md`](https://github.com/abyssmemes/contextverse/blob/main/deploy/contextd.winservice.md).
+
 ## Windows (script)
 
 ```powershell

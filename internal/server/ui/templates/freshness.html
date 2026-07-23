@@ -1,0 +1,42 @@
+{{define "freshness.html"}}
+<!doctype html>
+<html lang="en">
+<head>{{template "head" .}}</head>
+<body class="app" hx-boost="true">
+  {{template "app-open" .}}
+  <header class="page-head">
+    <div>
+      <h1>Freshness</h1>
+      <p class="lede">Markdown <code>stale-after</code> / <code>last-validated</code> across spaces.</p>
+    </div>
+    {{if eq .Role "admin"}}
+    <form method="post" action="/ui/freshness/nag">
+      <button class="btn accent" type="submit">Nag stale (webhooks)</button>
+    </form>
+    {{end}}
+  </header>
+  <div class="panel">
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Stale</th><th>Space</th><th>Path</th><th>Last validated</th><th>Stale after</th><th>Owner</th></tr></thead>
+        <tbody>
+        {{range .Data.Rows}}
+          <tr>
+            <td>{{if .Stale}}<span class="badge">yes</span>{{else}}—{{end}}</td>
+            <td>{{.Space}}</td>
+            <td class="mono"><a href="/ui/spaces/{{.Space}}/files/{{.Path}}">{{.Path}}</a></td>
+            <td class="muted">{{.LastValidated}}</td>
+            <td class="muted">{{.StaleAfter}}</td>
+            <td>{{.Owner}}</td>
+          </tr>
+        {{else}}
+          <tr><td colspan="6"><div class="empty"><strong>No freshness metadata found</strong></div></td></tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {{template "app-close" .}}
+</body>
+</html>
+{{end}}

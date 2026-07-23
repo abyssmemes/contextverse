@@ -41,17 +41,20 @@ func newServerTLSACMECmd() *cobra.Command {
 
 func newServerTLSACMEEnableCmd() *cobra.Command {
 	var (
-		email    string
-		domains  []string
-		httpAddr string
+		email       string
+		domains     []string
+		httpAddr    string
+		challenge   string
+		dnsProvider string
 	)
 	cmd := &cobra.Command{
 		Use:   "enable",
-		Short: "Enable ACME in server config.yaml (HTTP-01)",
+		Short: "Enable ACME in server config.yaml (HTTP-01 or DNS-01)",
 		Long: `Writes tls.enabled + tls.acme into config.yaml and clears static cert_file/key_file.
 
-Requires a public hostname pointing at this host. HTTP-01 challenges are served
-on --http-addr (default :80) unless the main listen port is 80.
+HTTP-01 (default): public hostname; challenges on --http-addr (default :80).
+DNS-01: --challenge dns-01 --dns-provider cloudflare; set CLOUDFLARE_DNS_API_TOKEN
+(or CF_DNS_API_TOKEN) in the server environment.
 
 SSO/OIDC is not configured here — that is ContextVerse Cloud only.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -68,6 +71,9 @@ SSO/OIDC is not configured here — that is ContextVerse Cloud only.`,
 			if len(domains) == 0 {
 				return fmt.Errorf("at least one --domain is required")
 			}
+			if challenge == "" {
+				challenge = "http-01"
+			}
 			cfg, err := config.LoadServer(dir)
 			if err != nil {
 				return err
@@ -75,12 +81,21 @@ SSO/OIDC is not configured here — that is ContextVerse Cloud only.`,
 			cfg.TLS.Enabled = true
 			cfg.TLS.CertFile = ""
 			cfg.TLS.KeyFile = ""
-			cfg.TLS.ACME = config.ACMEConfig{
-				Enabled:  true,
-				Email:    email,
-				Domains:  domains,
-				HTTPAddr: httpAddr,
+			acmeCfg := config.ACMEConfig{
+				Enabled:   true,
+				Email:     email,
+				Domains:   domains,
+				HTTPAddr:  httpAddr,
+				Challenge: challenge,
 			}
+			if challenge == "dns-01" {
+				if dnsProvider == "" {
+					dnsProvider = "cloudflare"
+				}
+				acmeCfg.DNS = config.ACMEDNSConfig{Provider: dnsProvider}
+				acmeCfg.HTTPAddr = ""
+			}
+			cfg.TLS.ACME = acmeCfg
 			if err := cfg.TLS.Validate(); err != nil {
 				return err
 			}
@@ -88,7 +103,12 @@ SSO/OIDC is not configured here — that is ContextVerse Cloud only.`,
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "updated %s\n", config.ServerConfigPathIn(dir))
-			fmt.Fprintf(cmd.OutOrStdout(), "acme: email=%s domains=%v http_addr=%s\n", email, domains, orDefault(httpAddr, ":80"))
+			fmt.Fprintf(cmd.OutOrStdout(), "acme: challenge=%s email=%s domains=%v\n", challenge, email, domains)
+			if challenge == "dns-01" {
+				fmt.Fprintf(cmd.OutOrStdout(), "acme: dns.provider=%s (export CLOUDFLARE_DNS_API_TOKEN before server start)\n", dnsProvider)
+			} else {
+				fmt.Fprintf(cmd.OutOrStdout(), "acme: http_addr=%s\n", orDefault(httpAddr, ":80"))
+			}
 			fmt.Fprintf(cmd.OutOrStdout(), "restart: contextd server stop && contextd server start\n")
 			return nil
 		},
@@ -96,6 +116,8 @@ SSO/OIDC is not configured here — that is ContextVerse Cloud only.`,
 	cmd.Flags().StringVar(&email, "email", "", "contact email for Let's Encrypt")
 	cmd.Flags().StringArrayVar(&domains, "domain", nil, "hostname to obtain a cert for (repeatable)")
 	cmd.Flags().StringVar(&httpAddr, "http-addr", ":80", "bind address for HTTP-01 challenges")
+	cmd.Flags().StringVar(&challenge, "challenge", "http-01", "http-01 or dns-01")
+	cmd.Flags().StringVar(&dnsProvider, "dns-provider", "cloudflare", "DNS-01 provider (cloudflare)")
 	return cmd
 }
 
@@ -122,15 +144,28 @@ func newServerTLSACMEStatusCmd() *cobra.Command {
 				if cfg.TLS.ACME.CacheDir != "" {
 					cache = cfg.TLS.ACME.CacheDir
 				}
-				httpAddr := cfg.TLS.ACME.HTTPAddr
-				if httpAddr == "" {
-					httpAddr = ":80"
+				ch := cfg.TLS.ACME.Challenge
+				if ch == "" {
+					ch = "http-01"
 				}
 				fmt.Fprintf(out, "tls.acme.enabled: true\n")
+				fmt.Fprintf(out, "tls.acme.challenge: %s\n", ch)
 				fmt.Fprintf(out, "tls.acme.email: %s\n", cfg.TLS.ACME.Email)
 				fmt.Fprintf(out, "tls.acme.domains: %v\n", cfg.TLS.ACME.Domains)
 				fmt.Fprintf(out, "tls.acme.cache_dir: %s\n", cache)
-				fmt.Fprintf(out, "tls.acme.http_addr: %s\n", httpAddr)
+				if ch == "dns-01" {
+					p := cfg.TLS.ACME.DNS.Provider
+					if p == "" {
+						p = "cloudflare"
+					}
+					fmt.Fprintf(out, "tls.acme.dns.provider: %s\n", p)
+				} else {
+					httpAddr := cfg.TLS.ACME.HTTPAddr
+					if httpAddr == "" {
+						httpAddr = ":80"
+					}
+					fmt.Fprintf(out, "tls.acme.http_addr: %s\n", httpAddr)
+				}
 				return nil
 			}
 			fmt.Fprintf(out, "tls.acme.enabled: false\n")

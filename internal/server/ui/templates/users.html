@@ -2,12 +2,12 @@
 <!doctype html>
 <html lang="en">
 <head>{{template "head" .}}</head>
-<body class="app">
+<body class="app" hx-boost="true">
   {{template "app-open" .}}
   <header class="page-head">
     <div>
       <h1>Users</h1>
-      <p class="lede">Accounts and roles. New users get a one-time API token.</p>
+      <p class="lede">Accounts, roles, and API tokens. New users get a one-time token.</p>
     </div>
   </header>
   <div class="panel">
@@ -19,6 +19,33 @@
           <tr><td><strong>{{.Name}}</strong></td><td><span class="badge">{{.Role}}</span></td></tr>
         {{else}}
           <tr><td colspan="2"><div class="empty"><strong>No users</strong></div></td></tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="panel">
+    <h2 class="section-title">API tokens</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>User</th><th>Label</th><th>Created</th><th></th></tr></thead>
+        <tbody>
+        {{range .Data.Tokens}}
+          <tr>
+            <td class="mono">{{.ID}}</td>
+            <td>{{.User}}</td>
+            <td>{{.Label}}</td>
+            <td class="muted">{{.CreatedAt.Format "2006-01-02"}}</td>
+            <td>
+              {{if eq $.Role "admin"}}
+              <form method="post" action="/ui/tokens/{{.ID}}/revoke" style="display:inline">
+                <button class="btn secondary" type="submit" style="padding:4px 10px;font-size:0.8rem;">Revoke</button>
+              </form>
+              {{end}}
+            </td>
+          </tr>
+        {{else}}
+          <tr><td colspan="5"><div class="empty"><strong>No tokens on disk</strong></div></td></tr>
         {{end}}
         </tbody>
       </table>

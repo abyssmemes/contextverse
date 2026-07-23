@@ -1,0 +1,133 @@
+# HA lab: 2× contextd + MinIO + Caddy
+#
+# Architecture: no clustering — stateless nodes + shared S3 backend.
+# Auth/config live on a shared Docker volume (lab only). Spaces CAS on MinIO.
+#
+#   docker build -f ../../docker/Dockerfile -t contextd:local ../../..
+#   docker compose up -d
+#   curl -sf http://127.0.0.1:8743/health
+#
+# Sticky sessions are NOT required. Probe /health before undrain on rolling restart.
+
+services:
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_started
+    entrypoint: >
+      /bin/sh -c "
+      sleep 2;
+      mc alias set local http://minio:9000 minioadmin minioadmin;
+      mc mb -p local/contextverse || true;
+      exit 0;
+      "
+
+  contextd-init:
+    image: contextd:local
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      CONTEXTD_DATA_DIR: /data
+      CONTEXTD_LISTEN_ADDRESS: "0.0.0.0"
+      CONTEXTD_LISTEN_PORT: "8743"
+      CONTEXTD_ADMIN: admin
+      CONTEXTD_SPACE: team
+    volumes:
+      - contextd_shared:/data
+      - ./init.sh:/ha/init.sh:ro
+    entrypoint: ["/bin/sh", "/ha/init.sh"]
+
+  config-patch:
+    image: mikefarah/yq:4
+    depends_on:
+      contextd-init:
+        condition: service_completed_successfully
+    volumes:
+      - contextd_shared:/data
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        test -f /data/config.yaml
+        yq -i '
+          .backend.driver = "s3" |
+          .backend.s3_endpoint = "http://minio:9000" |
+          .backend.s3_region = "us-east-1" |
+          .backend.s3_bucket = "contextverse" |
+          .backend.s3_prefix = "ha" |
+          .backend.s3_access_key = "minioadmin" |
+          .backend.s3_secret_key = "minioadmin" |
+          .backend.s3_path_style = true |
+          .listen.address = "0.0.0.0" |
+          .listen.port = 8743
+        ' /data/config.yaml
+        echo "backend patched to s3/minio"
+
+  contextd-a:
+    image: contextd:local
+    depends_on:
+      config-patch:
+        condition: service_completed_successfully
+    environment:
+      CONTEXTD_DATA_DIR: /data
+    volumes:
+      - contextd_shared:/data
+    entrypoint: ["contextd", "server", "start", "--server-dir", "/data", "--open=false"]
+    healthcheck:
+      test: ["CMD", "contextd", "server", "health", "--server-dir", "/data"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    restart: unless-stopped
+
+  contextd-b:
+    image: contextd:local
+    depends_on:
+      config-patch:
+        condition: service_completed_successfully
+    environment:
+      CONTEXTD_DATA_DIR: /data
+    volumes:
+      - contextd_shared:/data
+    entrypoint: ["contextd", "server", "start", "--server-dir", "/data", "--open=false"]
+    healthcheck:
+      test: ["CMD", "contextd", "server", "health", "--server-dir", "/data"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    restart: unless-stopped
+
+  proxy:
+    image: caddy:2-alpine
+    depends_on:
+      contextd-a:
+        condition: service_healthy
+      contextd-b:
+        condition: service_healthy
+    ports:
+      - "8743:8743"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    restart: unless-stopped
+
+volumes:
+  minio_data:
+  contextd_shared:

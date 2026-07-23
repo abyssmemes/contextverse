@@ -25,6 +25,7 @@ import (
 	"github.com/abyssmemes/contextverse/internal/server"
 	"github.com/abyssmemes/contextverse/internal/spacesvc"
 	"github.com/abyssmemes/contextverse/internal/tui"
+	"github.com/abyssmemes/contextverse/internal/winsvc"
 )
 
 var flagServerDir string
@@ -207,6 +208,7 @@ func newServerCmd() *cobra.Command {
 	cmd.AddCommand(newServerLogsCmd())
 	cmd.AddCommand(newServerUnitCmd())
 	cmd.AddCommand(newServerTLSCmd())
+	cmd.AddCommand(newServerServiceCmd())
 	return cmd
 }
 
@@ -266,7 +268,7 @@ func newServerStartCmd() *cobra.Command {
 			if err := checkListenFree(listenAddr, listenPort); err != nil {
 				return err
 			}
-			if openUI {
+			if openUI && !winsvc.IsService() {
 				url := srv.Cfg.BaseURL()
 				if !config.ServerExists(dir) {
 					url = fmt.Sprintf("http://%s:%d/setup", loopbackHost(address), port)
@@ -294,6 +296,11 @@ func newServerStartCmd() *cobra.Command {
 				}
 			}
 
+			if winsvc.IsService() {
+				return winsvc.Run(func(ctx context.Context) error {
+					return runServerUntilContext(srv, ctx, wishCancel)
+				})
+			}
 			return runServerUntilSignal(srv, wishCancel)
 		},
 	}
@@ -325,22 +332,45 @@ func runServerUntilSignal(srv *server.Server, onStop func()) error {
 		return err
 	case sig := <-sigCh:
 		logx.L().Info("shutdown signal", "signal", sig.String())
-		if onStop != nil {
-			onStop()
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-		defer cancel()
-		if err := srv.Shutdown(ctx); err != nil {
-			logx.L().Error("graceful shutdown failed", "err", err)
-			return err
-		}
-		err := <-errCh
+		return gracefulStop(srv, onStop, errCh)
+	}
+}
+
+// runServerUntilContext serves until ctx is cancelled (Windows service stop).
+func runServerUntilContext(srv *server.Server, ctx context.Context, onStop func()) error {
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- srv.ListenAndServe()
+	}()
+
+	select {
+	case err := <-errCh:
 		if err == nil || errors.Is(err, http.ErrServerClosed) {
-			logx.L().Info("server stopped")
 			return nil
 		}
 		return err
+	case <-ctx.Done():
+		logx.L().Info("shutdown signal", "signal", "service-stop")
+		return gracefulStop(srv, onStop, errCh)
 	}
+}
+
+func gracefulStop(srv *server.Server, onStop func(), errCh <-chan error) error {
+	if onStop != nil {
+		onStop()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		logx.L().Error("graceful shutdown failed", "err", err)
+		return err
+	}
+	err := <-errCh
+	if err == nil || errors.Is(err, http.ErrServerClosed) {
+		logx.L().Info("server stopped")
+		return nil
+	}
+	return err
 }
 
 func execOpen(url string) error {

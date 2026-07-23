@@ -27,6 +27,7 @@ import (
 	"github.com/abyssmemes/contextverse/internal/ratelimit"
 	"github.com/abyssmemes/contextverse/internal/spacesvc"
 	"github.com/abyssmemes/contextverse/internal/storage"
+	"github.com/abyssmemes/contextverse/internal/tracing"
 	"github.com/abyssmemes/contextverse/internal/version"
 	"github.com/abyssmemes/contextverse/internal/webhooks"
 )
@@ -44,8 +45,10 @@ type Server struct {
 	Metrics  *metrics.Registry
 	Events   *events.Hub
 	Methods  *auth.Registry
+	Tracing  *tracing.Provider
 	http     *http.Server
 	acmeHTTP *http.Server // optional HTTP-01 challenge listener
+	acmeMgr  *acme.Manager
 
 	mu           sync.Mutex
 	NeedsSetup   bool
@@ -96,6 +99,13 @@ func New(cfg *config.ServerConfig, authStore *auth.Store) *Server {
 			reg.WebhookFailed.Inc()
 		}
 	}
+	tp, err := tracing.New(cfg.Tracing.OTLPEndpoint)
+	if err != nil {
+		logx.L().Error("init tracing", "err", err)
+		tp, _ = tracing.New("")
+	} else if tp.Enabled() {
+		logx.L().Info("otlp tracing enabled", "endpoint", cfg.Tracing.OTLPEndpoint)
+	}
 	return &Server{
 		Cfg:      cfg,
 		Auth:     authStore,
@@ -108,6 +118,7 @@ func New(cfg *config.ServerConfig, authStore *auth.Store) *Server {
 		Metrics:  reg,
 		Events:   hub,
 		Methods:  auth.DefaultRegistry(),
+		Tracing:  tp,
 	}
 }
 
@@ -178,7 +189,17 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle("GET /api/v1/events", s.auth(s.handleEvents))
 	}
 
-	return s.withAccessLog(s.withRateLimit(s.withRequestID(mux)))
+	return s.withAccessLog(s.withRateLimit(s.withRequestID(s.withTracing(mux))))
+}
+
+func (s *Server) withTracing(next http.Handler) http.Handler {
+	if s.Tracing == nil || !s.Tracing.Enabled() {
+		return next
+	}
+	return s.Tracing.Middleware(func(ctx context.Context) string {
+		rid, _ := ctx.Value(requestIDKey).(string)
+		return rid
+	}, next)
 }
 
 // ListenAndServe starts the HTTP server (blocking).
@@ -215,15 +236,18 @@ func (s *Server) ListenAndServe() error {
 func (s *Server) serveACME(ln net.Listener) error {
 	cache := acme.ResolveCacheDir(s.Cfg.DataDir, s.Cfg.TLS.ACME.CacheDir)
 	mgr, err := acme.New(acme.Config{
-		Enabled:  true,
-		Email:    s.Cfg.TLS.ACME.Email,
-		Domains:  s.Cfg.TLS.ACME.Domains,
-		CacheDir: s.Cfg.TLS.ACME.CacheDir,
-		HTTPAddr: s.Cfg.TLS.ACME.HTTPAddr,
+		Enabled:   true,
+		Email:     s.Cfg.TLS.ACME.Email,
+		Domains:   s.Cfg.TLS.ACME.Domains,
+		CacheDir:  s.Cfg.TLS.ACME.CacheDir,
+		HTTPAddr:  s.Cfg.TLS.ACME.HTTPAddr,
+		Challenge: s.Cfg.TLS.ACME.Challenge,
+		DNS:       acme.DNSConfig{Provider: s.Cfg.TLS.ACME.DNS.Provider},
 	}, cache)
 	if err != nil {
 		return err
 	}
+	s.acmeMgr = mgr
 	s.http.TLSConfig = mgr.TLSConfig()
 	challengeAddr := mgr.ChallengeHTTPAddr()
 	if challengeAddr != "" && s.Cfg.Listen.Port != 80 {
@@ -239,7 +263,10 @@ func (s *Server) serveACME(ln net.Listener) error {
 			}
 		}()
 	}
-	logx.L().Info("tls acme enabled", "domains", strings.Join(s.Cfg.TLS.ACME.Domains, ","), "cache", cache)
+	logx.L().Info("tls acme enabled",
+		"challenge", mgr.Cfg.NormalizedChallenge(),
+		"domains", strings.Join(s.Cfg.TLS.ACME.Domains, ","),
+		"cache", cache)
 	return s.http.ServeTLS(ln, "", "")
 }
 
@@ -250,13 +277,22 @@ func isLoopbackListen(addr string) bool {
 
 // Shutdown stops the server gracefully.
 func (s *Server) Shutdown(ctx context.Context) error {
+	if s.acmeMgr != nil {
+		s.acmeMgr.Close()
+	}
 	if s.acmeHTTP != nil {
 		_ = s.acmeHTTP.Shutdown(ctx)
 	}
-	if s.http == nil {
-		return nil
+	var err error
+	if s.http != nil {
+		err = s.http.Shutdown(ctx)
 	}
-	return s.http.Shutdown(ctx)
+	if s.Tracing != nil {
+		if terr := s.Tracing.Shutdown(ctx); terr != nil && err == nil {
+			err = terr
+		}
+	}
+	return err
 }
 
 type ctxKey int

@@ -24,6 +24,17 @@ contextd server stop     # graceful SIGTERM
 
 Access logs include `request_id` (from `X-Request-Id` or generated).
 
+### Tracing (optional)
+
+Off by default. When `tracing.otlp_endpoint` is set, each HTTP request gets an OpenTelemetry span with attribute `request_id`, exported via **OTLP HTTP** (no embedded Jaeger UI).
+
+```yaml
+tracing:
+  otlp_endpoint: "http://localhost:4318"   # collector OTLP/HTTP; omit or empty = off
+```
+
+Correlate spans with access logs and client `X-Request-Id` headers.
+
 ## TLS
 
 ### Lab self-signed
@@ -42,18 +53,28 @@ tls:
     enabled: true
     email: ops@example.com
     domains: ["context.example.com"]
-    cache_dir: ""   # default <data_dir>/tls/acme
-    http_addr: ":80"  # HTTP-01 challenges
+    challenge: http-01          # or dns-01
+    cache_dir: ""               # default <data_dir>/tls/acme
+    http_addr: ":80"            # HTTP-01 only
+    # dns:
+    #   provider: cloudflare    # DNS-01; set CLOUDFLARE_DNS_API_TOKEN
 ```
 
 ```bash
+# HTTP-01
 contextd server tls acme enable \
   --email ops@example.com \
   --domain context.example.com
+
+# DNS-01 (Cloudflare)
+export CLOUDFLARE_DNS_API_TOKEN=…
+contextd server tls acme enable \
+  --challenge dns-01 --dns-provider cloudflare \
+  --email ops@example.com --domain context.example.com
 contextd server tls acme status
 ```
 
-Mutual exclusion: ACME **or** static `cert_file`/`key_file`, not both. DNS-01 / wildcards are later (or terminate TLS at a reverse proxy).
+Mutual exclusion: ACME **or** static `cert_file`/`key_file`, not both. Wildcards still later (DNS-01 path supports them once LE issues).
 
 ## Rate limits & quotas
 
@@ -72,4 +93,6 @@ Configured in server `config.yaml` (`rate_limit`, `quotas`). Defaults apply if o
 
 - `deploy/contextd.service` — systemd
 - `deploy/contextd.plist` — launchd
+- `deploy/contextd.winservice.md` — Windows SCM (`contextd server service …`)
+- `deploy/compose/ha-minio/` — HA lab (2× nodes + MinIO + Caddy); see [Deploy → HA](deploy.md#high-availability-shared-backend)
 - `deploy/docker/` · `deploy/helm/contextd/` — **templates in development** (no CI image/Helm publish yet). See [Deploy](deploy.md).

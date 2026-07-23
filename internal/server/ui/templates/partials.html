@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Georama:ital,wght@0,400..800;1,400..800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/ui/static/app.css">
+<script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfVWEgJBjdVuMkbOmLA" crossorigin="anonymous"></script>
 <script defer src="/ui/static/theme.js"></script>
 {{end}}
 
@@ -37,6 +38,7 @@
     <a href="/ui/backends" class="{{if eq .Active "backends"}}active{{end}}">Backends</a>
     <a href="/ui/audit" class="{{if eq .Active "audit"}}active{{end}}">Audit</a>
     <a href="/ui/webhooks" class="{{if eq .Active "webhooks"}}active{{end}}">Webhooks</a>
+    <a href="/ui/freshness" class="{{if eq .Active "freshness"}}active{{end}}">Freshness</a>
     <a href="/ui/logout">Logout</a>
   </nav>
   <div style="display:flex;align-items:center;gap:10px;">
@@ -68,6 +70,7 @@
       <a href="/ui/backends" class="{{if eq .Active "backends"}}active{{end}}">Backends</a>
       <a href="/ui/audit" class="{{if eq .Active "audit"}}active{{end}}">Audit</a>
       <a href="/ui/webhooks" class="{{if eq .Active "webhooks"}}active{{end}}">Webhooks</a>
+      <a href="/ui/freshness" class="{{if eq .Active "freshness"}}active{{end}}">Freshness</a>
     </nav>
     <div class="app-side-foot">
       <div class="who"><strong>{{.User}}</strong><br>{{.Role}}</div>

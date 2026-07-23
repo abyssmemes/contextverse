@@ -2,7 +2,7 @@
 <!doctype html>
 <html lang="en">
 <head>{{template "head" .}}</head>
-<body class="app">
+<body class="app" hx-boost="true">
   {{template "app-open" .}}
   <header class="page-head">
     <div>
@@ -10,7 +10,7 @@
       <p class="lede">Context spaces on this server. Open one to browse files.</p>
     </div>
   </header>
-  <div class="panel">
+  <div class="panel" id="spaces-panel">
     <div class="table-wrap">
       <table>
         <thead><tr><th>Name</th><th>Head</th><th></th></tr></thead>

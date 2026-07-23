@@ -2,7 +2,7 @@
 
 `contextd` is **one binary**. Mode comes from config (`solo` | `client` | `server`), not from which subcommand exists.
 
-The CLI is the primary surface. Web UI and TUI wrap the same capabilities.
+The CLI is the primary surface. Web UI and TUI wrap the same capabilities (admin: spaces, users/tokens, freshness nag, backends, audit, webhooks; file `vN` View/Restore).
 
 ## Global flags
 

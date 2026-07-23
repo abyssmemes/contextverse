@@ -31,10 +31,11 @@ curl -sf http://127.0.0.1:8743/health
 
 ## Important limits (for now)
 
-- **`replicaCount: 1`** with a ReadWriteOnce PVC and **local** backend. Horizontal scale needs a shared storage backend (S3 / SQL / git) configured in `config.yaml` — not covered by this template.
+- Default **`replicaCount: 1`** with a ReadWriteOnce PVC and **local** backend.
+- For HA: use [`values-ha-s3.yaml`](./values-ha-s3.yaml) (`replicaCount: 2`, `persistence.enabled: false`) and point `backend` at shared S3/SQL/git. See also Compose lab [`../../compose/ha-minio/`](../../compose/ha-minio/).
 - Ingress is **off** by default (`ingress.enabled: false`).
 - Image tags like `contextd:local` must already exist in the cluster — nothing pulls from GHCR yet.
 
 ## Values
 
-See [`values.yaml`](./values.yaml). Override listen/admin/space via `env.*`.
+See [`values.yaml`](./values.yaml) and [`values-ha-s3.yaml`](./values-ha-s3.yaml). Override listen/admin/space via `env.*`.

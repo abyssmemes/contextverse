@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
@@ -16,6 +17,7 @@ import (
 	"github.com/abyssmemes/contextverse/internal/auth"
 	"github.com/abyssmemes/contextverse/internal/authz"
 	"github.com/abyssmemes/contextverse/internal/config"
+	"github.com/abyssmemes/contextverse/internal/freshness"
 	"github.com/abyssmemes/contextverse/internal/hooks"
 	"github.com/abyssmemes/contextverse/internal/logx"
 	"github.com/abyssmemes/contextverse/internal/server/ui"
@@ -61,6 +63,9 @@ func (s *Server) registerUI(mux *http.ServeMux) {
 	mux.Handle("POST /ui/webhooks", s.uiAuth(s.handleUIWebhooksCreate))
 	mux.Handle("POST /ui/webhooks/{id}/test", s.uiAuth(s.handleUIWebhooksTest))
 	mux.Handle("POST /ui/webhooks/{id}/delete", s.uiAuth(s.handleUIWebhooksDelete))
+	mux.Handle("POST /ui/tokens/{id}/revoke", s.uiAuth(s.handleUITokenRevoke))
+	mux.Handle("GET /ui/freshness", s.uiAuth(s.handleUIFreshness))
+	mux.Handle("POST /ui/freshness/nag", s.uiAuth(s.handleUIFreshnessNag))
 }
 
 func (s *Server) pageBase(active string, p *auth.Principal) ui.Page {
@@ -581,9 +586,10 @@ func (s *Server) handleUIUsers(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	tokens, _ := s.Auth.ListTokens("")
 	pg := s.pageBase("users", p)
 	pg.Title = "Users"
-	pg.Data = map[string]any{"Users": users, "NewToken": ""}
+	pg.Data = map[string]any{"Users": users, "Tokens": tokens, "NewToken": ""}
 	_ = ui.Render(w, "users.html", pg)
 }
 
@@ -600,18 +606,104 @@ func (s *Server) handleUIAddUser(w http.ResponseWriter, r *http.Request) {
 		pg := s.pageBase("users", p)
 		pg.FlashError = err.Error()
 		users, _ := s.Auth.ListUsers()
-		pg.Data = map[string]any{"Users": users}
+		tokens, _ := s.Auth.ListTokens("")
+		pg.Data = map[string]any{"Users": users, "Tokens": tokens}
 		_ = ui.Render(w, "users.html", pg)
 		return
 	}
 	token, _, _ := s.Auth.CreateToken(name, "ui")
 	users, _ := s.Auth.ListUsers()
+	tokens, _ := s.Auth.ListTokens("")
 	pg := s.pageBase("users", p)
 	pg.Title = "Users"
 	pg.Flash = "user created"
-	pg.Data = map[string]any{"Users": users, "NewToken": token}
+	pg.Data = map[string]any{"Users": users, "Tokens": tokens, "NewToken": token}
 	s.auditEmit(r, "user.add", "", name+":"+string(role), nil)
 	_ = ui.Render(w, "users.html", pg)
+}
+
+func (s *Server) handleUITokenRevoke(w http.ResponseWriter, r *http.Request) {
+	p := principalFrom(r.Context())
+	if !auth.CanAdmin(p.Role) {
+		http.Error(w, "admin only", 403)
+		return
+	}
+	id := r.PathValue("id")
+	if err := s.Auth.RevokeToken(id); err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+	s.auditEmit(r, "token.revoke", "", id, nil)
+	http.Redirect(w, r, "/ui/users", http.StatusSeeOther)
+}
+
+func (s *Server) handleUIFreshness(w http.ResponseWriter, r *http.Request) {
+	p := principalFrom(r.Context())
+	type row struct {
+		Space         string
+		Path          string
+		Stale         bool
+		LastValidated string
+		StaleAfter    string
+		Owner         string
+	}
+	var rows []row
+	names, _ := s.Spaces.List()
+	now := time.Now().UTC()
+	for _, name := range names {
+		all, err := freshness.ScanDir(s.Spaces.SpaceRoot(name), now)
+		if err != nil {
+			continue
+		}
+		for _, m := range all {
+			rows = append(rows, row{
+				Space:         name,
+				Path:          m.Path,
+				Stale:         m.Stale,
+				LastValidated: m.LastValidated.Format("2006-01-02"),
+				StaleAfter:    m.StaleAfter.String(),
+				Owner:         m.Owner,
+			})
+		}
+	}
+	pg := s.pageBase("freshness", p)
+	pg.Title = "Freshness"
+	if r.URL.Query().Get("flash") == "nagged" {
+		pg.Flash = "stale freshness webhooks emitted"
+	}
+	pg.Data = map[string]any{"Rows": rows}
+	_ = ui.Render(w, "freshness.html", pg)
+}
+
+func (s *Server) handleUIFreshnessNag(w http.ResponseWriter, r *http.Request) {
+	p := principalFrom(r.Context())
+	if !auth.CanAdmin(p.Role) {
+		http.Error(w, "admin only", 403)
+		return
+	}
+	n := 0
+	names, _ := s.Spaces.List()
+	now := time.Now().UTC()
+	for _, name := range names {
+		all, err := freshness.ScanDir(s.Spaces.SpaceRoot(name), now)
+		if err != nil {
+			continue
+		}
+		for _, m := range freshness.StaleOnly(all) {
+			if s.Dispatch != nil {
+				s.Dispatch.Emit(webhooks.Event{
+					Type:  "freshness.stale",
+					Space: name,
+					Scope: m.Path,
+					Actor: p.User,
+					Data:  map[string]any{"owner": m.Owner, "stale_after": m.StaleAfter.String()},
+				})
+			}
+			n++
+		}
+	}
+	s.auditEmit(r, "freshness.nag", "", fmt.Sprintf("%d", n), nil)
+	http.Redirect(w, r, "/ui/freshness?flash=nagged", http.StatusSeeOther)
 }
 
 func (s *Server) handleUIBackends(w http.ResponseWriter, r *http.Request) {
