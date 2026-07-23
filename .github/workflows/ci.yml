@@ -50,6 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       product: ${{ steps.resolve.outputs.product }}
+      tests: ${{ steps.resolve.outputs.tests }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -66,20 +67,35 @@ jobs:
               - 'internal/**'
               - 'scripts/**'
               - '.goreleaser.yaml'
+            tests:
+              - '**/*.go'
+              - 'go.mod'
+              - 'go.sum'
+              - 'Makefile'
+              - 'cmd/**'
+              - 'internal/**'
+              - 'scripts/**'
+              - '.goreleaser.yaml'
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/bump-major.yml'
+              - '.github/workflows/release-branch.yml'
+              - '.github/workflows/release.yml'
       - name: Resolve product gate
         id: resolve
         run: |
           set -euo pipefail
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "product=true" >> "$GITHUB_OUTPUT"
+            echo "tests=true" >> "$GITHUB_OUTPUT"
             echo "Manual run — skip change filter, full pipeline"
           else
             echo "product=${{ steps.filter.outputs.product }}" >> "$GITHUB_OUTPUT"
+            echo "tests=${{ steps.filter.outputs.tests }}" >> "$GITHUB_OUTPUT"
           fi
 
   test:
     needs: [changes]
-    if: needs.changes.outputs.product == 'true'
+    if: needs.changes.outputs.tests == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -90,6 +106,19 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.25.x"
+      - name: Download modules (retry)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in 1 2 3 4 5; do
+            if go mod download; then
+              exit 0
+            fi
+            echo "go mod download failed (attempt $i), retrying..."
+            sleep $((i * 5))
+          done
+          echo "go mod download failed after retries" >&2
+          exit 1
       - name: Test
         run: go test ./...
       - name: Build
@@ -110,13 +139,26 @@ jobs:
 
   integration:
     needs: [changes]
-    if: needs.changes.outputs.product == 'true'
+    if: needs.changes.outputs.tests == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: "1.25.x"
+      - name: Download modules (retry)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in 1 2 3 4 5; do
+            if go mod download; then
+              exit 0
+            fi
+            echo "go mod download failed (attempt $i), retrying..."
+            sleep $((i * 5))
+          done
+          echo "go mod download failed after retries" >&2
+          exit 1
       - name: Integration (MinIO + Postgres)
         run: make test-integration
 
