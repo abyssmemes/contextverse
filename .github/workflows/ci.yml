@@ -1,11 +1,39 @@
 name: ci
 
+# Product CI + auto minor release. Docs / Helm / README-only pushes do NOT run this
+# workflow (docs.yml covers the docs site). Paths = code that ships in contextd.
 on:
   pull_request:
+    paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+      - "Makefile"
+      - "cmd/**"
+      - "internal/**"
+      - "scripts/**"
+      - ".goreleaser.yaml"
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/bump-major.yml"
+      - ".github/workflows/release-branch.yml"
+      - ".github/workflows/release.yml"
   push:
     branches:
       - main
       - "test/**"
+    paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+      - "Makefile"
+      - "cmd/**"
+      - "internal/**"
+      - "scripts/**"
+      - ".goreleaser.yaml"
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/bump-major.yml"
+      - ".github/workflows/release-branch.yml"
+      - ".github/workflows/release.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

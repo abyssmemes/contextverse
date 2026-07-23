@@ -23,10 +23,13 @@ GoReleaser produces:
 | Branch | Automatic CI | Publish |
 |---|---|---|
 | `dev/**` | none | — |
-| `test/**` | multi-OS tests + integration | no |
-| `main` | tests → **minor** tag + release + brew/scoop + `release/X.Y.Z` | yes |
+| `test/**` | tests **if code paths changed** | no |
+| `main` | tests → **minor** release **if code paths changed** | yes |
 | `release/X.Y.Z` | none on push | manual **test** / **deploy** (patch) |
-| PRs | tests only | no |
+| PRs | tests **if code paths changed** | no |
+| docs / deploy templates / README only | `docs.yml` or nothing | **no version bump** |
+
+Code paths that trigger `ci.yml`: `**/*.go`, `go.mod`/`go.sum`, `Makefile`, `cmd/**`, `internal/**`, `scripts/**`, `.goreleaser.yaml`, release workflow YAML.
 
 Version bumps:
 
