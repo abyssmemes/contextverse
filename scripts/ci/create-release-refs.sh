@@ -9,6 +9,10 @@ TAG="${1:-}"
 VER="${BASH_REMATCH[1]}"
 BRANCH="release/${VER}"
 
+# Annotated tags need an identity on GitHub Actions runners.
+git config user.name "${GIT_AUTHOR_NAME:-github-actions[bot]}"
+git config user.email "${GIT_AUTHOR_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}"
+
 if git rev-parse "$TAG" >/dev/null 2>&1; then
   echo "tag $TAG already exists" >&2
   exit 1
