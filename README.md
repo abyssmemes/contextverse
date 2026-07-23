@@ -56,6 +56,9 @@ contextd mcp serve       # live MCP tools for Claude/Cursor (stdio)
 
 Optional: seed from a community template — see [`contextverse-templates`](https://github.com/abyssmemes/contextverse-templates).
 
+Shell completions: `contextd completion zsh|bash|fish|powershell`.  
+ChatGPT / web UIs: `contextd export --format chatgpt` → `~/contextverse-export/`.
+
 ## Key ideas
 
 - **Context space model** — layered `identity / team / projects` with entry files and freshness/importance metadata.

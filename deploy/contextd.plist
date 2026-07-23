@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>dev.contextverse.contextd</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/local/bin/contextd</string>
+		<string>server</string>
+		<string>start</string>
+		<string>--server-dir</string>
+		<string>/usr/local/var/contextverse</string>
+		<string>--open=false</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>StandardOutPath</key>
+	<string>/usr/local/var/log/contextd.log</string>
+	<key>StandardErrorPath</key>
+	<string>/usr/local/var/log/contextd.err.log</string>
+</dict>
+</plist>
