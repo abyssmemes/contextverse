@@ -3,11 +3,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}} · ContextVerse</title>
 <script>
-(function(){try{var t=localStorage.getItem("contextverse-theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();
+(function(){try{var t=localStorage.getItem("contextverse-theme");if(t==="dark")document.documentElement.setAttribute("data-theme","dark");else document.documentElement.setAttribute("data-theme","light");}catch(e){document.documentElement.setAttribute("data-theme","light");}})();
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Georama:ital,wght@0,400..800;1,400..800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/ui/static/app.css">
 <script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfVWEgJBjdVuMkbOmLA" crossorigin="anonymous"></script>
 <script defer src="/ui/static/theme.js"></script>
@@ -62,6 +62,7 @@
 <div class="app-frame">
   <aside class="app-sidebar" aria-label="Sidebar">
     <a class="brand" href="/">ContextVerse</a>
+    <div class="sidebar-label">Menu</div>
     <nav class="app-nav">
       <a href="/" class="{{if eq .Active "dash"}}active{{end}}">Dashboard</a>
       <a href="/ui/spaces" class="{{if eq .Active "spaces"}}active{{end}}">Spaces</a>
@@ -78,7 +79,7 @@
         {{template "theme-btn" .}}
         <a class="btn secondary" href="/ui/logout" style="flex:1;text-align:center;padding:8px 12px;font-size:0.85rem;">Logout</a>
       </div>
-      <div class="muted" style="font-size:0.75rem;">Theme <span class="kbd">d</span></div>
+      <div class="muted" style="font-size:0.75rem;">Theme <span class="kbd">d</span> · canvas only</div>
     </div>
   </aside>
   <div class="app-main" id="main">
@@ -86,7 +87,7 @@
 {{end}}
 
 {{define "app-close"}}
-    <div class="footer">contextd {{.Version}} · CLI wrapper UI</div>
+    <div class="footer">contextd {{.Version}} · space UI</div>
   </div>
 </div>
 {{end}}

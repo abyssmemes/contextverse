@@ -1,20 +1,13 @@
 (function () {
   var KEY = "contextverse-theme";
 
-  function systemTheme() {
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  }
-
   function current() {
-    return document.documentElement.getAttribute("data-theme") || systemTheme();
+    return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
   }
 
   function apply(theme) {
-    if (theme !== "light" && theme !== "dark") {
-      document.documentElement.removeAttribute("data-theme");
-      return;
-    }
-    document.documentElement.setAttribute("data-theme", theme);
+    // Dark flips only canvas CSS variables; sidebar gradient is theme-invariant.
+    document.documentElement.setAttribute("data-theme", theme === "dark" ? "dark" : "light");
   }
 
   function persist(theme) {
@@ -26,13 +19,13 @@
   function load() {
     try {
       var saved = localStorage.getItem(KEY);
-      if (saved === "light" || saved === "dark") {
-        apply(saved);
-        return saved;
+      if (saved === "dark") {
+        apply("dark");
+        return "dark";
       }
     } catch (_) {}
-    apply(systemTheme());
-    return systemTheme();
+    apply("light");
+    return "light";
   }
 
   function toggle() {
@@ -47,7 +40,7 @@
     document.querySelectorAll("[data-theme-toggle]").forEach(function (btn) {
       var dark = theme === "dark";
       btn.setAttribute("aria-pressed", dark ? "true" : "false");
-      btn.setAttribute("title", dark ? "Switch to light theme" : "Switch to dark theme");
+      btn.setAttribute("title", dark ? "Switch to light canvas" : "Switch to dark canvas");
       var label = btn.querySelector("[data-theme-label]");
       if (label) label.textContent = dark ? "Light" : "Dark";
     });
@@ -79,7 +72,6 @@
 
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape") document.body.classList.remove("nav-open");
-      // d = toggle theme when not typing
       if ((e.key === "d" || e.key === "D") && !e.metaKey && !e.ctrlKey && !e.altKey) {
         var t = e.target;
         if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) {
