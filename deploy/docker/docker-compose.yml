@@ -1,0 +1,32 @@
+# Template Compose file for a local contextd server.
+# Status: in development — build the image yourself (no registry publish yet).
+#
+#   docker build -f ../Dockerfile -t contextd:local ../..
+#   docker compose up -d
+
+services:
+  contextd:
+    image: contextd:local
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    ports:
+      - "8743:8743"
+    environment:
+      CONTEXTD_DATA_DIR: /data
+      CONTEXTD_LISTEN_ADDRESS: "0.0.0.0"
+      CONTEXTD_LISTEN_PORT: "8743"
+      CONTEXTD_ADMIN: admin
+      CONTEXTD_SPACE: team
+    volumes:
+      - contextd_data:/data
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/contextd", "server", "health", "--server-dir", "/data"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  contextd_data:

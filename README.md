@@ -79,16 +79,11 @@ ChatGPT / web UIs: `contextd export --format chatgpt` → `~/contextverse-export
 
 ```
 cmd/contextd/          # binary entrypoint
-deploy/                # example systemd unit
+deploy/                # systemd/launchd + Docker/Helm templates (WIP)
+docs/                  # user documentation (MkDocs → GitHub Pages)
 internal/
-  cli/                 # Cobra commands (incl. file, tui, server)
-  storage/             # backends + FileLog + space snapshots
-  spacesvc/            # server space ops
-  server/              # HTTP API + admin Web UI
-  tui/                 # Bubble Tea client + server admin
-  plugins/             # session-start delivery
-  auth/ authz/         # tokens + path ACL
-scripts/               # install.sh / install.ps1
+  ...
+scripts/               # install.sh / install.ps1 + ci/
 ```
 
 Related repos:

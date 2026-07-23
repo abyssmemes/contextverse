@@ -1,0 +1,19 @@
+apiVersion: v2
+name: contextd
+description: ContextVerse contextd server (self-hosted data plane) — TEMPLATE / WIP
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - contextverse
+  - contextd
+  - ai-context
+home: https://github.com/abyssmemes/contextverse
+sources:
+  - https://github.com/abyssmemes/contextverse
+maintainers:
+  - name: abyssmemes
+    url: https://github.com/abyssmemes
+annotations:
+  # Chart is a starter template; no OCI chart publish / CD yet.
+  contextverse.dev/status: "in-development"

@@ -1,0 +1,92 @@
+# Template values for contextd.
+# Status: in development — no automated Helm package or cluster deploy yet.
+#
+# Image is expected to be built locally (or from a future registry):
+#   docker build -f deploy/docker/Dockerfile -t contextd:local .
+
+replicaCount: 1
+
+image:
+  repository: contextd
+  tag: local
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podSecurityContext:
+  fsGroup: 65532
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop: ["ALL"]
+
+service:
+  type: ClusterIP
+  port: 8743
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: context.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+persistence:
+  enabled: true
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 10Gi
+  # existingClaim: ""
+
+env:
+  CONTEXTD_DATA_DIR: /data
+  CONTEXTD_LISTEN_ADDRESS: "0.0.0.0"
+  CONTEXTD_LISTEN_PORT: "8743"
+  CONTEXTD_ADMIN: admin
+  CONTEXTD_SPACE: team
+
+# Single-replica + RWO PVC. Multi-replica needs a shared backend (S3/SQL/git), not local FS.
+autoscaling:
+  enabled: false
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 15
+  periodSeconds: 20
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10

@@ -20,7 +20,7 @@ Every AI tool keeps context in its own silo. Switch tools and you start over; us
 
 1. [Install](install.md)
 2. [Quickstart](quickstart.md)
-3. [CLI](cli.md) · [Server](server.md) · [Auth & ACL](auth-acl.md)
+3. [CLI](cli.md) · [Server](server.md) · [Deploy](deploy.md) · [Auth & ACL](auth-acl.md)
 
 ## Status
 

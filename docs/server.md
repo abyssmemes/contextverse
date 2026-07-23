@@ -72,3 +72,4 @@ Configured in server `config.yaml` (`rate_limit`, `quotas`). Defaults apply if o
 
 - `deploy/contextd.service` — systemd
 - `deploy/contextd.plist` — launchd
+- `deploy/docker/` · `deploy/helm/contextd/` — **templates in development** (no CI image/Helm publish yet). See [Deploy](deploy.md).

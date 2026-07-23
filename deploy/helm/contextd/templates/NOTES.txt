@@ -1,0 +1,10 @@
+1. Status: **in development** — this chart is a template. No OCI chart publish or CD yet.
+2. Build / load an image first, e.g.:
+   docker build -f deploy/docker/Dockerfile -t {{ .Values.image.repository }}:{{ .Values.image.tag }} .
+3. Install:
+   helm upgrade --install {{ .Release.Name }} deploy/helm/contextd -n {{ .Release.Namespace }}
+4. Port-forward:
+   kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "contextd.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+5. Health:
+   curl -sf http://127.0.0.1:{{ .Values.service.port }}/health
+6. First-boot admin token is in the pod logs (shown once by contextd init).

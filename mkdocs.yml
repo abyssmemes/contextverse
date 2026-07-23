@@ -55,6 +55,7 @@ nav:
   - Quickstart: quickstart.md
   - CLI: cli.md
   - Server: server.md
+  - Deploy (Docker & Helm): deploy.md
   - Auth & ACL: auth-acl.md
   - Packaging & releases: packaging.md
   - Contributing: contributing.md
