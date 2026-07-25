@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/abyssmemes/contextverse/internal/logx"
+	"github.com/abyssmemes/contextverse/internal/storage"
 )
 
 const (
@@ -35,11 +36,11 @@ const (
 
 // ResolveOptions control template lookup.
 type ResolveOptions struct {
-	Name     string // catalog name, e.g. solo-default
-	Path     string // explicit local directory (wins)
-	Repo     string // owner/name, default DefaultRepo
-	Ref      string // git ref, default DefaultRef
-	Refresh  bool   // ignore cache, re-fetch
+	Name       string // catalog name, e.g. solo-default
+	Path       string // explicit local directory (wins)
+	Repo       string // owner/name, default DefaultRepo
+	Ref        string // git ref, default DefaultRef
+	Refresh    bool   // ignore cache, re-fetch
 	HTTPClient *http.Client
 }
 
@@ -195,6 +196,7 @@ func extractTemplateFromTarGz(r io.Reader, prefix, dest string) error {
 	defer gz.Close()
 
 	tr := tar.NewReader(gz)
+	budget := int64(maxArchiveBytes)
 	found := false
 	for {
 		hdr, err := tr.Next()
@@ -219,31 +221,68 @@ func extractTemplateFromTarGz(r io.Reader, prefix, dest string) error {
 			continue
 		}
 		found = true
-		target := filepath.Join(dest, rel)
-		switch hdr.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0o755); err != nil {
-				return err
-			}
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				return err
-			}
-			f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode)&0o755|0o644)
-			if err != nil {
-				return err
-			}
-			if _, err := io.Copy(f, tr); err != nil {
-				f.Close()
-				return err
-			}
-			if err := f.Close(); err != nil {
-				return err
-			}
+		if err := extractMember(tr, hdr, dest, rel, &budget); err != nil {
+			return err
 		}
 	}
 	if !found {
 		return fmt.Errorf("template prefix %q not found in archive", prefix)
 	}
 	return nil
+}
+
+const (
+	// maxMemberBytes caps one extracted file, maxArchiveBytes the whole archive.
+	// Without them a crafted or corrupted tarball can fill the cache directory.
+	maxMemberBytes  = 8 << 20
+	maxArchiveBytes = 64 << 20
+)
+
+// extractMember writes one archive member under dest. Member names come from a
+// remote tarball, so the target is resolved inside dest and links are skipped:
+// a member named "../../.ssh/authorized_keys" or a symlink to /etc must not be
+// able to reach outside the template cache.
+func extractMember(tr io.Reader, hdr *tar.Header, dest, rel string, budget *int64) error {
+	switch hdr.Typeflag {
+	case tar.TypeDir:
+		target, err := storage.ResolveUnder(dest, rel)
+		if err != nil {
+			return fmt.Errorf("archive member %q: %w", hdr.Name, err)
+		}
+		return os.MkdirAll(target, 0o755)
+	case tar.TypeReg:
+		target, err := storage.ResolveUnder(dest, rel)
+		if err != nil {
+			return fmt.Errorf("archive member %q: %w", hdr.Name, err)
+		}
+		if hdr.Size > maxMemberBytes {
+			return fmt.Errorf("archive member %q is %d bytes (limit %d)", hdr.Name, hdr.Size, int64(maxMemberBytes))
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode)&0o755|0o644)
+		if err != nil {
+			return err
+		}
+		limit := maxMemberBytes
+		if *budget < int64(limit) {
+			limit = int(*budget)
+		}
+		n, err := io.Copy(f, io.LimitReader(tr, int64(limit)+1))
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+		if err != nil {
+			return err
+		}
+		if n > int64(limit) {
+			return fmt.Errorf("archive exceeds the %d byte extraction budget", int64(maxArchiveBytes))
+		}
+		*budget -= n
+		return nil
+	default:
+		logx.L().Warn("skipping unsupported archive member", "name", hdr.Name, "type", hdr.Typeflag)
+		return nil
+	}
 }

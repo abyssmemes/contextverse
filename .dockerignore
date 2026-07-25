@@ -1,0 +1,11 @@
+.git
+.bin
+bin
+site/
+docs/
+packaging/
+*.md
+mkdocs.yml
+requirements-docs.txt
+docker-compose*.yml
+.DS_Store

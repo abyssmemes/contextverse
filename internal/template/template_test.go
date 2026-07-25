@@ -50,6 +50,42 @@ func TestExtractTemplateFromTarGz(t *testing.T) {
 	}
 }
 
+func TestExtractTemplateRefusesTraversal(t *testing.T) {
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	body := "pwned\n"
+	hdr := &tar.Header{
+		Name: "contextverse-templates-main/templates/solo-default/../../../../loot.md",
+		Mode: 0o644,
+		Size: int64(len(body)),
+	}
+	if err := tw.WriteHeader(hdr); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.WriteString(tw, body); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	parent := t.TempDir()
+	dest := filepath.Join(parent, "cache")
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := extractTemplateFromTarGz(bytes.NewReader(buf.Bytes()), "templates/solo-default/", dest); err == nil {
+		t.Fatal("a member escaping the destination must abort extraction")
+	}
+	if _, err := os.Stat(filepath.Join(parent, "loot.md")); !os.IsNotExist(err) {
+		t.Fatal("archive member escaped the destination directory")
+	}
+}
+
 func TestResolveLocalPath(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "context-entry.md"), []byte("# hi\n"), 0o644); err != nil {

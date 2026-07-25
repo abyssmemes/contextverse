@@ -142,6 +142,10 @@ func (s *S3) getRecord(ctx context.Context, path string) (s3ObjectRecord, string
 }
 
 func (s *S3) Get(ctx context.Context, path string) ([]byte, Version, error) {
+	path, err := CleanFilePath(path)
+	if err != nil {
+		return nil, "", err
+	}
 	rec, _, err := s.getRecord(ctx, path)
 	if err != nil {
 		return nil, "", err
@@ -150,6 +154,10 @@ func (s *S3) Get(ctx context.Context, path string) ([]byte, Version, error) {
 }
 
 func (s *S3) List(ctx context.Context, prefix string) ([]Entry, error) {
+	prefix, err := CleanPath(prefix)
+	if err != nil {
+		return nil, err
+	}
 	var out []Entry
 	paginator := s3.NewListObjectsV2Paginator(s.client, &s3.ListObjectsV2Input{
 		Bucket: aws.String(s.bucket),
@@ -190,6 +198,10 @@ func (s *S3) List(ctx context.Context, prefix string) ([]Entry, error) {
 }
 
 func (s *S3) Put(ctx context.Context, path string, data []byte, expected Version) (Version, error) {
+	path, err := CleanFilePath(path)
+	if err != nil {
+		return "", err
+	}
 	rec, etag, err := s.getRecord(ctx, path)
 	actual := Version("")
 	if err == nil {
@@ -229,6 +241,10 @@ func (s *S3) Put(ctx context.Context, path string, data []byte, expected Version
 }
 
 func (s *S3) Delete(ctx context.Context, path string, expected Version) error {
+	path, err := CleanFilePath(path)
+	if err != nil {
+		return err
+	}
 	rec, _, err := s.getRecord(ctx, path)
 	if err != nil {
 		return err
@@ -244,6 +260,10 @@ func (s *S3) Delete(ctx context.Context, path string, expected Version) error {
 }
 
 func (s *S3) Head(ctx context.Context, scope string) (Version, error) {
+	scope, err := CleanPath(scope)
+	if err != nil {
+		return "", err
+	}
 	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(s.headKey(scope)),
@@ -263,6 +283,10 @@ func (s *S3) Head(ctx context.Context, scope string) (Version, error) {
 }
 
 func (s *S3) SetHead(ctx context.Context, scope string, expected, next Version) error {
+	scope, err := CleanPath(scope)
+	if err != nil {
+		return err
+	}
 	key := s.headKey(scope)
 	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),

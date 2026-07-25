@@ -22,9 +22,9 @@ import (
 
 // Meta is per-space metadata on the server.
 type Meta struct {
-	Name      string    `yaml:"name" json:"name"`
-	CreatedAt time.Time `yaml:"created_at" json:"created_at"`
-	Template  string    `yaml:"template,omitempty" json:"template,omitempty"`
+	Name      string     `yaml:"name" json:"name"`
+	CreatedAt time.Time  `yaml:"created_at" json:"created_at"`
+	Template  string     `yaml:"template,omitempty" json:"template,omitempty"`
 	Sync      SyncConfig `yaml:"sync" json:"sync"`
 }
 
@@ -52,9 +52,31 @@ func (s *Service) spacesRoot() string {
 	return filepath.Join(s.DataDir, "spaces")
 }
 
-// SpaceRoot returns the on-disk tree for a space.
+// SpaceRoot returns the on-disk tree for a space. An invalid name yields a path
+// that cannot exist, so callers that skipped SpaceRootFor still fail closed
+// instead of reaching a sibling directory.
 func (s *Service) SpaceRoot(name string) string {
+	if storage.ValidSpaceName(name) != nil {
+		return filepath.Join(s.spacesRoot(), "_invalid-space-name")
+	}
 	return filepath.Join(s.spacesRoot(), name)
+}
+
+// SpaceRootFor validates the name and returns its on-disk tree.
+func (s *Service) SpaceRootFor(name string) (string, error) {
+	if err := storage.ValidSpaceName(name); err != nil {
+		return "", err
+	}
+	return filepath.Join(s.spacesRoot(), name), nil
+}
+
+// treePath resolves a caller-supplied blob path inside a space's working tree.
+func (s *Service) treePath(name, rel string) (string, error) {
+	root, err := s.SpaceRootFor(name)
+	if err != nil {
+		return "", err
+	}
+	return storage.ResolveUnder(root, rel)
 }
 
 // OpenBackend opens the configured storage backend for a space.
@@ -89,7 +111,11 @@ func (s *Service) List() ([]string, error) {
 
 // LoadMeta reads meta.yaml.
 func (s *Service) LoadMeta(name string) (*Meta, error) {
-	raw, err := os.ReadFile(filepath.Join(s.SpaceRoot(name), "meta.yaml"))
+	root, err := s.SpaceRootFor(name)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := os.ReadFile(filepath.Join(root, "meta.yaml"))
 	if err != nil {
 		return nil, err
 	}
@@ -101,12 +127,15 @@ func (s *Service) LoadMeta(name string) (*Meta, error) {
 }
 
 func (s *Service) saveMeta(m *Meta) error {
+	root, err := s.SpaceRootFor(m.Name)
+	if err != nil {
+		return err
+	}
 	raw, err := yaml.Marshal(m)
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(s.SpaceRoot(m.Name), "meta.yaml")
-	return os.WriteFile(path, raw, 0o644)
+	return os.WriteFile(filepath.Join(root, "meta.yaml"), raw, 0o644)
 }
 
 // DefaultSync returns the Phase-2a default selective sync rules.
@@ -124,13 +153,10 @@ func DefaultSync() SyncConfig {
 
 // Create seeds a space from a template and snapshots into the local backend.
 func (s *Service) Create(ctx context.Context, name, templateName string, force bool) (*Meta, error) {
-	if name == "" {
-		return nil, fmt.Errorf("space name required")
+	root, err := s.SpaceRootFor(name)
+	if err != nil {
+		return nil, err
 	}
-	if strings.Contains(name, "/") || strings.Contains(name, "..") {
-		return nil, fmt.Errorf("invalid space name")
-	}
-	root := s.SpaceRoot(name)
 	if !force {
 		if _, err := os.Stat(root); err == nil {
 			return nil, fmt.Errorf("space %q already exists", name)
@@ -174,7 +200,10 @@ func (s *Service) Create(ctx context.Context, name, templateName string, force b
 
 // Delete removes a space directory.
 func (s *Service) Delete(name string) error {
-	root := s.SpaceRoot(name)
+	root, err := s.SpaceRootFor(name)
+	if err != nil {
+		return err
+	}
 	if _, err := os.Stat(root); err != nil {
 		return fmt.Errorf("space %q not found", name)
 	}
@@ -274,7 +303,7 @@ func (s *Service) PutFile(ctx context.Context, name, path string, data []byte, e
 	if err != nil {
 		return "", err
 	}
-	if err := writeTreeFile(s.SpaceRoot(name), path, data); err != nil {
+	if err := s.writeTreeFile(name, path, data); err != nil {
 		return ver, err
 	}
 	return ver, nil
@@ -288,7 +317,10 @@ func (s *Service) checkSpaceQuota(ctx context.Context, name string, newBytes int
 	var total, oldSize int64
 	exists := false
 	for _, e := range entries {
-		p := filepath.Join(s.SpaceRoot(name), filepath.FromSlash(e.Path))
+		p, err := s.treePath(name, e.Path)
+		if err != nil {
+			continue
+		}
 		st, err := os.Stat(p)
 		if err != nil {
 			continue
@@ -314,7 +346,10 @@ func (s *Service) SpaceUsage(ctx context.Context, name string) (bytes int64, fil
 		return 0, 0, err
 	}
 	for _, e := range entries {
-		p := filepath.Join(s.SpaceRoot(name), filepath.FromSlash(e.Path))
+		p, err := s.treePath(name, e.Path)
+		if err != nil {
+			continue
+		}
 		if st, err := os.Stat(p); err == nil {
 			bytes += st.Size()
 		}
@@ -331,7 +366,7 @@ func (s *Service) DeleteFile(ctx context.Context, name, path string, expected st
 	if err := fl.SoftDelete(ctx, path, expected); err != nil {
 		return err
 	}
-	_ = os.Remove(filepath.Join(s.SpaceRoot(name), filepath.FromSlash(path)))
+	s.removeTreeFile(name, path)
 	return nil
 }
 
@@ -349,7 +384,7 @@ func (s *Service) UndeleteFile(ctx context.Context, name, path string) (storage.
 	if err != nil {
 		return ver, err
 	}
-	if err := writeTreeFile(s.SpaceRoot(name), path, data); err != nil {
+	if err := s.writeTreeFile(name, path, data); err != nil {
 		return ver, err
 	}
 	return ver, nil
@@ -462,7 +497,7 @@ func (s *Service) Push(ctx context.Context, name string, req PushRequest) (*Push
 			if _, err := fl.Put(ctx, op.Path, data, expected); err != nil {
 				return nil, err
 			}
-			if err := writeTreeFile(s.SpaceRoot(name), op.Path, data); err != nil {
+			if err := s.writeTreeFile(name, op.Path, data); err != nil {
 				return nil, err
 			}
 			applied++
@@ -478,7 +513,7 @@ func (s *Service) Push(ctx context.Context, name string, req PushRequest) (*Push
 			if err := fl.SoftDelete(ctx, op.Path, expected); err != nil {
 				return nil, err
 			}
-			_ = os.Remove(filepath.Join(s.SpaceRoot(name), filepath.FromSlash(op.Path)))
+			s.removeTreeFile(name, op.Path)
 			applied++
 		default:
 			return nil, fmt.Errorf("unknown op %q", op.Op)
@@ -493,8 +528,14 @@ func (s *Service) Push(ctx context.Context, name string, req PushRequest) (*Push
 	return &PushResult{Head: next, Applied: applied}, nil
 }
 
-func writeTreeFile(spaceRoot, path string, data []byte) error {
-	abs := filepath.Join(spaceRoot, filepath.FromSlash(path))
+// writeTreeFile mirrors a blob into the space's working tree. The path is
+// resolved under the space root, so a request for "../other/notes.md" is
+// rejected rather than written next door.
+func (s *Service) writeTreeFile(name, path string, data []byte) error {
+	abs, err := s.treePath(name, path)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 		return err
 	}
@@ -503,6 +544,17 @@ func writeTreeFile(spaceRoot, path string, data []byte) error {
 		return err
 	}
 	return os.Rename(tmp, abs)
+}
+
+// removeTreeFile drops the working-tree mirror; a rejected path is a no-op
+// because nothing inside the space could have been written under it.
+func (s *Service) removeTreeFile(name, path string) {
+	abs, err := s.treePath(name, path)
+	if err != nil {
+		logx.L().Warn("refused tree path", "space", name, "path", path, "err", err)
+		return
+	}
+	_ = os.Remove(abs)
 }
 
 func decodeB64(s string) ([]byte, error) {

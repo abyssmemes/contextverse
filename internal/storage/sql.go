@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -68,10 +69,14 @@ func (s *SQL) Name() string { return "sql" }
 func (s *SQL) Close() error { return s.db.Close() }
 
 func (s *SQL) Get(ctx context.Context, path string) ([]byte, Version, error) {
+	path, err := CleanFilePath(path)
+	if err != nil {
+		return nil, "", err
+	}
 	var ver string
 	var data []byte
-	err := s.db.QueryRowContext(ctx,
-		`SELECT version, data FROM cv_objects WHERE path = $1`, sanitizePath(path),
+	err = s.db.QueryRowContext(ctx,
+		`SELECT version, data FROM cv_objects WHERE path = $1`, path,
 	).Scan(&ver, &data)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, "", ErrNotFound
@@ -83,11 +88,17 @@ func (s *SQL) Get(ctx context.Context, path string) ([]byte, Version, error) {
 }
 
 func (s *SQL) List(ctx context.Context, prefix string) ([]Entry, error) {
+	prefix, err := CleanPath(prefix)
+	if err != nil {
+		return nil, err
+	}
 	q := `SELECT path, version FROM cv_objects`
 	var args []any
 	if prefix != "" {
-		q += ` WHERE path LIKE $1`
-		args = append(args, prefix+"%")
+		// A prefix is data, not a pattern: escape LIKE wildcards so "a_b" or
+		// "%" cannot widen the match beyond the caller's own subtree.
+		q += ` WHERE path LIKE $1 ESCAPE '\'`
+		args = append(args, escapeLike(prefix)+"%")
 	}
 	q += ` ORDER BY path`
 	rows, err := s.db.QueryContext(ctx, q, args...)
@@ -109,7 +120,10 @@ func (s *SQL) List(ctx context.Context, prefix string) ([]Entry, error) {
 }
 
 func (s *SQL) Put(ctx context.Context, path string, data []byte, expected Version) (Version, error) {
-	path = sanitizePath(path)
+	path, err := CleanFilePath(path)
+	if err != nil {
+		return "", err
+	}
 	next := contentVersion(data)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -159,7 +173,10 @@ func (s *SQL) Put(ctx context.Context, path string, data []byte, expected Versio
 }
 
 func (s *SQL) Delete(ctx context.Context, path string, expected Version) error {
-	path = sanitizePath(path)
+	path, err := CleanFilePath(path)
+	if err != nil {
+		return err
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -186,9 +203,12 @@ func (s *SQL) Delete(ctx context.Context, path string, expected Version) error {
 }
 
 func (s *SQL) Head(ctx context.Context, scope string) (Version, error) {
-	scope = headScope(scope)
+	scope, err := cleanHeadScope(scope)
+	if err != nil {
+		return "", err
+	}
 	var ver string
-	err := s.db.QueryRowContext(ctx, `SELECT version FROM cv_heads WHERE scope=$1`, scope).Scan(&ver)
+	err = s.db.QueryRowContext(ctx, `SELECT version FROM cv_heads WHERE scope=$1`, scope).Scan(&ver)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", ErrNotFound
 	}
@@ -199,7 +219,10 @@ func (s *SQL) Head(ctx context.Context, scope string) (Version, error) {
 }
 
 func (s *SQL) SetHead(ctx context.Context, scope string, expected, next Version) error {
-	scope = headScope(scope)
+	scope, err := cleanHeadScope(scope)
+	if err != nil {
+		return err
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -247,10 +270,27 @@ func (s *SQL) TestConnectivity(ctx context.Context) error {
 	return s.db.PingContext(ctx)
 }
 
-func headScope(scope string) string {
-	s := sanitizePath(scope)
-	if s == "" || s == "." {
-		return "_root"
+func cleanHeadScope(scope string) (string, error) {
+	s, err := CleanPath(scope)
+	if err != nil {
+		return "", err
 	}
-	return s
+	if s == "" {
+		return "_root", nil
+	}
+	return s, nil
+}
+
+// escapeLike neutralizes LIKE metacharacters so a path prefix matches literally.
+func escapeLike(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch r {
+		case '\\', '%', '_':
+			b.WriteRune('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }

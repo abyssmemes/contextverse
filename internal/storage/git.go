@@ -134,8 +134,10 @@ func (g *Git) ensureRemote(url string) error {
 	return err
 }
 
-func (g *Git) objectAbs(path string) string {
-	return filepath.Join(g.path, gitObjectsPrefix, filepath.FromSlash(sanitizePath(path)+".bin"))
+// objectAbs resolves a validated path inside the object tree. It re-checks
+// containment because this backend writes real files.
+func (g *Git) objectAbs(path string) (string, error) {
+	return ResolveUnder(filepath.Join(g.path, gitObjectsPrefix), sanitizePath(path)+".bin")
 }
 
 func (g *Git) objectRel(path string) string {
@@ -180,7 +182,15 @@ func (g *Git) commit(paths []string, msg string) error {
 
 func (g *Git) Get(ctx context.Context, path string) ([]byte, Version, error) {
 	_ = ctx
-	data, err := os.ReadFile(g.objectAbs(path))
+	path, err := CleanFilePath(path)
+	if err != nil {
+		return nil, "", err
+	}
+	abs, err := g.objectAbs(path)
+	if err != nil {
+		return nil, "", err
+	}
+	data, err := os.ReadFile(abs)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, "", ErrNotFound
@@ -192,9 +202,13 @@ func (g *Git) Get(ctx context.Context, path string) ([]byte, Version, error) {
 
 func (g *Git) List(ctx context.Context, prefix string) ([]Entry, error) {
 	_ = ctx
+	prefix, err := CleanPath(prefix)
+	if err != nil {
+		return nil, err
+	}
 	root := filepath.Join(g.path, gitObjectsPrefix)
 	var out []Entry
-	err := filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+	err = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
 			if os.IsNotExist(err) {
 				return nil
@@ -228,7 +242,14 @@ func (g *Git) List(ctx context.Context, prefix string) ([]Entry, error) {
 
 func (g *Git) Put(ctx context.Context, path string, data []byte, expected Version) (Version, error) {
 	_ = ctx
-	abs := g.objectAbs(path)
+	path, err := CleanFilePath(path)
+	if err != nil {
+		return "", err
+	}
+	abs, err := g.objectAbs(path)
+	if err != nil {
+		return "", err
+	}
 	rel := g.objectRel(path)
 
 	actual := Version("")
@@ -264,7 +285,14 @@ func (g *Git) Put(ctx context.Context, path string, data []byte, expected Versio
 
 func (g *Git) Delete(ctx context.Context, path string, expected Version) error {
 	_ = ctx
-	abs := g.objectAbs(path)
+	path, err := CleanFilePath(path)
+	if err != nil {
+		return err
+	}
+	abs, err := g.objectAbs(path)
+	if err != nil {
+		return err
+	}
 	rel := g.objectRel(path)
 	cur, err := os.ReadFile(abs)
 	if err != nil {
@@ -288,6 +316,10 @@ func (g *Git) Delete(ctx context.Context, path string, expected Version) error {
 
 func (g *Git) Head(ctx context.Context, scope string) (Version, error) {
 	_ = ctx
+	scope, err := CleanPath(scope)
+	if err != nil {
+		return "", err
+	}
 	raw, err := os.ReadFile(g.headAbs(scope))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -300,6 +332,10 @@ func (g *Git) Head(ctx context.Context, scope string) (Version, error) {
 
 func (g *Git) SetHead(ctx context.Context, scope string, expected, next Version) error {
 	_ = ctx
+	scope, err := CleanPath(scope)
+	if err != nil {
+		return err
+	}
 	abs := g.headAbs(scope)
 	rel := g.headRel(scope)
 	actual := Version("")

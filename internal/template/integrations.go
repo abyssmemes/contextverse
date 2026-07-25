@@ -159,6 +159,7 @@ func extractTreeFromTarGz(r io.Reader, prefix, dest string) error {
 	}
 	defer gz.Close()
 	tr := tar.NewReader(gz)
+	budget := int64(maxArchiveBytes)
 	found := false
 	for {
 		hdr, err := tr.Next()
@@ -178,27 +179,8 @@ func extractTreeFromTarGz(r io.Reader, prefix, dest string) error {
 			continue
 		}
 		found = true
-		target := filepath.Join(dest, rel)
-		switch hdr.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0o755); err != nil {
-				return err
-			}
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				return err
-			}
-			f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode)&0o755|0o644)
-			if err != nil {
-				return err
-			}
-			if _, err := io.Copy(f, tr); err != nil {
-				f.Close()
-				return err
-			}
-			if err := f.Close(); err != nil {
-				return err
-			}
+		if err := extractMember(tr, hdr, dest, rel, &budget); err != nil {
+			return err
 		}
 	}
 	if !found {

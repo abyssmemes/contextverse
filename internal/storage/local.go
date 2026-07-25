@@ -89,9 +89,13 @@ func (l *Local) withLock(ctx context.Context, fn func() error) error {
 }
 
 func (l *Local) Get(ctx context.Context, path string) ([]byte, Version, error) {
+	path, err := CleanFilePath(path)
+	if err != nil {
+		return nil, "", err
+	}
 	var data []byte
 	var ver Version
-	err := l.withLock(ctx, func() error {
+	err = l.withLock(ctx, func() error {
 		rec, err := l.readRecord(path)
 		if err != nil {
 			return err
@@ -104,8 +108,12 @@ func (l *Local) Get(ctx context.Context, path string) ([]byte, Version, error) {
 }
 
 func (l *Local) List(ctx context.Context, prefix string) ([]Entry, error) {
+	prefix, err := CleanPath(prefix)
+	if err != nil {
+		return nil, err
+	}
 	var out []Entry
-	err := l.withLock(ctx, func() error {
+	err = l.withLock(ctx, func() error {
 		root := filepath.Join(l.root, localDataDir)
 		return filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
 			if err != nil {
@@ -133,8 +141,12 @@ func (l *Local) List(ctx context.Context, prefix string) ([]Entry, error) {
 }
 
 func (l *Local) Put(ctx context.Context, path string, data []byte, expected Version) (Version, error) {
+	path, err := CleanFilePath(path)
+	if err != nil {
+		return "", err
+	}
 	var next Version
-	err := l.withLock(ctx, func() error {
+	err = l.withLock(ctx, func() error {
 		rec, err := l.readRecord(path)
 		if err != nil && !errors.Is(err, ErrNotFound) {
 			return err
@@ -163,6 +175,10 @@ func (l *Local) Put(ctx context.Context, path string, data []byte, expected Vers
 }
 
 func (l *Local) Delete(ctx context.Context, path string, expected Version) error {
+	path, err := CleanFilePath(path)
+	if err != nil {
+		return err
+	}
 	return l.withLock(ctx, func() error {
 		rec, err := l.readRecord(path)
 		if err != nil {
@@ -176,8 +192,12 @@ func (l *Local) Delete(ctx context.Context, path string, expected Version) error
 }
 
 func (l *Local) Head(ctx context.Context, scope string) (Version, error) {
+	scope, err := CleanPath(scope)
+	if err != nil {
+		return "", err
+	}
 	var ver Version
-	err := l.withLock(ctx, func() error {
+	err = l.withLock(ctx, func() error {
 		p := l.headPath(scope)
 		raw, err := os.ReadFile(p)
 		if err != nil {
@@ -193,6 +213,10 @@ func (l *Local) Head(ctx context.Context, scope string) (Version, error) {
 }
 
 func (l *Local) SetHead(ctx context.Context, scope string, expected, next Version) error {
+	scope, err := CleanPath(scope)
+	if err != nil {
+		return err
+	}
 	return l.withLock(ctx, func() error {
 		p := l.headPath(scope)
 		actual := Version("")
@@ -255,6 +279,9 @@ func (l *Local) writeRecord(rec objectRecord) error {
 	return os.Rename(tmp, p)
 }
 
+// sanitizePath normalizes an already-validated path for keying. Callers reach it
+// only after CleanPath/CleanFilePath rejected traversal at the backend boundary;
+// it deliberately does no rejection of its own.
 func sanitizePath(path string) string {
 	path = filepath.ToSlash(path)
 	path = strings.TrimPrefix(path, "/")

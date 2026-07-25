@@ -16,6 +16,7 @@ import (
 	"github.com/abyssmemes/contextverse/internal/config"
 	"github.com/abyssmemes/contextverse/internal/logx"
 	"github.com/abyssmemes/contextverse/internal/spacesvc"
+	"github.com/abyssmemes/contextverse/internal/storage"
 )
 
 // Client talks to a contextd server.
@@ -162,9 +163,9 @@ type change struct {
 
 // PullResult summarizes a pull.
 type PullResult struct {
-	Head     string
-	Updated  int
-	Skipped  int
+	Head      string
+	Updated   int
+	Skipped   int
 	CheckOnly bool
 }
 
@@ -211,8 +212,14 @@ func (c *Client) Pull(ctx context.Context, spaceRoot string, since string, sync 
 			result.Skipped++
 			continue
 		}
+		// The server names these paths. A hostile or compromised server must not
+		// be able to write outside the space it is syncing.
+		abs, err := storage.ResolveUnder(spaceRoot, ch.Path)
+		if err != nil {
+			return result, fmt.Errorf("refusing server path %q: %w", ch.Path, err)
+		}
 		if ch.Op == "delete" {
-			_ = os.Remove(filepath.Join(spaceRoot, filepath.FromSlash(ch.Path)))
+			_ = os.Remove(abs)
 			result.Updated++
 			continue
 		}
@@ -220,7 +227,6 @@ func (c *Client) Pull(ctx context.Context, spaceRoot string, since string, sync 
 		if err != nil {
 			return result, err
 		}
-		abs := filepath.Join(spaceRoot, filepath.FromSlash(ch.Path))
 		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 			return result, err
 		}

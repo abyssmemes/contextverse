@@ -14,15 +14,22 @@ type Prefixed struct {
 
 func (p *Prefixed) Name() string { return p.Inner.Name() }
 
-func (p *Prefixed) ns(path string) string {
-	path = strings.TrimPrefix(path, "/")
-	if p.Prefix == "" {
-		return path
+// ns namespaces a caller path. The path is validated first: without that,
+// "../other-space/notes.md" would resolve out of this space's prefix and hit a
+// neighbour's objects in the shared backend.
+func (p *Prefixed) ns(path string) (string, error) {
+	clean, err := CleanPath(path)
+	if err != nil {
+		return "", err
 	}
-	if path == "" {
-		return strings.Trim(p.Prefix, "/")
+	pre := strings.Trim(p.Prefix, "/")
+	if pre == "" {
+		return clean, nil
 	}
-	return strings.Trim(p.Prefix, "/") + "/" + path
+	if clean == "" {
+		return pre, nil
+	}
+	return pre + "/" + clean, nil
 }
 
 func (p *Prefixed) strip(path string) string {
@@ -35,11 +42,19 @@ func (p *Prefixed) strip(path string) string {
 }
 
 func (p *Prefixed) Get(ctx context.Context, path string) ([]byte, Version, error) {
-	return p.Inner.Get(ctx, p.ns(path))
+	key, err := p.ns(path)
+	if err != nil {
+		return nil, "", err
+	}
+	return p.Inner.Get(ctx, key)
 }
 
 func (p *Prefixed) List(ctx context.Context, prefix string) ([]Entry, error) {
-	entries, err := p.Inner.List(ctx, p.ns(prefix))
+	key, err := p.ns(prefix)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := p.Inner.List(ctx, key)
 	if err != nil {
 		return nil, err
 	}
@@ -51,17 +66,33 @@ func (p *Prefixed) List(ctx context.Context, prefix string) ([]Entry, error) {
 }
 
 func (p *Prefixed) Put(ctx context.Context, path string, data []byte, expected Version) (Version, error) {
-	return p.Inner.Put(ctx, p.ns(path), data, expected)
+	key, err := p.ns(path)
+	if err != nil {
+		return "", err
+	}
+	return p.Inner.Put(ctx, key, data, expected)
 }
 
 func (p *Prefixed) Delete(ctx context.Context, path string, expected Version) error {
-	return p.Inner.Delete(ctx, p.ns(path), expected)
+	key, err := p.ns(path)
+	if err != nil {
+		return err
+	}
+	return p.Inner.Delete(ctx, key, expected)
 }
 
 func (p *Prefixed) Head(ctx context.Context, scope string) (Version, error) {
-	return p.Inner.Head(ctx, p.ns(scope))
+	key, err := p.ns(scope)
+	if err != nil {
+		return "", err
+	}
+	return p.Inner.Head(ctx, key)
 }
 
 func (p *Prefixed) SetHead(ctx context.Context, scope string, expected, next Version) error {
-	return p.Inner.SetHead(ctx, p.ns(scope), expected, next)
+	key, err := p.ns(scope)
+	if err != nil {
+		return err
+	}
+	return p.Inner.SetHead(ctx, key, expected, next)
 }
