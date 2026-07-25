@@ -35,7 +35,11 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusInternalServerError, "internal", "streaming unsupported", nil)
 		return
 	}
-	scopes := events.ParseScopes(r.URL.Query().Get("scopes"))
+	scopes := s.eventScopesFor(principalFrom(r.Context()), events.ParseScopes(r.URL.Query().Get("scopes")))
+	if len(scopes) == 0 {
+		writeErr(w, r, http.StatusForbidden, "permission_denied", "no readable spaces in the requested scopes", nil)
+		return
+	}
 	ch := s.Events.Subscribe(scopes)
 	if s.Metrics != nil {
 		s.Metrics.SSEClients.Store(int64(s.Events.Clients()))

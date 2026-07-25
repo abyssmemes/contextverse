@@ -488,12 +488,17 @@ func (s *Server) handleRevokeToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListSpaces(w http.ResponseWriter, r *http.Request) {
-	if !s.requireCap(w, r, "spaces/", authz.CapList) {
-		return
-	}
 	names, err := s.Spaces.List()
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, "internal", err.Error(), nil)
+		return
+	}
+	p := principalFrom(r.Context())
+	names = s.visibleSpaces(p, names)
+	// A principal scoped to a few spaces still gets a listing — of those spaces.
+	// Only a caller who can see nothing at all is refused.
+	if len(names) == 0 && !s.allow(p, "spaces/", authz.CapList) {
+		s.deny(w, r, "missing list on spaces/")
 		return
 	}
 	type item struct {

@@ -245,21 +245,21 @@ func (s *Server) setupErr(w http.ResponseWriter, r *http.Request, msg string, st
 		step = 1
 	}
 	vals := s.setupDefaults(map[string]any{
-		"Step":       step,
-		"DataDir":    strings.TrimSpace(r.FormValue("data_dir")),
-		"Address":    strings.TrimSpace(r.FormValue("address")),
-		"Port":       r.FormValue("port"),
-		"Space":      strings.TrimSpace(r.FormValue("space")),
-		"Admin":      strings.TrimSpace(r.FormValue("admin")),
-		"Template":   strings.TrimSpace(r.FormValue("template")),
-		"Backend":    strings.TrimSpace(r.FormValue("backend")),
-		"GitRemote":  r.FormValue("git_remote"),
-		"GitUser":    r.FormValue("git_user"),
-		"GitSSHKey":  r.FormValue("git_ssh_key"),
-		"S3Endpoint": r.FormValue("s3_endpoint"),
-		"S3Bucket":   r.FormValue("s3_bucket"),
-		"S3Region":   r.FormValue("s3_region"),
-		"S3Prefix":   r.FormValue("s3_prefix"),
+		"Step":        step,
+		"DataDir":     strings.TrimSpace(r.FormValue("data_dir")),
+		"Address":     strings.TrimSpace(r.FormValue("address")),
+		"Port":        r.FormValue("port"),
+		"Space":       strings.TrimSpace(r.FormValue("space")),
+		"Admin":       strings.TrimSpace(r.FormValue("admin")),
+		"Template":    strings.TrimSpace(r.FormValue("template")),
+		"Backend":     strings.TrimSpace(r.FormValue("backend")),
+		"GitRemote":   r.FormValue("git_remote"),
+		"GitUser":     r.FormValue("git_user"),
+		"GitSSHKey":   r.FormValue("git_ssh_key"),
+		"S3Endpoint":  r.FormValue("s3_endpoint"),
+		"S3Bucket":    r.FormValue("s3_bucket"),
+		"S3Region":    r.FormValue("s3_region"),
+		"S3Prefix":    r.FormValue("s3_prefix"),
 		"S3AccessKey": r.FormValue("s3_access_key"),
 	})
 	if vals["DataDir"] == "" {
@@ -365,6 +365,7 @@ func (s *Server) handleUISpaces(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	names = s.visibleSpaces(p, names)
 	type row struct{ Name, Head string }
 	var rows []row
 	for _, n := range names {
@@ -379,8 +380,7 @@ func (s *Server) handleUISpaces(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleUICreateSpace(w http.ResponseWriter, r *http.Request) {
 	p := principalFrom(r.Context())
-	if !auth.CanAdmin(p.Role) {
-		http.Error(w, "admin only", 403)
+	if !s.requireCapUI(w, r, "spaces/", authz.CapCreate) {
 		return
 	}
 	_ = r.ParseForm()
@@ -391,6 +391,7 @@ func (s *Server) handleUICreateSpace(w http.ResponseWriter, r *http.Request) {
 		pg.Title = "Spaces"
 		pg.FlashError = err.Error()
 		names, _ := s.Spaces.List()
+		names = s.visibleSpaces(p, names)
 		type row struct{ Name, Head string }
 		var rows []row
 		for _, n := range names {
@@ -407,6 +408,9 @@ func (s *Server) handleUICreateSpace(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUISpace(w http.ResponseWriter, r *http.Request) {
 	p := principalFrom(r.Context())
 	name := r.PathValue("space")
+	if !s.requireCapUI(w, r, "spaces/"+name, authz.CapRead) {
+		return
+	}
 	meta, err := s.Spaces.LoadMeta(name)
 	if err != nil {
 		http.NotFound(w, r)
@@ -467,10 +471,10 @@ func (s *Server) handleUIFileSave(w http.ResponseWriter, r *http.Request) {
 			s.renderUIFile(w, r, "", err.Error())
 			return
 		}
-	_, _ = s.bumpHead(r.Context(), spaceName)
-	logx.L().Info("ui file restored", "space", spaceName, "path", path, "from", n, "user", p.User, "version", string(ver))
-	s.auditEmit(r, "file.write", spaceName, path, &audit.Diff{Ops: 1})
-	http.Redirect(w, r, "/ui/spaces/"+spaceName+"/files/"+path, http.StatusSeeOther)
+		_, _ = s.bumpHead(r.Context(), spaceName)
+		logx.L().Info("ui file restored", "space", spaceName, "path", path, "from", n, "user", p.User, "version", string(ver))
+		s.auditEmit(r, "file.write", spaceName, path, &audit.Diff{Ops: 1})
+		http.Redirect(w, r, "/ui/spaces/"+spaceName+"/files/"+path, http.StatusSeeOther)
 		return
 	}
 
@@ -500,6 +504,9 @@ func (s *Server) renderUIFile(w http.ResponseWriter, r *http.Request, flash, fla
 	p := principalFrom(r.Context())
 	spaceName := r.PathValue("space")
 	path := r.PathValue("path")
+	if !s.requireCapUI(w, r, fmt.Sprintf("spaces/%s/files/%s", spaceName, path), authz.CapRead) {
+		return
+	}
 	if flash == "" {
 		flash = r.URL.Query().Get("flash")
 	}
@@ -581,6 +588,9 @@ func (s *Server) renderUIFile(w http.ResponseWriter, r *http.Request, flash, fla
 
 func (s *Server) handleUIUsers(w http.ResponseWriter, r *http.Request) {
 	p := principalFrom(r.Context())
+	if !s.requireCapUI(w, r, "sys/auth/users", authz.CapList) {
+		return
+	}
 	users, err := s.Auth.ListUsers()
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -595,8 +605,7 @@ func (s *Server) handleUIUsers(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleUIAddUser(w http.ResponseWriter, r *http.Request) {
 	p := principalFrom(r.Context())
-	if !auth.CanAdmin(p.Role) {
-		http.Error(w, "admin only", 403)
+	if !s.requireCapUI(w, r, "sys/auth/users", authz.CapCreate) {
 		return
 	}
 	_ = r.ParseForm()
@@ -623,9 +632,7 @@ func (s *Server) handleUIAddUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUITokenRevoke(w http.ResponseWriter, r *http.Request) {
-	p := principalFrom(r.Context())
-	if !auth.CanAdmin(p.Role) {
-		http.Error(w, "admin only", 403)
+	if !s.requireCapUI(w, r, "sys/auth/users", authz.CapUpdate) {
 		return
 	}
 	id := r.PathValue("id")
@@ -649,6 +656,7 @@ func (s *Server) handleUIFreshness(w http.ResponseWriter, r *http.Request) {
 	}
 	var rows []row
 	names, _ := s.Spaces.List()
+	names = s.visibleSpaces(p, names)
 	now := time.Now().UTC()
 	for _, name := range names {
 		all, err := freshness.ScanDir(s.Spaces.SpaceRoot(name), now)
@@ -677,12 +685,12 @@ func (s *Server) handleUIFreshness(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleUIFreshnessNag(w http.ResponseWriter, r *http.Request) {
 	p := principalFrom(r.Context())
-	if !auth.CanAdmin(p.Role) {
-		http.Error(w, "admin only", 403)
+	if !s.requireCapUI(w, r, "sys/webhooks", authz.CapUpdate) {
 		return
 	}
 	n := 0
 	names, _ := s.Spaces.List()
+	names = s.visibleSpaces(p, names)
 	now := time.Now().UTC()
 	for _, name := range names {
 		all, err := freshness.ScanDir(s.Spaces.SpaceRoot(name), now)
@@ -707,6 +715,10 @@ func (s *Server) handleUIFreshnessNag(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUIBackends(w http.ResponseWriter, r *http.Request) {
+	// The page shows remotes, buckets and DSN hosts — read is privileged too.
+	if !s.requireCapUI(w, r, "sys/backends", authz.CapRead) {
+		return
+	}
 	s.renderBackends(w, r, "", "")
 }
 
@@ -809,6 +821,9 @@ func (s *Server) renderBackends(w http.ResponseWriter, r *http.Request, flash, f
 
 func (s *Server) handleUIPolicies(w http.ResponseWriter, r *http.Request) {
 	p := principalFrom(r.Context())
+	if !s.requireCapUI(w, r, "sys/auth/policies", authz.CapList) {
+		return
+	}
 	if s.Authz == nil {
 		http.Error(w, "authz not loaded", 500)
 		return
@@ -838,6 +853,9 @@ func (s *Server) handleUIPolicies(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUIPolicyShow(w http.ResponseWriter, r *http.Request) {
 	p := principalFrom(r.Context())
 	name := r.PathValue("name")
+	if !s.requireCapUI(w, r, "sys/auth/policies", authz.CapRead) {
+		return
+	}
 	if s.Authz == nil {
 		http.Error(w, "authz not loaded", 500)
 		return
@@ -1035,4 +1053,3 @@ func (s *Server) renderUIWebhooks(w http.ResponseWriter, r *http.Request, p *aut
 	}
 	_ = ui.Render(w, "webhooks.html", pg)
 }
-
