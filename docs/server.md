@@ -115,6 +115,44 @@ revokes its tokens immediately.
 - Webhooks: HMAC-SHA256 (`X-ContextVerse-Signature`), retries then dead-letter. Manage via API/UI/`contextd`.
 - Audit log: append-only under the server data dir; query via API/UI.
 
+Hook URLs must point somewhere public. Loopback, private ranges, link-local and
+cloud metadata addresses are refused when the hook is saved *and* again when the
+connection is dialed, so a redirect cannot smuggle the request back inside your
+network. A single-tenant server that genuinely needs an internal receiver can
+opt out:
+
+```yaml
+webhooks:
+  allow_private_targets: true # only safe when every operator is trusted
+```
+
+Delivery runs on a bounded worker pool. If an event storm outruns it, extra
+events are dropped rather than queued forever; `contextd_webhook_dropped_total`
+counts them. The dead-letter file is capped at 8 MiB and rotated once, so a
+broken endpoint cannot fill the disk.
+
+Each audit record carries the hash of the record before it. `contextd server
+audit verify` recomputes the chain and reports the first line that was edited,
+removed or reordered:
+
+```bash
+contextd server audit verify
+# audit chain intact: 1284 entries verified
+```
+
+Entries written before the chain existed have no hash and are skipped rather
+than reported as damage. A write that fails is logged at error level and counted
+by `contextd_audit_failed_total` — alert on it, because a log that quietly stops
+recording is worse than no log.
+
+## Console hardening
+
+The server-rendered console sets a strict `Content-Security-Policy`: scripts run
+only from the server's own origin or with the per-response nonce, so an injected
+tag does not execute. Every state-changing form carries a CSRF token that is
+checked against an `HttpOnly` cookie; the JSON API is exempt because it accepts
+only a `Bearer` header, which a foreign page cannot attach.
+
 ## Open-core boundary
 
 **SSO (OIDC) and MFA are not in this binary** — they belong to ContextVerse Cloud’s control plane, which mints a normal data-plane Bearer. Self-host auth is **userpass + API tokens** (and SSH for the admin TUI). See [Auth & ACL](auth-acl.md).

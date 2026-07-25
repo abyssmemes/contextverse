@@ -18,7 +18,29 @@ func newAuditCmd() *cobra.Command {
 	cmd.AddCommand(newAuditListCmd())
 	cmd.AddCommand(newAuditExportCmd())
 	cmd.AddCommand(newAuditStatsCmd())
+	cmd.AddCommand(newAuditVerifyCmd())
 	return cmd
+}
+
+func newAuditVerifyCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "verify",
+		Short: "Check the audit log hash chain for tampering",
+		Long:  `Recomputes every record hash and its link to the previous record. Exits non-zero on the first break.`,
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			lg, err := openAuditLogger()
+			if err != nil {
+				return err
+			}
+			n, err := lg.Verify()
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "audit chain intact: %d entries verified\n", n)
+			return nil
+		},
+	}
 }
 
 func openAuditLogger() (*audit.Logger, error) {

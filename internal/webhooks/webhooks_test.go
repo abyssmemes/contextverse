@@ -26,6 +26,8 @@ func TestDeliverAndDeadLetter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// httptest listens on loopback, which the default policy refuses.
+	store.Policy = TargetPolicy{AllowPrivate: true}
 
 	var mu sync.Mutex
 	var got []byte
@@ -55,6 +57,7 @@ func TestDeliverAndDeadLetter(t *testing.T) {
 	}
 
 	d := NewDispatcher(store)
+	d.SetPolicy(store.Policy)
 	d.Client.Timeout = 2 * time.Second
 	evt := Event{Type: "space.push", Space: "team", Actor: "alice", Data: map[string]any{"ops": 1}}
 	if err := d.postOnce(ok, evt); err != nil {

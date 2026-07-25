@@ -19,6 +19,7 @@
     {{if .Data.SQLDSN}}<p class="muted">sql dsn configured</p>{{end}}
     <div class="actions">
       <form method="post" action="/ui/backends/test" style="display:inline">
+        {{template "csrf" $}}
         <button class="btn secondary" type="submit">Test connectivity + CAS</button>
       </form>
     </div>
@@ -28,6 +29,7 @@
     <h2 class="section-title">Connect / switch</h2>
     <p class="muted">Saves connection settings and sets the active driver. Does <strong>not</strong> copy existing objects — use migrate for that.</p>
     <form method="post" action="/ui/backends/set">
+      {{template "csrf" $}}
       <label for="driver">Driver</label>
       <select id="driver" name="driver">
         {{range .Data.Drivers}}
@@ -79,6 +81,7 @@
     <h2 class="section-title">Migrate &amp; switch</h2>
     <p class="muted">Copies all stored objects for every space from the current backend to the target, then switches config. Destination keys may be overwritten.</p>
     <form method="post" action="/ui/backends/migrate">
+      {{template "csrf" $}}
       <label for="mig_driver">Target driver</label>
       <select id="mig_driver" name="driver">
         {{range .Data.Drivers}}

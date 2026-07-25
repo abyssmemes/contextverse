@@ -37,6 +37,7 @@
   <div class="panel">
     <h2 class="section-title">Create space</h2>
     <form method="post" action="/ui/spaces">
+      {{template "csrf" $}}
       <label for="name">Name</label>
       <input id="name" name="name" required pattern="[a-zA-Z0-9_-]+" placeholder="team">
       <label for="template">Template</label>

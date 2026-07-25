@@ -2,7 +2,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}} · ContextVerse</title>
-<script>
+<script nonce="{{.Nonce}}">
 (function(){try{var t=localStorage.getItem("contextverse-theme");if(t==="dark")document.documentElement.setAttribute("data-theme","dark");else document.documentElement.setAttribute("data-theme","light");}catch(e){document.documentElement.setAttribute("data-theme","light");}})();
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -19,6 +19,10 @@
   <span aria-hidden="true">◐</span>
 </button>
 {{end}}
+
+{{/* Every state-changing form echoes this back; see withCSRF. Pass $ from
+     inside a range so the token is not looked up on the loop item. */}}
+{{define "csrf"}}<input type="hidden" name="csrf_token" value="{{.CSRF}}">{{end}}
 
 {{define "flash"}}
 {{if .Flash}}<div class="flash ok" role="status">{{.Flash}}</div>{{end}}

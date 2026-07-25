@@ -26,6 +26,7 @@
     <div class="panel wizard">
       <form id="setup-form" method="post" action="/setup" novalidate
             data-start-step="{{if .Data.Step}}{{.Data.Step}}{{else}}1{{end}}">
+        {{template "csrf" $}}
 
         <section class="wizard-pane is-active" data-step="1" aria-labelledby="step1-title">
           <h2 id="step1-title" class="section-title">Server location</h2>

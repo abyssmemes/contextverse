@@ -148,7 +148,7 @@ func (s *Server) handleSetupGet(w http.ResponseWriter, r *http.Request) {
 		Version: version.Version,
 		Data:    s.setupDefaults(nil),
 	}
-	_ = ui.Render(w, "setup.html", pg)
+	_ = s.render(w, r, "setup.html", pg)
 }
 
 func (s *Server) setupDefaults(override map[string]any) map[string]any {
@@ -258,7 +258,7 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 			"DataDir": dataDir,
 		},
 	}
-	_ = ui.Render(w, "setup_done.html", pg)
+	_ = s.render(w, r, "setup_done.html", pg)
 }
 
 func (s *Server) setupErr(w http.ResponseWriter, r *http.Request, msg string, step int) {
@@ -311,7 +311,7 @@ func (s *Server) setupErr(w http.ResponseWriter, r *http.Request, msg string, st
 		Data:       vals,
 	}
 	w.WriteHeader(http.StatusBadRequest)
-	_ = ui.Render(w, "setup.html", pg)
+	_ = s.render(w, r, "setup.html", pg)
 }
 
 func (s *Server) handleUIHome(w http.ResponseWriter, r *http.Request) {
@@ -336,11 +336,11 @@ func (s *Server) handleUIHome(w http.ResponseWriter, r *http.Request) {
 		"DataDir":      s.Cfg.DataDir,
 		"DefaultSpace": s.Cfg.Defaults.Space,
 	}
-	_ = ui.Render(w, "dashboard.html", pg)
+	_ = s.render(w, r, "dashboard.html", pg)
 }
 
 func (s *Server) handleLoginGet(w http.ResponseWriter, r *http.Request) {
-	_ = ui.Render(w, "login.html", ui.Page{Title: "Login", Version: version.Version})
+	_ = s.render(w, r, "login.html", ui.Page{Title: "Login", Version: version.Version})
 }
 
 func (s *Server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
@@ -361,18 +361,18 @@ func (s *Server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
 				msg = "too many failed logins, try again later"
 			}
 			logx.L().Warn("failed ui login", "user", user, "ip", s.clientIP(r))
-			_ = ui.Render(w, "login.html", ui.Page{Title: "Login", Version: version.Version, FlashError: msg})
+			_ = s.render(w, r, "login.html", ui.Page{Title: "Login", Version: version.Version, FlashError: msg})
 			return
 		}
 		token = tok
 	}
 	if token == "" {
-		_ = ui.Render(w, "login.html", ui.Page{Title: "Login", Version: version.Version, FlashError: "username/password or token required"})
+		_ = s.render(w, r, "login.html", ui.Page{Title: "Login", Version: version.Version, FlashError: "username/password or token required"})
 		return
 	}
 	p, err = s.Auth.Authenticate(token)
 	if err != nil {
-		_ = ui.Render(w, "login.html", ui.Page{Title: "Login", Version: version.Version, FlashError: "invalid token"})
+		_ = s.render(w, r, "login.html", ui.Page{Title: "Login", Version: version.Version, FlashError: "invalid token"})
 		return
 	}
 	s.setSession(w, token)
@@ -402,7 +402,7 @@ func (s *Server) handleUISpaces(w http.ResponseWriter, r *http.Request) {
 	pg := s.pageBase("spaces", p)
 	pg.Title = "Spaces"
 	pg.Data = map[string]any{"Spaces": rows}
-	_ = ui.Render(w, "spaces.html", pg)
+	_ = s.render(w, r, "spaces.html", pg)
 }
 
 func (s *Server) handleUICreateSpace(w http.ResponseWriter, r *http.Request) {
@@ -426,7 +426,7 @@ func (s *Server) handleUICreateSpace(w http.ResponseWriter, r *http.Request) {
 			rows = append(rows, row{Name: n, Head: string(h)})
 		}
 		pg.Data = map[string]any{"Spaces": rows}
-		_ = ui.Render(w, "spaces.html", pg)
+		_ = s.render(w, r, "spaces.html", pg)
 		return
 	}
 	http.Redirect(w, r, "/ui/spaces/"+name, http.StatusSeeOther)
@@ -453,7 +453,7 @@ func (s *Server) handleUISpace(w http.ResponseWriter, r *http.Request) {
 		"Template": meta.Template,
 		"Files":    files,
 	}
-	_ = ui.Render(w, "space.html", pg)
+	_ = s.render(w, r, "space.html", pg)
 }
 
 func (s *Server) handleUIFile(w http.ResponseWriter, r *http.Request) {
@@ -610,7 +610,7 @@ func (s *Server) renderUIFile(w http.ResponseWriter, r *http.Request, flash, fla
 		"MarkdownHTML": renderMarkdownHTML(data),
 		"VersionQ":     r.URL.Query().Get("version"),
 	}
-	_ = ui.Render(w, "file.html", pg)
+	_ = s.render(w, r, "file.html", pg)
 }
 
 func (s *Server) handleUIUsers(w http.ResponseWriter, r *http.Request) {
@@ -627,7 +627,7 @@ func (s *Server) handleUIUsers(w http.ResponseWriter, r *http.Request) {
 	pg := s.pageBase("users", p)
 	pg.Title = "Users"
 	pg.Data = map[string]any{"Users": users, "Tokens": tokens, "NewToken": ""}
-	_ = ui.Render(w, "users.html", pg)
+	_ = s.render(w, r, "users.html", pg)
 }
 
 func (s *Server) handleUIAddUser(w http.ResponseWriter, r *http.Request) {
@@ -644,7 +644,7 @@ func (s *Server) handleUIAddUser(w http.ResponseWriter, r *http.Request) {
 		users, _ := s.Auth.ListUsers()
 		tokens, _ := s.Auth.ListTokens("")
 		pg.Data = map[string]any{"Users": users, "Tokens": tokens}
-		_ = ui.Render(w, "users.html", pg)
+		_ = s.render(w, r, "users.html", pg)
 		return
 	}
 	token, _, _ := s.Auth.CreateToken(name, "ui")
@@ -655,7 +655,7 @@ func (s *Server) handleUIAddUser(w http.ResponseWriter, r *http.Request) {
 	pg.Flash = "user created"
 	pg.Data = map[string]any{"Users": users, "Tokens": tokens, "NewToken": token}
 	s.auditEmit(r, "user.add", "", name+":"+string(role), nil)
-	_ = ui.Render(w, "users.html", pg)
+	_ = s.render(w, r, "users.html", pg)
 }
 
 func (s *Server) handleUITokenRevoke(w http.ResponseWriter, r *http.Request) {
@@ -707,7 +707,7 @@ func (s *Server) handleUIFreshness(w http.ResponseWriter, r *http.Request) {
 		pg.Flash = "stale freshness webhooks emitted"
 	}
 	pg.Data = map[string]any{"Rows": rows}
-	_ = ui.Render(w, "freshness.html", pg)
+	_ = s.render(w, r, "freshness.html", pg)
 }
 
 func (s *Server) handleUIFreshnessNag(w http.ResponseWriter, r *http.Request) {
@@ -843,7 +843,7 @@ func (s *Server) renderBackends(w http.ResponseWriter, r *http.Request, flash, f
 		"SQLDSN":      s.Cfg.Backend.SQLDSN != "",
 		"Status":      s.probeBackendStatus(r),
 	}
-	_ = ui.Render(w, "backends.html", pg)
+	_ = s.render(w, r, "backends.html", pg)
 }
 
 func (s *Server) handleUIPolicies(w http.ResponseWriter, r *http.Request) {
@@ -874,7 +874,7 @@ func (s *Server) handleUIPolicies(w http.ResponseWriter, r *http.Request) {
 	pg := s.pageBase("policies", p)
 	pg.Title = "Policies"
 	pg.Data = map[string]any{"Policies": rows, "DefaultSpace": def}
-	_ = ui.Render(w, "policies.html", pg)
+	_ = s.render(w, r, "policies.html", pg)
 }
 
 func (s *Server) handleUIPolicyShow(w http.ResponseWriter, r *http.Request) {
@@ -896,7 +896,7 @@ func (s *Server) handleUIPolicyShow(w http.ResponseWriter, r *http.Request) {
 	pg := s.pageBase("policies", p)
 	pg.Title = "Policy " + name
 	pg.Data = map[string]any{"Name": name, "Body": string(raw)}
-	_ = ui.Render(w, "policy_show.html", pg)
+	_ = s.render(w, r, "policy_show.html", pg)
 }
 
 func (s *Server) handleUIPolicyWrite(w http.ResponseWriter, r *http.Request) {
@@ -956,7 +956,7 @@ func (s *Server) handleUIAudit(w http.ResponseWriter, r *http.Request) {
 		"Actor":   f.Actor,
 		"Action":  f.Action,
 	}
-	_ = ui.Render(w, "audit.html", pg)
+	_ = s.render(w, r, "audit.html", pg)
 }
 
 func (s *Server) handleUIAuditExport(w http.ResponseWriter, r *http.Request) {
@@ -1078,5 +1078,5 @@ func (s *Server) renderUIWebhooks(w http.ResponseWriter, r *http.Request, p *aut
 		"NewSecret":  newSecret,
 		"DeadLetter": string(dlJSON),
 	}
-	_ = ui.Render(w, "webhooks.html", pg)
+	_ = s.render(w, r, "webhooks.html", pg)
 }

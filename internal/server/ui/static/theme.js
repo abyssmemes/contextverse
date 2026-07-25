@@ -70,6 +70,15 @@
       document.body.classList.remove("nav-open");
     });
 
+    // Confirmations are wired here rather than with an inline onsubmit so the
+    // page needs no 'unsafe-inline' in its script policy.
+    document.addEventListener("submit", function (e) {
+      var form = e.target;
+      if (!form || !form.getAttribute) return;
+      var msg = form.getAttribute("data-confirm");
+      if (msg && !window.confirm(msg)) e.preventDefault();
+    });
+
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape") document.body.classList.remove("nav-open");
       if ((e.key === "d" || e.key === "D") && !e.metaKey && !e.ctrlKey && !e.altKey) {

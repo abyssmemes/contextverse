@@ -101,9 +101,12 @@ func newFreshnessNagCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			policy := webhooks.TargetPolicy{AllowPrivate: cfg.Webhooks.AllowPrivateTargets}
+			st.Policy = policy
 			d := webhooks.NewDispatcher(st)
+			d.SetPolicy(policy)
 			for _, m := range stale {
-				d.Emit(webhooks.Event{
+				d.EmitSync(webhooks.Event{
 					Type:  "freshness.stale",
 					Space: space,
 					Scope: m.Path,

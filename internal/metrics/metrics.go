@@ -14,15 +14,21 @@ import (
 type Registry struct {
 	start time.Time
 
-	HTTPRequests   *CounterVec // method, code
-	HTTPDuration   *Histogram  // seconds
-	RateLimited    *Counter
-	PushTotal      *Counter
-	WebhookFired   *Counter
-	WebhookFailed  *Counter
+	HTTPRequests  *CounterVec // method, code
+	HTTPDuration  *Histogram  // seconds
+	RateLimited   *Counter
+	PushTotal     *Counter
+	WebhookFired  *Counter
+	WebhookFailed *Counter
+	// WebhookDropped counts events shed because the delivery queue was full,
+	// which is a capacity signal rather than an endpoint failure.
+	WebhookDropped *Counter
 	AuditEntries   *Counter
-	SSEEvents      *Counter
-	SSEClients     atomic.Int64
+	// AuditFailed counts entries that could not be written. A log that silently
+	// stops recording is worse than no log, so this is the metric to alert on.
+	AuditFailed *Counter
+	SSEEvents   *Counter
+	SSEClients  atomic.Int64
 }
 
 // New builds the default contextd metric set.
@@ -32,12 +38,14 @@ func New() *Registry {
 		HTTPRequests: NewCounterVec("contextd_http_requests_total", "Total HTTP requests", []string{"method", "code"}),
 		HTTPDuration: NewHistogram("contextd_http_request_duration_seconds", "HTTP request latency seconds",
 			[]float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}),
-		RateLimited:   NewCounter("contextd_rate_limit_rejected_total", "Requests rejected by rate limit"),
-		PushTotal:     NewCounter("contextd_push_total", "Successful space.push operations"),
-		WebhookFired:  NewCounter("contextd_webhook_fired_total", "Webhook deliveries succeeded"),
-		WebhookFailed: NewCounter("contextd_webhook_failed_total", "Webhook deliveries failed (dead-letter)"),
-		AuditEntries:  NewCounter("contextd_audit_entries_total", "Audit log entries appended"),
-		SSEEvents:     NewCounter("contextd_sse_events_total", "Events published to the SSE hub"),
+		RateLimited:    NewCounter("contextd_rate_limit_rejected_total", "Requests rejected by rate limit"),
+		PushTotal:      NewCounter("contextd_push_total", "Successful space.push operations"),
+		WebhookFired:   NewCounter("contextd_webhook_fired_total", "Webhook deliveries succeeded"),
+		WebhookFailed:  NewCounter("contextd_webhook_failed_total", "Webhook deliveries failed (dead-letter)"),
+		WebhookDropped: NewCounter("contextd_webhook_dropped_total", "Webhook events dropped because the delivery queue was full"),
+		AuditEntries:   NewCounter("contextd_audit_entries_total", "Audit log entries appended"),
+		AuditFailed:    NewCounter("contextd_audit_failed_total", "Audit entries that could not be written"),
+		SSEEvents:      NewCounter("contextd_sse_events_total", "Events published to the SSE hub"),
 	}
 }
 
@@ -56,7 +64,9 @@ func (r *Registry) WritePrometheus(w io.Writer) error {
 	r.PushTotal.write(&b)
 	r.WebhookFired.write(&b)
 	r.WebhookFailed.write(&b)
+	r.WebhookDropped.write(&b)
 	r.AuditEntries.write(&b)
+	r.AuditFailed.write(&b)
 	r.SSEEvents.write(&b)
 	_, err := io.WriteString(w, b.String())
 	return err

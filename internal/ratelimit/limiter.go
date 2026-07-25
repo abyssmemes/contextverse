@@ -25,11 +25,22 @@ type bucket struct {
 	rate     float64 // tokens per second
 }
 
+// Buckets are keyed by user or address, so the map grows with every distinct
+// caller and would otherwise never shrink — a caller cycling addresses could
+// spend our memory. Idle buckets are dropped: a bucket refills to full capacity
+// long before the idle window elapses, so forgetting it changes no decision.
+const (
+	idleAfter   = 10 * time.Minute
+	sweepEvery  = 30 * time.Second
+	sweepAbove  = 1024
+)
+
 // Limiter is an in-process token bucket keyed by string.
 type Limiter struct {
-	cfg Config
-	mu  sync.Mutex
-	m   map[string]*bucket
+	cfg       Config
+	mu        sync.Mutex
+	m         map[string]*bucket
+	lastSweep time.Time
 }
 
 // New builds a limiter (no-op if disabled).
@@ -82,12 +93,39 @@ func (l *Limiter) get(key string, rpm float64) *bucket {
 	if b, ok := l.m[key]; ok {
 		return b
 	}
+	now := time.Now()
+	l.sweepLocked(now)
 	b := &bucket{
 		tokens:   rpm,
-		last:     time.Now(),
+		last:     now,
 		capacity: rpm,
 		rate:     rpm / 60.0,
 	}
 	l.m[key] = b
 	return b
+}
+
+func (l *Limiter) sweepLocked(now time.Time) {
+	if len(l.m) < sweepAbove || now.Sub(l.lastSweep) < sweepEvery {
+		return
+	}
+	l.lastSweep = now
+	for k, b := range l.m {
+		b.mu.Lock()
+		idle := now.Sub(b.last) > idleAfter
+		b.mu.Unlock()
+		if idle {
+			delete(l.m, k)
+		}
+	}
+}
+
+// Size reports how many buckets are tracked (for tests and diagnostics).
+func (l *Limiter) Size() int {
+	if l == nil {
+		return 0
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return len(l.m)
 }

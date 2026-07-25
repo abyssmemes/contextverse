@@ -3,6 +3,7 @@ package audit
 import (
 	"bufio"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
@@ -40,6 +41,11 @@ type Diff struct {
 }
 
 // Entry is one immutable audit record (JSONL line).
+//
+// Prev and Hash form a chain: Hash covers the record's own fields plus the hash
+// of the record before it. Editing or removing a line therefore breaks every
+// link after it, which is what makes tampering detectable rather than merely
+// discouraged. See Verify.
 type Entry struct {
 	ID        string    `json:"id"`
 	Timestamp time.Time `json:"timestamp"`
@@ -50,6 +56,8 @@ type Entry struct {
 	Diff      *Diff     `json:"diff,omitempty"`
 	Result    string    `json:"result"`
 	Error     string    `json:"error,omitempty"`
+	Prev      string    `json:"prev,omitempty"`
+	Hash      string    `json:"hash,omitempty"`
 }
 
 // Filter selects entries for Query / Export.
@@ -75,17 +83,43 @@ type Stats struct {
 
 // Logger appends JSONL under <dir>/YYYY-MM-DD.jsonl.
 type Logger struct {
-	mu  sync.Mutex
-	dir string
+	mu   sync.Mutex
+	dir  string
+	head string // hash of the most recent entry; "" until loaded
 }
 
 // Open creates (or reuses) an audit directory under dataDir/audit.
 func Open(dataDir string) (*Logger, error) {
 	dir := filepath.Join(dataDir, "audit")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	// The log names users, addresses and paths: it is not world-readable.
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	return &Logger{dir: dir}, nil
+	l := &Logger{dir: dir}
+	if err := l.loadHead(); err != nil {
+		return nil, err
+	}
+	return l, nil
+}
+
+// loadHead picks the chain up where the last run left it.
+func (l *Logger) loadHead() error {
+	files, err := l.dayFiles()
+	if err != nil {
+		return err
+	}
+	if len(files) == 0 {
+		return nil
+	}
+	sort.Strings(files)
+	entries, err := readFile(filepath.Join(l.dir, files[len(files)-1]))
+	if err != nil {
+		return err
+	}
+	if len(entries) > 0 {
+		l.head = entries[len(entries)-1].Hash
+	}
+	return nil
 }
 
 // Dir returns the audit directory.
@@ -107,16 +141,18 @@ func (l *Logger) Append(e Entry) error {
 	if e.Result == "" {
 		e.Result = ResultSuccess
 	}
-	raw, err := json.Marshal(e)
-	if err != nil {
-		return err
-	}
 	day := e.Timestamp.Format("2006-01-02")
 	path := filepath.Join(l.dir, day+".jsonl")
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	e.Prev = l.head
+	e.Hash = hashEntry(e)
+	raw, err := json.Marshal(e)
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
@@ -124,7 +160,78 @@ func (l *Logger) Append(e Entry) error {
 	if _, err := f.Write(append(raw, '\n')); err != nil {
 		return err
 	}
+	l.head = e.Hash
 	return nil
+}
+
+// hashEntry hashes the record with its own Hash field cleared, so the value can
+// be recomputed from the stored line.
+func hashEntry(e Entry) string {
+	e.Hash = ""
+	raw, err := json.Marshal(e)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
+}
+
+// ChainBreak describes the first place the log stops adding up.
+type ChainBreak struct {
+	File    string
+	Line    int
+	EntryID string
+	Reason  string
+}
+
+func (b ChainBreak) Error() string {
+	return fmt.Sprintf("audit chain broken at %s:%d (entry %s): %s", b.File, b.Line, b.EntryID, b.Reason)
+}
+
+// Verify walks the whole log oldest-first and checks every link. It returns the
+// number of entries verified, and a ChainBreak if a record was altered, removed
+// or reordered. Entries written before the chain existed carry no hash and are
+// skipped, so upgrading an existing install does not report a false alarm.
+func (l *Logger) Verify() (int, error) {
+	if l == nil {
+		return 0, nil
+	}
+	files, err := l.dayFiles()
+	if err != nil {
+		return 0, err
+	}
+	sort.Strings(files)
+	checked := 0
+	prev := ""
+	started := false
+	for _, name := range files {
+		entries, err := readFile(filepath.Join(l.dir, name))
+		if err != nil {
+			return checked, err
+		}
+		for i, e := range entries {
+			if e.Hash == "" {
+				// Pre-chain record: nothing to check, and it must not be treated
+				// as the predecessor of the next one.
+				continue
+			}
+			if want := hashEntry(e); want != e.Hash {
+				return checked, ChainBreak{File: name, Line: i + 1, EntryID: e.ID, Reason: "record does not match its own hash"}
+			}
+			switch {
+			case !started && e.Prev != "":
+				// The log opens mid-chain, so whole records — possibly a whole
+				// day file — were removed ahead of it.
+				return checked, ChainBreak{File: name, Line: i + 1, EntryID: e.ID, Reason: "log starts mid-chain: earlier records are missing"}
+			case started && e.Prev != prev:
+				return checked, ChainBreak{File: name, Line: i + 1, EntryID: e.ID, Reason: "predecessor hash does not match the previous record"}
+			}
+			prev = e.Hash
+			started = true
+			checked++
+		}
+	}
+	return checked, nil
 }
 
 func newID(ts time.Time) string {

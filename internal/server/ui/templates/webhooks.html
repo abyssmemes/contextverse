@@ -26,8 +26,8 @@
       <td>{{.Space}}</td>
       <td class="mono">{{.URL}}</td>
       <td>
-        <form method="post" action="/ui/webhooks/{{.ID}}/test" style="display:inline"><button class="btn secondary" type="submit">Test</button></form>
-        <form method="post" action="/ui/webhooks/{{.ID}}/delete" style="display:inline" onsubmit="return confirm('Delete?')"><button class="btn secondary" type="submit">Delete</button></form>
+        <form method="post" action="/ui/webhooks/{{.ID}}/test" style="display:inline">{{template "csrf" $}}<button class="btn secondary" type="submit">Test</button></form>
+        <form method="post" action="/ui/webhooks/{{.ID}}/delete" style="display:inline" data-confirm="Delete this webhook?">{{template "csrf" $}}<button class="btn secondary" type="submit">Delete</button></form>
       </td>
     </tr>
   {{else}}
@@ -39,6 +39,7 @@
 <section class="panel">
   <h2>Add webhook</h2>
   <form method="post" action="/ui/webhooks">
+    {{template "csrf" $}}
     <label>URL <input name="url" required placeholder="https://example.com/hooks/cv"></label>
     <label>Events <input name="events" value="*" placeholder="space.push,file.write or *"></label>
     <label>Space filter <input name="space" placeholder="(optional)"></label>

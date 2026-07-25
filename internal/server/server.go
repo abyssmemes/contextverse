@@ -88,7 +88,17 @@ func New(cfg *config.ServerConfig, authStore *auth.Store) *Server {
 	})
 	reg := metrics.New()
 	hub := events.NewHub()
+	// Webhook URLs are chosen by whoever can configure hooks, so destinations are
+	// filtered on the socket as well as at write time.
+	hookPolicy := webhooks.TargetPolicy{AllowPrivate: cfg.Webhooks.AllowPrivateTargets}
+	if wh != nil {
+		wh.Policy = hookPolicy
+	}
 	disp := webhooks.NewDispatcher(wh)
+	disp.SetPolicy(hookPolicy)
+	if hookPolicy.AllowPrivate {
+		logx.L().Warn("webhooks may target private addresses (webhooks.allow_private_targets): only safe on a single-tenant server")
+	}
 	disp.OnEmit = func(evt webhooks.Event) {
 		hub.Publish(evt)
 		reg.SSEEvents.Inc()
@@ -99,6 +109,10 @@ func New(cfg *config.ServerConfig, authStore *auth.Store) *Server {
 		} else {
 			reg.WebhookFailed.Inc()
 		}
+	}
+	disp.OnDropped = func(ev webhooks.Event) {
+		reg.WebhookDropped.Inc()
+		logx.L().Warn("webhook queue full; event dropped", "event", ev.Type, "space", ev.Space)
 	}
 	tp, err := tracing.New(cfg.Tracing.OTLPEndpoint)
 	if err != nil {
@@ -206,7 +220,11 @@ func (s *Server) Handler() http.Handler {
 		s.registerUsersAPI(mux)
 	}
 
-	return s.withAccessLog(s.withRateLimit(s.withRequestID(s.withTracing(mux))))
+	return s.withAccessLog(
+		s.withSecurityHeaders(
+			withBodyLimit(
+				s.withRateLimit(
+					s.withCSRF(s.withRequestID(s.withTracing(mux)))))))
 }
 
 func (s *Server) withTracing(next http.Handler) http.Handler {
@@ -221,12 +239,17 @@ func (s *Server) withTracing(next http.Handler) http.Handler {
 
 // ListenAndServe starts the HTTP server (blocking).
 func (s *Server) ListenAndServe() error {
+	// Without write and idle timeouts a handful of slow or half-open connections
+	// can hold the listener open indefinitely. Reads are not capped here because
+	// pushes stream large files; the per-request body limit does that job.
 	s.http = &http.Server{
 		Addr: s.Cfg.Addr(),
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			s.Handler().ServeHTTP(w, r)
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
+		WriteTimeout:      0, // SSE streams stay open by design
+		IdleTimeout:       120 * time.Second,
 	}
 	ln, err := net.Listen("tcp", s.Cfg.Addr())
 	if err != nil {

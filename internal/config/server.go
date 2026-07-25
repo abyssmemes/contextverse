@@ -35,6 +35,17 @@ type ServerConfig struct {
 	RateLimit RateLimitConfig `yaml:"rate_limit,omitempty"`
 	Quotas    QuotasConfig    `yaml:"quotas,omitempty"`
 	Tracing   TracingConfig   `yaml:"tracing,omitempty"`
+	Webhooks  WebhooksConfig  `yaml:"webhooks,omitempty"`
+}
+
+// WebhooksConfig governs outbound webhook destinations.
+type WebhooksConfig struct {
+	// AllowPrivateTargets permits hooks pointing at loopback and private
+	// networks. Off by default: a webhook URL is chosen by whoever can configure
+	// hooks, and on a shared node that would reach the orchestrator API and the
+	// neighbours. Turn it on for a self-hosted server delivering to an internal
+	// relay. Cloud metadata endpoints stay refused either way.
+	AllowPrivateTargets bool `yaml:"allow_private_targets,omitempty"`
 }
 
 // TracingConfig is optional OpenTelemetry export (off by default).

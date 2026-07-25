@@ -33,6 +33,7 @@
   <div class="panel">
     <h2 class="section-title">Write / update policy</h2>
     <form method="post" action="/ui/policies">
+      {{template "csrf" $}}
       <label for="pname">Name</label>
       <input id="pname" name="name" required placeholder="eng-writers">
       <label for="pbody">YAML body</label>

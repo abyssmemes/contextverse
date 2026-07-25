@@ -59,4 +59,8 @@ type Page struct {
 	Active     string // nav key
 	Version    string
 	Data       any
+	// Nonce authorizes the one inline script the console needs; CSRF is echoed
+	// by every form. Both are stamped by the server at render time.
+	Nonce string
+	CSRF  string
 }

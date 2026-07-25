@@ -38,6 +38,7 @@
 
       {{if and .Data.CanWrite .Data.Editable (ne .Data.ViewMode "preview")}}
       <form method="post" action="/ui/spaces/{{.Data.Space}}/files/{{.Data.Path}}">
+        {{template "csrf" $}}
         <input type="hidden" name="version" value="{{.Data.Version}}">
         <label for="content" class="sr-only">File contents</label>
         <textarea id="content" name="content" class="file-editor" rows="28" spellcheck="false">{{.Data.Content}}</textarea>
@@ -51,6 +52,7 @@
         <article class="md-preview">{{.Data.MarkdownHTML}}</article>
         {{if and .Data.CanWrite .Data.Historical}}
         <form method="post" action="/ui/spaces/{{.Data.Space}}/files/{{.Data.Path}}" class="actions">
+          {{template "csrf" $}}
           <input type="hidden" name="action" value="restore">
           <input type="hidden" name="restore_version" value="{{.Data.Viewing}}">
           <input type="hidden" name="version" value="{{.Data.Current}}">
@@ -73,6 +75,7 @@
         <pre class="file-pre">{{.Data.Content}}</pre>
         {{if and .Data.CanWrite .Data.Historical}}
         <form method="post" action="/ui/spaces/{{.Data.Space}}/files/{{.Data.Path}}" class="actions">
+          {{template "csrf" $}}
           <input type="hidden" name="action" value="restore">
           <input type="hidden" name="restore_version" value="{{.Data.Viewing}}">
           <input type="hidden" name="version" value="{{.Data.Current}}">
@@ -101,6 +104,7 @@
               <a href="/ui/spaces/{{$.Data.Space}}/files/{{$.Data.Path}}?version={{.Version}}&view=preview">View</a>
               {{if and $.Data.CanWrite (ne .Version $.Data.Current)}}
               <form method="post" action="/ui/spaces/{{$.Data.Space}}/files/{{$.Data.Path}}" style="display:inline">
+                {{template "csrf" $}}
                 <input type="hidden" name="action" value="restore">
                 <input type="hidden" name="restore_version" value="{{.Version}}">
                 <input type="hidden" name="version" value="{{$.Data.Current}}">

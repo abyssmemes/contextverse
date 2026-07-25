@@ -13,6 +13,7 @@
     {{if .FlashError}}<div class="flash err" role="alert">{{.FlashError}}</div>{{end}}
     <div class="panel">
       <form method="post" action="/ui/login">
+        {{template "csrf" $}}
         <label for="username">Username</label>
         <input id="username" name="username" autocomplete="username" placeholder="admin" autofocus>
         <label for="password">Password</label>

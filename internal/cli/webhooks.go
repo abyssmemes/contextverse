@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/abyssmemes/contextverse/internal/config"
 	"github.com/abyssmemes/contextverse/internal/webhooks"
 )
 
@@ -29,7 +30,17 @@ func openWebhookStore() (*webhooks.Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	return webhooks.Open(dir)
+	st, err := webhooks.Open(dir)
+	if err != nil {
+		return nil, err
+	}
+	// The CLI writes the same file the server delivers from, so it must apply the
+	// same destination policy — otherwise `webhooks add` stores a hook that every
+	// delivery then refuses.
+	if cfg, err := config.LoadServer(dir); err == nil && cfg != nil {
+		st.Policy = webhooks.TargetPolicy{AllowPrivate: cfg.Webhooks.AllowPrivateTargets}
+	}
+	return st, nil
 }
 
 func newWebhooksListCmd() *cobra.Command {
@@ -133,6 +144,7 @@ func newWebhooksTestCmd() *cobra.Command {
 				return err
 			}
 			d := webhooks.NewDispatcher(st)
+			d.SetPolicy(st.Policy)
 			if err := d.Test(cmd.Context(), args[0]); err != nil {
 				return err
 			}

@@ -11,6 +11,7 @@
     </div>
     {{if eq .Role "admin"}}
     <form method="post" action="/ui/freshness/nag">
+      {{template "csrf" $}}
       <button class="btn accent" type="submit">Nag stale (webhooks)</button>
     </form>
     {{end}}

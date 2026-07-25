@@ -44,7 +44,11 @@ func (s *Server) auditWrite(r *http.Request, action, space, target, result, errM
 		Actor:  s.actorFrom(r, p),
 	}
 	if err := s.Audit.Append(e); err != nil {
-		logx.L().Warn("audit append", "err", err, "action", action)
+		// A missing audit line is a compliance gap, not a warning to skim past.
+		logx.L().Error("audit append failed", "err", err, "action", action, "actor", e.Actor.Username)
+		if s.Metrics != nil {
+			s.Metrics.AuditFailed.Inc()
+		}
 	} else if s.Metrics != nil {
 		s.Metrics.AuditEntries.Inc()
 	}

@@ -62,6 +62,9 @@ type fileDoc struct {
 type Store struct {
 	mu  sync.Mutex
 	dir string
+	// Policy rejects unsafe destinations at write time so a bad hook is refused
+	// with a clear message instead of failing on every delivery.
+	Policy TargetPolicy
 }
 
 // Open creates the store directory.
@@ -108,6 +111,9 @@ func (s *Store) Get(id string) (Hook, bool, error) {
 func (s *Store) Upsert(h Hook) (Hook, error) {
 	if h.URL == "" {
 		return Hook{}, fmt.Errorf("url required")
+	}
+	if err := s.Policy.ValidateURL(h.URL); err != nil {
+		return Hook{}, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -189,6 +195,16 @@ func (s *Store) saveLocked(doc fileDoc) error {
 	return os.Rename(tmp, s.path())
 }
 
+// Delivery worker pool sizing. Each attempt sequence sleeps through its
+// backoffs, so one goroutine per event would let a burst of writes park
+// thousands of sleeping goroutines and sockets. A small pool with a bounded
+// queue puts a ceiling on both, and a full queue drops the delivery loudly
+// rather than growing memory.
+const (
+	deliveryWorkers   = 4
+	deliveryQueueSize = 256
+)
+
 // Dispatcher delivers events asynchronously.
 type Dispatcher struct {
 	Store  *Store
@@ -198,17 +214,34 @@ type Dispatcher struct {
 	OnEmit func(Event)
 	// OnDelivered is called after a webhook attempt settles (success or dead-letter).
 	OnDelivered func(ok bool)
+	// OnDropped is called when the delivery queue is full.
+	OnDropped func(Event)
+	// Policy decides which destinations may be dialled.
+	Policy TargetPolicy
+
+	queue     chan Event
+	startPool sync.Once
 }
 
 // NewDispatcher builds a dispatcher with sensible defaults.
 func NewDispatcher(store *Store) *Dispatcher {
-	return &Dispatcher{
+	d := &Dispatcher{
 		Store: store,
-		Client: &http.Client{
-			Timeout: 8 * time.Second,
-		},
-		now: time.Now,
+		now:   time.Now,
 	}
+	d.Client = d.Policy.Client(8 * time.Second)
+	return d
+}
+
+// SetPolicy applies a destination policy and rebuilds the client so the socket
+// check matches it.
+func (d *Dispatcher) SetPolicy(p TargetPolicy) {
+	d.Policy = p
+	timeout := 8 * time.Second
+	if d.Client != nil && d.Client.Timeout > 0 {
+		timeout = d.Client.Timeout
+	}
+	d.Client = p.Client(timeout)
 }
 
 // Emit fans out to matching hooks (non-blocking).
@@ -228,7 +261,47 @@ func (d *Dispatcher) Emit(evt Event) {
 	if d.Store == nil {
 		return
 	}
-	go d.deliverAll(evt)
+	d.startPool.Do(d.spawnWorkers)
+	select {
+	case d.queue <- evt:
+	default:
+		logx.L().Warn("webhook delivery queue full, dropping event", "event", evt.ID, "type", evt.Type)
+		if d.OnDropped != nil {
+			d.OnDropped(evt)
+		}
+	}
+}
+
+// EmitSync delivers before returning. One-shot commands need it: a process that
+// exits right after Emit would take the queue with it.
+func (d *Dispatcher) EmitSync(evt Event) {
+	if d == nil {
+		return
+	}
+	if evt.ID == "" {
+		evt.ID = newID("evt")
+	}
+	if evt.Created.IsZero() {
+		evt.Created = d.now().UTC()
+	}
+	if d.OnEmit != nil {
+		d.OnEmit(evt)
+	}
+	if d.Store == nil {
+		return
+	}
+	d.deliverAll(evt)
+}
+
+func (d *Dispatcher) spawnWorkers() {
+	d.queue = make(chan Event, deliveryQueueSize)
+	for i := 0; i < deliveryWorkers; i++ {
+		go func() {
+			for evt := range d.queue {
+				d.deliverAll(evt)
+			}
+		}()
+	}
 }
 
 func (d *Dispatcher) deliverAll(evt Event) {
@@ -287,12 +360,12 @@ func (d *Dispatcher) deliverWithRetry(h Hook, evt Event) {
 		d.OnDelivered(false)
 	}
 	_ = d.Store.appendDeadLetter(DeadLetter{
-		HookID:    h.ID,
-		URL:       h.URL,
-		Event:     evt,
-		Error:     fmt.Sprint(lastErr),
-		FailedAt:  d.now().UTC(),
-		Attempts:  len(backoffs) + 1,
+		HookID:   h.ID,
+		URL:      h.URL,
+		Event:    evt,
+		Error:    fmt.Sprint(lastErr),
+		FailedAt: d.now().UTC(),
+		Attempts: len(backoffs) + 1,
 	})
 }
 
@@ -366,6 +439,18 @@ type DeadLetter struct {
 	Attempts int       `json:"attempts"`
 }
 
+// A hook that is down during a busy hour writes one line per failed attempt, so
+// the file is capped and rotated once. Two generations is enough to investigate
+// an incident without letting a broken endpoint fill the disk.
+const (
+	maxDeadLetterBytes = 8 << 20
+	deadLetterTailScan = 1 << 20
+)
+
+func (s *Store) rotatedDeadLetterPath() string {
+	return filepath.Join(s.dir, "dead-letter.1.jsonl")
+}
+
 func (s *Store) appendDeadLetter(dl DeadLetter) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -373,25 +458,74 @@ func (s *Store) appendDeadLetter(dl DeadLetter) error {
 	if err != nil {
 		return err
 	}
-	f, err := os.OpenFile(s.deadLetterPath(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	path := s.deadLetterPath()
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	_, err = f.Write(append(raw, '\n'))
-	return err
+	if _, err := f.Write(append(raw, '\n')); err != nil {
+		f.Close()
+		return err
+	}
+	fi, statErr := f.Stat()
+	f.Close()
+	if statErr == nil && fi.Size() > maxDeadLetterBytes {
+		// Rename rather than truncate so a reader mid-file keeps its handle.
+		if err := os.Rename(path, s.rotatedDeadLetterPath()); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-// ListDeadLetter returns recent dead-letter rows (newest last in file).
+// ListDeadLetter returns recent dead-letter rows (newest last). Only the tail of
+// each file is read, so a large backlog cannot turn a UI page load into a
+// multi-megabyte allocation.
 func (s *Store) ListDeadLetter(limit int) ([]DeadLetter, error) {
-	raw, err := os.ReadFile(s.deadLetterPath())
+	out, err := readDeadLetterTail(s.deadLetterPath())
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 || len(out) < limit {
+		older, err := readDeadLetterTail(s.rotatedDeadLetterPath())
+		if err != nil {
+			return nil, err
+		}
+		out = append(older, out...)
+	}
+	if limit > 0 && len(out) > limit {
+		out = out[len(out)-limit:]
+	}
+	return out, nil
+}
+
+func readDeadLetterTail(path string) ([]DeadLetter, error) {
+	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
 		return nil, err
 	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	size := fi.Size()
+	offset := int64(0)
+	if size > deadLetterTailScan {
+		offset = size - deadLetterTailScan
+	}
+	raw := make([]byte, size-offset)
+	if _, err := f.ReadAt(raw, offset); err != nil && err != io.EOF {
+		return nil, err
+	}
 	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	if offset > 0 && len(lines) > 0 {
+		// The first line was cut in half by the offset.
+		lines = lines[1:]
+	}
 	var out []DeadLetter
 	for _, line := range lines {
 		if strings.TrimSpace(line) == "" {
@@ -402,9 +536,6 @@ func (s *Store) ListDeadLetter(limit int) ([]DeadLetter, error) {
 			continue
 		}
 		out = append(out, dl)
-	}
-	if limit > 0 && len(out) > limit {
-		out = out[len(out)-limit:]
 	}
 	return out, nil
 }
