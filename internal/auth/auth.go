@@ -3,6 +3,7 @@ package auth
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -62,6 +63,12 @@ type TokenRecord struct {
 	Label     string    `json:"label,omitempty"`
 	Hash      string    `json:"hash"`
 	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at,omitempty"` // zero = never
+}
+
+// Expired reports whether the record is past its lifetime at t.
+func (t TokenRecord) Expired(at time.Time) bool {
+	return !t.ExpiresAt.IsZero() && at.After(t.ExpiresAt)
 }
 
 // EffectivePolicies returns token policies (falls back to role).
@@ -86,8 +93,27 @@ type Principal struct {
 
 // Store manages users.yaml + token files under <dataDir>/auth.
 type Store struct {
-	mu      sync.RWMutex
-	dataDir string
+	mu       sync.RWMutex
+	dataDir  string
+	tokenTTL time.Duration
+	failures loginFailures
+}
+
+// SetTokenTTL sets the lifetime stamped on newly issued tokens (0 = never expire).
+func (s *Store) SetTokenTTL(d time.Duration) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if d < 0 {
+		d = 0
+	}
+	s.tokenTTL = d
+}
+
+// TokenTTL returns the configured token lifetime.
+func (s *Store) TokenTTL() time.Duration {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.tokenTTL
 }
 
 // OpenStore ensures auth directories exist and seeds builtin policies.
@@ -201,6 +227,31 @@ func (s *Store) SetRole(name string, role Role) error {
 	return fmt.Errorf("user %q not found", name)
 }
 
+// SetDisabled suspends or restores a user. Disabling also revokes their tokens;
+// Authenticate refuses a disabled user regardless, so a leftover token file
+// cannot outlive the suspension.
+func (s *Store) SetDisabled(name string, disabled bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	f, err := s.loadUsers()
+	if err != nil {
+		return err
+	}
+	for i := range f.Users {
+		if f.Users[i].Name == name {
+			f.Users[i].Disabled = disabled
+			if err := s.saveUsers(f); err != nil {
+				return err
+			}
+			if disabled {
+				return s.revokeUserTokensLocked(name)
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("user %q not found", name)
+}
+
 // RemoveUser disables the user and revokes tokens.
 func (s *Store) RemoveUser(name string) error {
 	s.mu.Lock()
@@ -228,8 +279,14 @@ func (s *Store) RemoveUser(name string) error {
 	return s.revokeUserTokensLocked(name)
 }
 
-// CreateToken issues a new bearer token. Returns plaintext once.
+// CreateToken issues a new bearer token with the store's configured TTL.
+// Returns plaintext once.
 func (s *Store) CreateToken(user, label string) (plaintext string, rec TokenRecord, err error) {
+	return s.CreateTokenTTL(user, label, s.TokenTTL())
+}
+
+// CreateTokenTTL issues a bearer token that stops working after ttl (0 = never).
+func (s *Store) CreateTokenTTL(user, label string, ttl time.Duration) (plaintext string, rec TokenRecord, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	f, err := s.loadUsers()
@@ -265,6 +322,7 @@ func (s *Store) CreateToken(user, label string) (plaintext string, rec TokenReco
 		return "", TokenRecord{}, err
 	}
 	plaintext = fmt.Sprintf("cv-%s-%s", user, secret)
+	now := time.Now().UTC()
 	rec = TokenRecord{
 		ID:        id,
 		User:      user,
@@ -272,7 +330,10 @@ func (s *Store) CreateToken(user, label string) (plaintext string, rec TokenReco
 		Policies:  policies,
 		Label:     label,
 		Hash:      hashToken(plaintext),
-		CreatedAt: time.Now().UTC(),
+		CreatedAt: now,
+	}
+	if ttl > 0 {
+		rec.ExpiresAt = now.Add(ttl)
 	}
 	path := filepath.Join(s.tokensDir(), id+".json")
 	raw, err := json.MarshalIndent(rec, "", "  ")
@@ -285,19 +346,25 @@ func (s *Store) CreateToken(user, label string) (plaintext string, rec TokenReco
 	return plaintext, rec, nil
 }
 
-// Authenticate resolves a bearer token to a principal.
+// ErrTokenExpired is returned when a presented token is past its lifetime.
+var ErrTokenExpired = fmt.Errorf("token expired")
+
+// Authenticate resolves a bearer token to a principal. Grants are re-read from
+// users.yaml on every call, so demoting or disabling a user takes effect
+// immediately instead of waiting for their tokens to be revoked.
 func (s *Store) Authenticate(token string) (*Principal, error) {
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return nil, fmt.Errorf("empty token")
 	}
-	h := hashToken(token)
+	h := []byte(hashToken(token))
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	entries, err := os.ReadDir(s.tokensDir())
 	if err != nil {
 		return nil, err
 	}
+	var match *TokenRecord
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 			continue
@@ -310,16 +377,83 @@ func (s *Store) Authenticate(token string) (*Principal, error) {
 		if err := json.Unmarshal(raw, &rec); err != nil {
 			continue
 		}
-		if rec.Hash == h {
-			pols := rec.EffectivePolicies()
-			role := rec.Role
-			if role == "" && len(pols) > 0 {
-				role = Role(pols[0])
-			}
-			return &Principal{User: rec.User, Role: role, Policies: pols, Token: token, ID: rec.ID}, nil
+		if subtle.ConstantTimeCompare([]byte(rec.Hash), h) == 1 {
+			found := rec
+			match = &found
+			break
 		}
 	}
-	return nil, fmt.Errorf("invalid token")
+	if match == nil {
+		return nil, fmt.Errorf("invalid token")
+	}
+	if match.Expired(time.Now().UTC()) {
+		return nil, ErrTokenExpired
+	}
+	u, err := s.findUserLocked(match.User)
+	if err != nil {
+		return nil, err
+	}
+	if u == nil {
+		return nil, fmt.Errorf("invalid token")
+	}
+	if u.Disabled {
+		return nil, fmt.Errorf("user %q disabled", u.Name)
+	}
+	pols := u.EffectivePolicies()
+	if len(pols) == 0 {
+		pols = match.EffectivePolicies()
+	}
+	role := u.Role
+	if role == "" && len(pols) > 0 {
+		role = Role(pols[0])
+	}
+	return &Principal{User: match.User, Role: role, Policies: pols, Token: token, ID: match.ID}, nil
+}
+
+func (s *Store) findUserLocked(name string) (*User, error) {
+	f, err := s.loadUsers()
+	if err != nil {
+		return nil, err
+	}
+	for i := range f.Users {
+		if f.Users[i].Name == name {
+			u := f.Users[i]
+			return &u, nil
+		}
+	}
+	return nil, nil
+}
+
+// PruneExpiredTokens deletes token files whose lifetime has passed.
+func (s *Store) PruneExpiredTokens() (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entries, err := os.ReadDir(s.tokensDir())
+	if err != nil {
+		return 0, err
+	}
+	now := time.Now().UTC()
+	n := 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		path := filepath.Join(s.tokensDir(), e.Name())
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		var rec TokenRecord
+		if err := json.Unmarshal(raw, &rec); err != nil {
+			continue
+		}
+		if rec.Expired(now) {
+			if os.Remove(path) == nil {
+				n++
+			}
+		}
+	}
+	return n, nil
 }
 
 // ListTokens returns token metadata (no plaintext).

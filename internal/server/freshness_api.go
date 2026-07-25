@@ -58,7 +58,7 @@ func (s *Server) maybeQuotaWarning(r *http.Request, space string) {
 	s.Dispatch.Emit(webhooks.Event{
 		Type:  "quota.warning",
 		Space: space,
-		Actor: actorFrom(r, principalFrom(r.Context())).Username,
+		Actor: s.actorFrom(r, principalFrom(r.Context())).Username,
 		Data:  map[string]any{"quota": quota, "used": used, "limit": limit},
 	})
 }

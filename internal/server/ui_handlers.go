@@ -112,13 +112,34 @@ func (s *Server) setSession(w http.ResponseWriter, token string) {
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   60 * 60 * 24 * 30,
+		// Strict, not Lax: the console mutates state with plain form posts and
+		// carries no CSRF token, so the cookie must never ride a cross-site
+		// request.
+		SameSite: http.SameSiteStrictMode,
+		Secure:   s.servesTLS(),
+		MaxAge:   60 * 60 * 24 * 7,
 	})
 }
 
+// servesTLS reports whether the console is reachable over HTTPS, in which case
+// the session cookie must not be sent in the clear.
+func (s *Server) servesTLS() bool {
+	if s.Cfg == nil {
+		return false
+	}
+	return s.Cfg.TLS.Enabled || s.Cfg.TLS.ACME.Enabled
+}
+
 func (s *Server) clearSession(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1})
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookie,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		Secure:   s.servesTLS(),
+		MaxAge:   -1,
+	})
 }
 
 func (s *Server) handleSetupGet(w http.ResponseWriter, r *http.Request) {
@@ -334,7 +355,13 @@ func (s *Server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
 	if user != "" && pass != "" {
 		tok, _, loginErr := s.Auth.LoginUserpass(user, pass)
 		if loginErr != nil {
-			_ = ui.Render(w, "login.html", ui.Page{Title: "Login", Version: version.Version, FlashError: loginErr.Error()})
+			s.auditWrite(r, "auth.login", "", user, audit.ResultDenied, loginErr.Error(), nil)
+			msg := "invalid credentials"
+			if errors.Is(loginErr, auth.ErrLockedOut) {
+				msg = "too many failed logins, try again later"
+			}
+			logx.L().Warn("failed ui login", "user", user, "ip", s.clientIP(r))
+			_ = ui.Render(w, "login.html", ui.Page{Title: "Login", Version: version.Version, FlashError: msg})
 			return
 		}
 		token = tok

@@ -80,6 +80,36 @@ Mutual exclusion: ACME **or** static `cert_file`/`key_file`, not both. Wildcards
 
 Configured in server `config.yaml` (`rate_limit`, `quotas`). Defaults apply if omitted (e.g. 120 req/min, auth 10/min; file/space size caps).
 
+## Behind a reverse proxy
+
+Rate limiting and audit records attribute a request to the peer address. A
+client can send `X-Forwarded-For` itself, so the header is only believed when the
+immediate peer is listed:
+
+```yaml
+listen:
+  address: 127.0.0.1
+  port: 8080
+  trusted_proxies: ["10.0.0.0/8", "192.168.1.5"] # empty = trust nobody
+```
+
+## Token lifetime
+
+Bearer tokens never expire unless you say so:
+
+```yaml
+auth:
+  token_ttl: 30 # days; 0 = never
+```
+
+Expired tokens are refused on use and pruned at start-up. The first-run token
+written to `auth/bootstrap_admin.token` always expires after 24 hours — copy it,
+delete the file, and issue a real token with `contextd server token create`.
+Password login answers `invalid credentials` for every failure (unknown user,
+wrong password, token-only account) and locks an account for 15 minutes after 5
+failed attempts. `contextd server user disable <name>` suspends an account and
+revokes its tokens immediately.
+
 ## Webhooks & audit
 
 - Webhooks: HMAC-SHA256 (`X-ContextVerse-Signature`), retries then dead-letter. Manage via API/UI/`contextd`.

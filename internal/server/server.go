@@ -49,6 +49,7 @@ type Server struct {
 	http     *http.Server
 	acmeHTTP *http.Server // optional HTTP-01 challenge listener
 	acmeMgr  *acme.Manager
+	proxies  trustedProxies
 
 	mu           sync.Mutex
 	NeedsSetup   bool
@@ -106,6 +107,20 @@ func New(cfg *config.ServerConfig, authStore *auth.Store) *Server {
 	} else if tp.Enabled() {
 		logx.L().Info("otlp tracing enabled", "endpoint", cfg.Tracing.OTLPEndpoint)
 	}
+	proxies, bad := parseTrustedProxies(cfg.Listen.TrustedProxies)
+	if len(bad) > 0 {
+		logx.L().Error("ignoring unparsable trusted_proxies entries", "entries", bad)
+	}
+	if ttl := cfg.Auth.TokenTTL(); ttl > 0 {
+		authStore.SetTokenTTL(ttl)
+	} else {
+		logx.L().Warn("api tokens never expire; set auth.token_ttl (days) to bound them")
+	}
+	if n, err := authStore.PruneExpiredTokens(); err != nil {
+		logx.L().Warn("prune expired tokens", "err", err)
+	} else if n > 0 {
+		logx.L().Info("pruned expired tokens", "count", n)
+	}
 	return &Server{
 		Cfg:      cfg,
 		Auth:     authStore,
@@ -119,6 +134,7 @@ func New(cfg *config.ServerConfig, authStore *auth.Store) *Server {
 		Events:   hub,
 		Methods:  auth.DefaultRegistry(),
 		Tracing:  tp,
+		proxies:  proxies,
 	}
 }
 
@@ -398,7 +414,7 @@ func (s *Server) withRateLimit(next http.Handler) http.Handler {
 			return
 		}
 		authEP := r.Method == http.MethodPost && strings.Contains(path, "/auth/")
-		key := rateLimitKey(r)
+		key := s.rateLimitKey(r)
 		ok, limit, remaining, reset, retry := s.Limiter.Allow(key, authEP)
 		if limit > 0 {
 			w.Header().Set("X-RateLimit-Limit", strconv.Itoa(limit))
@@ -419,22 +435,6 @@ func (s *Server) withRateLimit(next http.Handler) http.Handler {
 	})
 }
 
-func rateLimitKey(r *http.Request) string {
-	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
-		tok := strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
-		if tok != "" {
-			return "bearer:" + tok
-		}
-	}
-	ip := r.RemoteAddr
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		ip = strings.TrimSpace(strings.Split(xff, ",")[0])
-	} else if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		ip = host
-	}
-	return "ip:" + ip
-}
-
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":  "ok",
@@ -453,10 +453,20 @@ func (s *Server) handleUserpassLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	tok, rec, err := s.Auth.LoginUserpass(body.Username, body.Password)
 	if err != nil {
-		writeErr(w, r, http.StatusUnauthorized, "unauthenticated", err.Error(), nil)
+		s.auditWrite(r, "auth.login", "", body.Username, audit.ResultDenied, err.Error(), nil)
+		if errors.Is(err, auth.ErrLockedOut) {
+			w.Header().Set("Retry-After", strconv.Itoa(int(auth.LockoutDuration.Seconds())))
+			writeErr(w, r, http.StatusTooManyRequests, "rate_limited", "too many failed logins, try again later", nil)
+			return
+		}
+		logx.L().Warn("failed login", "user", body.Username, "ip", s.clientIP(r))
+		// One message for every cause, so the endpoint cannot be used to learn
+		// which usernames exist or which ones have a password set.
+		writeErr(w, r, http.StatusUnauthorized, "unauthenticated", "invalid credentials", nil)
 		return
 	}
 	logx.L().Info("userpass login", "user", body.Username, "token_id", rec.ID)
+	s.auditEmit(r, "auth.login", "", body.Username, nil)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"token":    tok,
 		"token_id": rec.ID,
@@ -720,7 +730,7 @@ func (s *Server) handlePutFile(w http.ResponseWriter, r *http.Request) {
 				Type:  "secret.blocked",
 				Space: name,
 				Scope: path,
-				Actor: actorFrom(r, principalFrom(r.Context())).Username,
+				Actor: s.actorFrom(r, principalFrom(r.Context())).Username,
 				Data: map[string]any{
 					"path":     path,
 					"rule":     blocked.Findings[0].Rule,
@@ -741,7 +751,7 @@ func (s *Server) handlePutFile(w http.ResponseWriter, r *http.Request) {
 				Type:  "quota.exceeded",
 				Space: name,
 				Scope: path,
-				Actor: actorFrom(r, principalFrom(r.Context())).Username,
+				Actor: s.actorFrom(r, principalFrom(r.Context())).Username,
 				Data:  map[string]any{"quota": qerr.Quota, "used": qerr.Used, "limit": qerr.Limit},
 			})
 		}
@@ -846,7 +856,7 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 			s.Dispatch.Emit(webhooks.Event{
 				Type:  "secret.blocked",
 				Space: name,
-				Actor: actorFrom(r, principalFrom(r.Context())).Username,
+				Actor: s.actorFrom(r, principalFrom(r.Context())).Username,
 				Data: map[string]any{
 					"path":     blocked.Findings[0].Path,
 					"rule":     blocked.Findings[0].Rule,
@@ -866,7 +876,7 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 			s.Dispatch.Emit(webhooks.Event{
 				Type:  "quota.exceeded",
 				Space: name,
-				Actor: actorFrom(r, principalFrom(r.Context())).Username,
+				Actor: s.actorFrom(r, principalFrom(r.Context())).Username,
 				Data:  map[string]any{"quota": qerr.Quota, "used": qerr.Used, "limit": qerr.Limit},
 			})
 		}

@@ -3,6 +3,7 @@ package auth
 import (
 	"fmt"
 	"path/filepath"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -58,16 +59,30 @@ func (s *Store) SetPolicies(name string, policies []string) error {
 	return fmt.Errorf("user %q not found", name)
 }
 
+// errInvalidCredentials is the single answer for every failed login: a wrong
+// password, an unknown user, a disabled user and a token-only user must be
+// indistinguishable to the caller.
+var errInvalidCredentials = fmt.Errorf("invalid credentials")
+
+// dummyHash is a real bcrypt hash of an unguessable value. Comparing against it
+// costs the same as comparing against a stored hash, so a missing user does not
+// answer faster than a wrong password.
+var dummyHash = []byte("$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy")
+
 // LoginUserpass verifies password and issues a new bearer token (shown once).
 func (s *Store) LoginUserpass(username, password string) (plaintext string, rec TokenRecord, err error) {
 	if username == "" || password == "" {
 		return "", TokenRecord{}, fmt.Errorf("username and password required")
 	}
+	now := time.Now()
+	if s.failures.locked(username, now) {
+		return "", TokenRecord{}, ErrLockedOut
+	}
 	s.mu.RLock()
-	f, err := s.loadUsers()
+	f, loadErr := s.loadUsers()
 	s.mu.RUnlock()
-	if err != nil {
-		return "", TokenRecord{}, err
+	if loadErr != nil {
+		return "", TokenRecord{}, loadErr
 	}
 	var u *User
 	for i := range f.Users {
@@ -76,18 +91,18 @@ func (s *Store) LoginUserpass(username, password string) (plaintext string, rec 
 			break
 		}
 	}
-	if u == nil {
-		return "", TokenRecord{}, fmt.Errorf("invalid credentials")
+	hash := dummyHash
+	usable := false
+	if u != nil && !u.Disabled && u.PasswordHash != "" {
+		hash = []byte(u.PasswordHash)
+		usable = true
 	}
-	if u.Disabled {
-		return "", TokenRecord{}, fmt.Errorf("user disabled")
+	matched := bcrypt.CompareHashAndPassword(hash, []byte(password)) == nil
+	if !usable || !matched {
+		s.failures.fail(username, now)
+		return "", TokenRecord{}, errInvalidCredentials
 	}
-	if u.PasswordHash == "" {
-		return "", TokenRecord{}, fmt.Errorf("password login not configured for this user (set password or use a token)")
-	}
-	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
-		return "", TokenRecord{}, fmt.Errorf("invalid credentials")
-	}
+	s.failures.reset(username)
 	return s.CreateToken(username, "userpass")
 }
 

@@ -151,7 +151,9 @@ For scripts/CI or headless installs, pass --noui (and typically --non-interactiv
 			if err := store.AddUser(admin, auth.RoleAdmin); err != nil {
 				return err
 			}
-			token, _, err := store.CreateToken(admin, "init")
+			// The bootstrap token sits in plaintext on disk until the operator
+			// takes it away, so it expires on its own.
+			token, rec, err := store.CreateTokenTTL(admin, "bootstrap", auth.BootstrapTokenTTL)
 			if err != nil {
 				return err
 			}
@@ -168,7 +170,10 @@ For scripts/CI or headless installs, pass --noui (and typically --non-interactiv
 			fmt.Fprintf(cmd.OutOrStdout(), "Listen: %s:%d\n", address, port)
 			fmt.Fprintf(cmd.OutOrStdout(), "Space:  %s\n", spaceName)
 			fmt.Fprintf(cmd.OutOrStdout(), "Admin:  %s\n\n", admin)
-			fmt.Fprintf(cmd.OutOrStdout(), "Save this token (shown once):\n  %s\n\n", token)
+			fmt.Fprintf(cmd.OutOrStdout(), "Save this token (shown once, expires %s):\n  %s\n\n",
+				rec.ExpiresAt.Format(time.RFC3339), token)
+			fmt.Fprintf(cmd.OutOrStdout(), "It is also in %s — delete that file once you have copied it,\n", bootPath)
+			fmt.Fprintf(cmd.OutOrStdout(), "then issue a long-lived token with: contextd server token create %s\n\n", admin)
 			fmt.Fprintf(cmd.OutOrStdout(), "Next:\n  contextd server start --server-dir %s\n", dataDir)
 			return nil
 		},
@@ -713,6 +718,38 @@ func newUserCmd() *cobra.Command {
 				pols[i] = strings.TrimSpace(pols[i])
 			}
 			return store.SetPolicies(args[0], pols)
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "disable <name>",
+		Short: "Suspend a user and revoke their tokens",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dir, err := resolveServerDir()
+			if err != nil {
+				return err
+			}
+			store, err := auth.OpenStore(dir)
+			if err != nil {
+				return err
+			}
+			return store.SetDisabled(args[0], true)
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "enable <name>",
+		Short: "Restore a suspended user (tokens must be reissued)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dir, err := resolveServerDir()
+			if err != nil {
+				return err
+			}
+			store, err := auth.OpenStore(dir)
+			if err != nil {
+				return err
+			}
+			return store.SetDisabled(args[0], false)
 		},
 	})
 	cmd.AddCommand(&cobra.Command{

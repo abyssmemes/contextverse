@@ -1,9 +1,7 @@
 package server
 
 import (
-	"net"
 	"net/http"
-	"strings"
 
 	"github.com/abyssmemes/contextverse/internal/audit"
 	"github.com/abyssmemes/contextverse/internal/auth"
@@ -43,7 +41,7 @@ func (s *Server) auditWrite(r *http.Request, action, space, target, result, errM
 		Result: result,
 		Error:  errMsg,
 		Diff:   diff,
-		Actor:  actorFrom(r, p),
+		Actor:  s.actorFrom(r, p),
 	}
 	if err := s.Audit.Append(e); err != nil {
 		logx.L().Warn("audit append", "err", err, "action", action)
@@ -80,7 +78,7 @@ func (s *Server) emitWebhook(r *http.Request, action, space, target string, diff
 	})
 }
 
-func actorFrom(r *http.Request, p *auth.Principal) audit.Actor {
+func (s *Server) actorFrom(r *http.Request, p *auth.Principal) audit.Actor {
 	a := audit.Actor{Method: "token"}
 	if p != nil {
 		a.Username = p.User
@@ -90,22 +88,10 @@ func actorFrom(r *http.Request, p *auth.Principal) audit.Actor {
 		}
 	}
 	if r != nil {
-		a.IP = clientIP(r)
+		a.IP = s.clientIP(r)
 		if c, err := r.Cookie(sessionCookie); err == nil && c.Value != "" {
 			a.Method = "session"
 		}
 	}
 	return a
-}
-
-func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		parts := strings.Split(xff, ",")
-		return strings.TrimSpace(parts[0])
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
 }

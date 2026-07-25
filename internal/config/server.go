@@ -85,6 +85,11 @@ type TUISSHConfig struct {
 type ListenConfig struct {
 	Address string `yaml:"address"`
 	Port    int    `yaml:"port"`
+	// TrustedProxies are the peers whose X-Forwarded-For / X-Real-IP headers the
+	// server believes (IPs or CIDRs). Empty = trust nobody, which is the safe
+	// default: otherwise any client can forge the address used for rate limiting
+	// and audit records.
+	TrustedProxies []string `yaml:"trusted_proxies,omitempty"`
 }
 
 // TLSConfig optional TLS (disabled by default).
@@ -119,9 +124,17 @@ type ServerDefaults struct {
 // ServerAuth holds auth policy knobs.
 // OIDC/MFA keys are rejected on OSS LoadServer (cloud control plane only).
 type ServerAuth struct {
-	TokenTTLDays int `yaml:"token_ttl"` // 0 = no expiry in 2a
+	TokenTTLDays int `yaml:"token_ttl"` // days; 0 = never expire
 	OIDC         any `yaml:"oidc,omitempty"`
 	MFA          any `yaml:"mfa,omitempty"`
+}
+
+// TokenTTL is the configured bearer-token lifetime (0 = never expire).
+func (a ServerAuth) TokenTTL() time.Duration {
+	if a.TokenTTLDays <= 0 {
+		return 0
+	}
+	return time.Duration(a.TokenTTLDays) * 24 * time.Hour
 }
 
 // ClientServer points a client checkout at a remote.
