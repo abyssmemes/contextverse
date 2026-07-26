@@ -18,6 +18,11 @@ type ApplyOpts struct {
 	Interactive bool
 	In          io.Reader // prompts; default os.Stdin
 	Out         io.Writer // prompt text; default os.Stderr
+
+	// Chooser, when set, replaces the built-in text prompt with a caller-supplied
+	// picker. The CLI passes an arrow-key multi-select; this package keeps its own
+	// typed fallback so it stays usable without the prompt package.
+	Chooser func(catalog []*Integration) ([]*Integration, error)
 }
 
 func (o ApplyOpts) in() io.Reader {
@@ -76,7 +81,15 @@ func ApplyDetected(catalog []*Integration, vars Vars, opts ApplyOpts) ([]ApplyRe
 	if len(found) == 0 {
 		var chosen []*Integration
 		if opts.Interactive {
-			chosen = AskWhich(catalog, opts.in(), opts.out())
+			if opts.Chooser != nil {
+				picked, err := opts.Chooser(catalog)
+				if err != nil {
+					return nil, err
+				}
+				chosen = picked
+			} else {
+				chosen = AskWhich(catalog, opts.in(), opts.out())
+			}
 		}
 		if len(chosen) == 0 {
 			fmt.Fprint(os.Stderr, ManualInstructionsCatalog(catalog, vars))

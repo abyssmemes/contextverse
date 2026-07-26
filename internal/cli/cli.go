@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,6 +25,18 @@ var (
 	flagSpaceRoot string
 )
 
+// Help groups. The command surface is wide enough that one alphabetical list
+// tells a reader nothing about where to start, so the root help is split by the
+// job being done rather than by the noun being acted on.
+const (
+	groupSetup     = "setup"
+	groupSpace     = "space"
+	groupSync      = "sync"
+	groupAI        = "ai"
+	groupServer    = "server"
+	groupInterface = "interface"
+)
+
 // Execute runs the root command.
 func Execute() error {
 	root := newRoot()
@@ -42,37 +55,45 @@ func newRoot() *cobra.Command {
 		},
 	}
 	root.PersistentFlags().BoolVar(&flagDebug, "debug", false, "enable debug logging")
+	root.PersistentFlags().BoolVar(&flagJSON, "json", false, "structured JSON output (where supported)")
+	root.PersistentFlags().BoolVar(&flagYAML, "yaml", false, "structured YAML output (where supported)")
 	root.PersistentFlags().StringVar(&flagSpaceRoot, "dir", "", "context space root (default: ~/.context)")
 	root.PersistentFlags().StringVar(&flagServerDir, "server-dir", "", "server data directory (default: ~/.contextverse-server)")
 
-	root.AddCommand(newVersionCmd())
-	root.AddCommand(newInitCmd())
-	root.AddCommand(newActivateCmd())
-	root.AddCommand(newStatusCmd())
-	root.AddCommand(newIndexCmd())
-	root.AddCommand(newTemplateCmd())
-	root.AddCommand(newSpaceCmd())
-	root.AddCommand(newBackendCmd())
-	root.AddCommand(newHistoryCmd())
-	root.AddCommand(newFileCmd())
-	root.AddCommand(newServerCmd())
-	root.AddCommand(newUserCmd())
-	root.AddCommand(newAuthCmd())
-	root.AddCommand(newPolicyCmd())
-	root.AddCommand(newACLCmd())
-	root.AddCommand(newContextCmd())
-	root.AddCommand(newPluginCmd())
-	root.AddCommand(newTUICmd())
-	root.AddCommand(newPullCmd())
-	root.AddCommand(newPushCmd())
-	root.AddCommand(newDaemonCmd())
-	root.AddCommand(newAuditCmd())
-	root.AddCommand(newWebhooksCmd())
-	root.AddCommand(newFreshnessCmd())
-	root.AddCommand(newExportCmd())
-	root.AddCommand(newCompletionCmd())
-	root.AddCommand(newMCPCmd())
+	root.AddGroup(
+		&cobra.Group{ID: groupSetup, Title: "Set up and inspect:"},
+		&cobra.Group{ID: groupSpace, Title: "Work on your context space:"},
+		&cobra.Group{ID: groupSync, Title: "Sync and storage:"},
+		&cobra.Group{ID: groupAI, Title: "Deliver context to AI tools:"},
+		&cobra.Group{ID: groupServer, Title: "Administer a server:"},
+		&cobra.Group{ID: groupInterface, Title: "Interfaces and help:"},
+	)
+
+	addGrouped(root, groupSetup,
+		newInitCmd(), newActivateCmd(), newStatusCmd(), newVersionCmd())
+	addGrouped(root, groupSpace,
+		newSpaceCmd(), newFileCmd(), newHistoryCmd(), newIndexCmd(), newTemplateCmd(), newFreshnessCmd())
+	addGrouped(root, groupSync,
+		newPullCmd(), newPushCmd(), newDaemonCmd(), newBackendCmd())
+	addGrouped(root, groupAI,
+		newMCPCmd(), newPluginCmd(), newContextCmd(), newExportCmd())
+	addGrouped(root, groupServer,
+		newServerCmd(), newUserCmd(), newAuthCmd(), newPolicyCmd(), newACLCmd(), newAuditCmd(), newWebhooksCmd())
+	addGrouped(root, groupInterface,
+		newTUICmd(), newCompletionCmd())
+	root.SetHelpCommandGroupID(groupInterface)
+
 	return root
+}
+
+// addGrouped files each command under a root help group. Assigning the group at
+// registration keeps the grouping readable in one place instead of scattering
+// GroupID across every constructor.
+func addGrouped(root *cobra.Command, group string, cmds ...*cobra.Command) {
+	for _, c := range cmds {
+		c.GroupID = group
+		root.AddCommand(c)
+	}
 }
 
 func resolveSpaceRoot() (string, error) {
@@ -93,11 +114,26 @@ func newVersionCmd() *cobra.Command {
 }
 
 func newInitCmd() *cobra.Command {
+	var reconfigure bool
 	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Initialize a ContextVerse installation",
-		Long:  "Create and configure a context space. Solo is available now; server and client land with sync (Phase 2).",
+		Long: `Create and configure a context space.
+
+Run bare for a guided setup that picks the mode with you and explains each
+choice. Use --reconfigure to change an existing installation. The subcommands
+stay available for scripts and CI:
+  solo     local-only space on this machine, no server and no account
+  client   sync an existing space from a server you have a token for
+  server   host a space for a team (starts the setup UI; --noui for headless)`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if reconfigure {
+				return runReconfigure(cmd)
+			}
+			return runInitWizard(cmd)
+		},
 	}
+	cmd.Flags().BoolVar(&reconfigure, "reconfigure", false, "change settings of an existing installation")
 	cmd.AddCommand(newInitSoloCmd())
 	cmd.AddCommand(newInitServerCmd())
 	cmd.AddCommand(newInitClientCmd())
@@ -129,10 +165,10 @@ func newInitSoloCmd() *cobra.Command {
 
 			if !nonInteractive {
 				in := bufio.NewReader(cmd.InOrStdin())
-				name = prompt(in, "Your name", name)
-				role = prompt(in, "Your role", role)
-				language = prompt(in, "Preferred language", orDefault(language, "English"))
-				tools = prompt(in, "Tools you use", tools)
+				name = askLine(in, "Your name", name)
+				role = askLine(in, "Your role", role)
+				language = askLine(in, "Preferred language", orDefault(language, "English"))
+				tools = askLine(in, "Tools you use", tools)
 			} else {
 				if name == "" {
 					return fmt.Errorf("--name is required with --non-interactive")
@@ -146,44 +182,21 @@ func newInitSoloCmd() *cobra.Command {
 				return fmt.Errorf("already initialized at %s (use --force to recreate template files; config will be rewritten)", root)
 			}
 
-			if err := space.Create(space.CreateOptions{
-				SpaceRoot:       root,
-				TemplateName:    templateName,
+			// Same builder the wizard uses, so the two entry points cannot drift.
+			if err := createSoloSpace(cmd, root, soloSetup{
+				Name:            name,
+				Role:            role,
+				Language:        language,
+				Tools:           tools,
+				Template:        templateName,
 				TemplatePath:    templatePath,
 				RefreshTemplate: refreshTpl,
-				Identity: space.IdentityFields{
-					Name:     name,
-					Role:     role,
-					Language: language,
-					Tools:    tools,
-				},
-				Force: force,
+				Force:           force,
+				Quiet:           true,
 			}); err != nil {
 				return err
 			}
-
-			if err := space.UpdateIndex(root); err != nil {
-				return err
-			}
-
-			cfg := &config.Config{
-				Mode:      config.ModeSolo,
-				SpaceRoot: root,
-				Identity: config.Identity{
-					Name:     name,
-					Role:     role,
-					Language: language,
-				},
-				Template: orDefault(templateName, "solo-default"),
-				Backend:  config.Backend{Driver: "local"},
-			}
-			if templatePath != "" {
-				cfg.Template = templatePath
-			}
-			if err := config.Save(cfg); err != nil {
-				return err
-			}
-			logx.L().Info("solo init complete", "space_root", root, "mode", cfg.Mode)
+			logx.L().Info("solo init complete", "space_root", root)
 
 			fmt.Fprintf(cmd.OutOrStdout(), "\n✅ Solo context space initialized at %s\n\n", root)
 			fmt.Fprintf(cmd.OutOrStdout(), "No sync configured. All data stays on this machine.\n")
@@ -267,6 +280,23 @@ func newActivateCmd() *cobra.Command {
 	return cmd
 }
 
+// StatusReport is the structured form of `contextd status`.
+type StatusReport struct {
+	SpaceRoot string   `json:"space_root" yaml:"space_root"`
+	Exists    bool     `json:"exists" yaml:"exists"`
+	Mode      string   `json:"mode" yaml:"mode"`
+	Config    string   `json:"config,omitempty" yaml:"config,omitempty"`
+	Identity  string   `json:"identity,omitempty" yaml:"identity,omitempty"`
+	Role      string   `json:"role,omitempty" yaml:"role,omitempty"`
+	Template  string   `json:"template,omitempty" yaml:"template,omitempty"`
+	Backend   string   `json:"backend,omitempty" yaml:"backend,omitempty"`
+	Server    string   `json:"server,omitempty" yaml:"server,omitempty"`
+	Space     string   `json:"space,omitempty" yaml:"space,omitempty"`
+	LastHead  string   `json:"last_head,omitempty" yaml:"last_head,omitempty"`
+	Missing   []string `json:"missing" yaml:"missing"`
+	Projects  []string `json:"projects" yaml:"projects"`
+}
+
 func newStatusCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
@@ -280,44 +310,71 @@ func newStatusCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			mode := config.DetectMode()
-			fmt.Fprintf(cmd.OutOrStdout(), "space_root: %s\n", st.SpaceRoot)
-			fmt.Fprintf(cmd.OutOrStdout(), "exists:     %v\n", st.Exists)
-			fmt.Fprintf(cmd.OutOrStdout(), "mode:       %s\n", mode)
-			if !st.Exists {
-				fmt.Fprintf(cmd.OutOrStdout(), "hint:       run contextd init solo\n")
-				return nil
+			rep := StatusReport{
+				SpaceRoot: st.SpaceRoot,
+				Exists:    st.Exists,
+				Mode:      string(config.DetectMode()),
+				Missing:   st.Missing,
+				Projects:  st.Projects,
 			}
-			if config.Exists(root) {
-				if cfg, err := config.Load(root); err == nil {
-					fmt.Fprintf(cmd.OutOrStdout(), "config:     %s\n", config.Path(root))
-					fmt.Fprintf(cmd.OutOrStdout(), "identity:   %s (%s)\n", cfg.Identity.Name, cfg.Identity.Role)
-					fmt.Fprintf(cmd.OutOrStdout(), "template:   %s\n", cfg.Template)
-					driver := cfg.Backend.Driver
-					if driver == "" {
-						driver = "local"
+			if rep.Missing == nil {
+				rep.Missing = []string{}
+			}
+			if rep.Projects == nil {
+				rep.Projects = []string{}
+			}
+			if st.Exists {
+				if config.Exists(root) {
+					if cfg, err := config.Load(root); err == nil {
+						rep.Config = config.Path(root)
+						rep.Identity = cfg.Identity.Name
+						rep.Role = cfg.Identity.Role
+						rep.Template = cfg.Template
+						rep.Backend = orDefault(cfg.Backend.Driver, "local")
+						if cfg.Mode == config.ModeClient {
+							rep.Server = cfg.Server.URL
+							rep.Space = cfg.Server.Space
+							rep.LastHead = cfg.Sync.LastHead
+						}
 					}
-					fmt.Fprintf(cmd.OutOrStdout(), "backend:    %s\n", driver)
-					if cfg.Mode == config.ModeClient {
-						fmt.Fprintf(cmd.OutOrStdout(), "server:     %s\n", cfg.Server.URL)
-						fmt.Fprintf(cmd.OutOrStdout(), "space:      %s\n", cfg.Server.Space)
-						fmt.Fprintf(cmd.OutOrStdout(), "last_head:  %s\n", cfg.Sync.LastHead)
-					}
+				} else if st.IdentityName != "" {
+					rep.Identity = st.IdentityName
 				}
-			} else if st.IdentityName != "" {
-				fmt.Fprintf(cmd.OutOrStdout(), "identity:   %s\n", st.IdentityName)
 			}
-			if len(st.Missing) > 0 {
-				fmt.Fprintf(cmd.OutOrStdout(), "missing:    %s\n", strings.Join(st.Missing, ", "))
-			} else {
-				fmt.Fprintf(cmd.OutOrStdout(), "missing:    (none)\n")
-			}
-			if len(st.Projects) == 0 {
-				fmt.Fprintf(cmd.OutOrStdout(), "projects:   (none)\n")
-			} else {
-				fmt.Fprintf(cmd.OutOrStdout(), "projects:   %s\n", strings.Join(st.Projects, ", "))
-			}
-			return nil
+
+			return emit(cmd.OutOrStdout(), rep, func(w io.Writer) error {
+				fmt.Fprintf(w, "space_root: %s\n", rep.SpaceRoot)
+				fmt.Fprintf(w, "exists:     %v\n", rep.Exists)
+				fmt.Fprintf(w, "mode:       %s\n", rep.Mode)
+				if !rep.Exists {
+					fmt.Fprintf(w, "hint:       run contextd init\n")
+					return nil
+				}
+				if rep.Config != "" {
+					fmt.Fprintf(w, "config:     %s\n", rep.Config)
+					fmt.Fprintf(w, "identity:   %s (%s)\n", rep.Identity, rep.Role)
+					fmt.Fprintf(w, "template:   %s\n", rep.Template)
+					fmt.Fprintf(w, "backend:    %s\n", rep.Backend)
+					if rep.Server != "" {
+						fmt.Fprintf(w, "server:     %s\n", rep.Server)
+						fmt.Fprintf(w, "space:      %s\n", rep.Space)
+						fmt.Fprintf(w, "last_head:  %s\n", rep.LastHead)
+					}
+				} else if rep.Identity != "" {
+					fmt.Fprintf(w, "identity:   %s\n", rep.Identity)
+				}
+				if len(rep.Missing) > 0 {
+					fmt.Fprintf(w, "missing:    %s\n", strings.Join(rep.Missing, ", "))
+				} else {
+					fmt.Fprintf(w, "missing:    (none)\n")
+				}
+				if len(rep.Projects) == 0 {
+					fmt.Fprintf(w, "projects:   (none)\n")
+				} else {
+					fmt.Fprintf(w, "projects:   %s\n", strings.Join(rep.Projects, ", "))
+				}
+				return nil
+			})
 		},
 	}
 }
@@ -376,8 +433,18 @@ func newTemplateCmd() *cobra.Command {
 func newSpaceCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "space",
-		Short: "Manage the context space",
+		Short: "Manage context spaces (local seed; create/list/show/delete on a server)",
+		Long: `Manage context spaces.
+
+  seed                    re-seed your own space from a template (solo/client)
+  list · show · create · delete
+                          manage the spaces of a server on this machine
+                          (uses --server-dir; same core as the API and Web UI)`,
 	}
+	cmd.AddCommand(newSpaceListCmd())
+	cmd.AddCommand(newSpaceShowCmd())
+	cmd.AddCommand(newSpaceCreateCmd())
+	cmd.AddCommand(newSpaceDeleteCmd())
 
 	var (
 		templateName string
@@ -444,7 +511,7 @@ func newMCPCmd() *cobra.Command {
 	return cmd
 }
 
-func prompt(in *bufio.Reader, label, def string) string {
+func askLine(in *bufio.Reader, label, def string) string {
 	if def != "" {
 		fmt.Fprintf(os.Stdout, "? %s [%s]: ", label, def)
 	} else {

@@ -5,6 +5,6 @@ detect:
   - bin: cursor
 mechanism: rules-slot
 target: "{{cwd}}/.cursor/rules/contextverse.mdc"
-merge: marked-block
+merge: replace-file
 payload: payload.tmpl
 notes: static snapshot refreshed on activate; project-local rules slot

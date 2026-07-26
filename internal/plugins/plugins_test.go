@@ -162,3 +162,78 @@ func TestApplySlotWindsurf(t *testing.T) {
 		t.Fatalf("%s", raw)
 	}
 }
+
+// AGENTS.md is hand-written and shared with other agents, so a merge must keep
+// everything outside the contextd markers. Overwriting it would destroy work.
+func TestMarkedBlockPreservesUserContent(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "AGENTS.md")
+	userText := "# My rules\n\nAlways run make test before committing.\n"
+	if err := os.WriteFile(target, []byte(userText), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := mergeSlotBlock(target, "generated one"); err != nil {
+		t.Fatalf("first merge: %v", err)
+	}
+	after, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(after), "Always run make test") {
+		t.Fatalf("user content lost:\n%s", after)
+	}
+	if !strings.Contains(string(after), "generated one") {
+		t.Fatalf("block not written:\n%s", after)
+	}
+
+	// Re-running must replace the block, not stack another copy.
+	if _, err := mergeSlotBlock(target, "generated two"); err != nil {
+		t.Fatalf("second merge: %v", err)
+	}
+	again, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(again)
+	if strings.Contains(body, "generated one") {
+		t.Errorf("stale block survived:\n%s", body)
+	}
+	if n := strings.Count(body, slotBlockBegin); n != 1 {
+		t.Errorf("begin marker appears %d times, want 1:\n%s", n, body)
+	}
+	if !strings.Contains(body, "Always run make test") {
+		t.Errorf("user content lost on second merge:\n%s", body)
+	}
+}
+
+func TestMarkedBlockRefusesHalfBlock(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "AGENTS.md")
+	if err := os.WriteFile(target, []byte(slotBlockBegin+"\nhalf a block\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mergeSlotBlock(target, "new"); err == nil {
+		t.Error("expected a refusal when the end marker is missing")
+	}
+}
+
+func TestOpencodeIntegrationIsEmbedded(t *testing.T) {
+	catalog, err := loadFromEmbedFS(embeddedFS)
+	if err != nil {
+		t.Fatalf("load embedded: %v", err)
+	}
+	for _, in := range catalog {
+		if in.ID != "opencode" {
+			continue
+		}
+		if in.Merge != MergeMarkedBlock {
+			t.Errorf("opencode merge = %q, want %q — AGENTS.md is shared", in.Merge, MergeMarkedBlock)
+		}
+		if in.Mechanism != MechanismInstructionsSlot {
+			t.Errorf("opencode mechanism = %q", in.Mechanism)
+		}
+		return
+	}
+	t.Fatal("opencode integration not found in the embedded catalog")
+}

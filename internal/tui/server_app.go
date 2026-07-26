@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -48,6 +49,8 @@ type serverModel struct {
 	spaceVers    []FileVersionRow
 	spaceDrill   int // 0=spaces list, 1=files, 2=versions
 	spaceFilesErr string
+
+	edit editState
 }
 
 type spaceFilesMsg struct {
@@ -168,6 +171,24 @@ func (m serverModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cursor = 0
 		return m, nil
 
+	case editSavedMsg:
+		m.busy = false
+		m.edit.pending = nil
+		switch {
+		case msg.err != nil:
+			m.snap.Err = msg.err.Error()
+			m.snap.LastMsg = msg.err.Error()
+			return m, nil
+		case !msg.changed:
+			m.snap.Err = ""
+			m.snap.LastMsg = "no changes to " + msg.path
+			return m, nil
+		default:
+			m.snap.Err = ""
+			m.snap.LastMsg = fmt.Sprintf("saved %s → %s", msg.path, storage.DisplayVersion(msg.version))
+			return m, tea.Batch(m.reloadSpaceFiles(), serverRefreshCmd(m.dataDir))
+		}
+
 	case shellDoneMsg:
 		if msg.err != nil {
 			m.snap.LastMsg = "shell: " + msg.err.Error()
@@ -211,6 +232,10 @@ func (m serverModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.tab = serverTabHelp
 			return m, nil
 		case "esc", "h":
+			if m.edit.picking {
+				m.edit.cancel()
+				return m, nil
+			}
 			if m.tab == serverTabSpaces && m.spaceDrill > 0 {
 				m.spaceDrill--
 				m.cursor = 0
@@ -270,7 +295,24 @@ func (m serverModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.busy = true
 			return m, tea.Batch(runServerActionCmd(ServerActionHealth, m.dataDir), m.spin.Tick)
 		case "enter":
-			if m.tab == serverTabSpaces {
+			if m.tab != serverTabSpaces {
+				return m, nil
+			}
+			if m.edit.picking {
+				return m, m.launchSpaceEdit()
+			}
+			// On the file list Enter edits; elsewhere it drills in as before.
+			if m.spaceDrill == 1 && m.cursor >= 0 && m.cursor < len(m.spaceFiles) {
+				if flash := m.edit.begin(m.spaceFiles[m.cursor].Path, ""); flash != "" {
+					m.snap.LastMsg = flash
+				}
+				return m, nil
+			}
+			m.busy = true
+			return m, tea.Batch(m.spaceEnter(), m.spin.Tick)
+		case "V":
+			// Version history moved off Enter on the file list.
+			if m.tab == serverTabSpaces && m.spaceDrill == 1 && !m.edit.picking {
 				m.busy = true
 				return m, tea.Batch(m.spaceEnter(), m.spin.Tick)
 			}
@@ -282,12 +324,16 @@ func (m serverModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "v":
-			if m.tab == serverTabSpaces && m.spaceDrill == 2 {
+			if m.tab == serverTabSpaces && m.spaceDrill == 2 && !m.edit.picking {
 				m.busy = true
 				return m, tea.Batch(m.spacePreview(), m.spin.Tick)
 			}
 			return m, nil
 		case "up", "k":
+			if m.edit.picking {
+				m.edit.moveCursor(-1)
+				return m, nil
+			}
 			if m.tab == serverTabOutput {
 				m.vp.LineUp(1)
 				return m, nil
@@ -297,6 +343,10 @@ func (m serverModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "down", "j":
+			if m.edit.picking {
+				m.edit.moveCursor(1)
+				return m, nil
+			}
 			if m.tab == serverTabOutput {
 				m.vp.LineDown(1)
 				return m, nil
@@ -423,16 +473,30 @@ func (m serverModel) renderBody(w, h int) string {
 			"  1–6 / ?     tabs          esc/h      overview",
 			"  j/k ↑↓      move/scroll   g / G      top / bottom",
 			"",
-			"Actions (CLI wrappers)",
-			"  s           server status",
-			"  H           health probe",
-			"  !           spawn $SHELL (Model A / local; exit returns here)",
+			"Administer a server",
+			"  s           server status           → contextd server status",
+			"  H           health probe            → contextd server health",
 			"  r           refresh from data dir",
+			"",
+			"Work on a space (tab 2 · Spaces) — drill in with enter",
+			"  enter       space → files; on a file, edit it",
+			"  V           version history         → contextd file history",
+			"  v           preview selected version",
+			"  R           restore as current      → contextd file revert",
+			"  esc/h       back one level / cancel picker",
+			"",
+			"  Editing is refused under Model B: an editor is a shell escape,",
+			"  and that session is the service user, not a real login.",
+			"",
+			"Interfaces",
+			"  !           spawn $SHELL (Model A / local; exit returns here)",
 			"  q           quit (Model A login → host shell)",
 			"",
 			"Model A: contextd tui login enable --server",
 			"Wish SSH (Model B): contextd tui ssh enable && server start",
-			"No UI-only ops — same verbs as the CLI.",
+			"",
+			"Groups match contextd --help. No UI-only ops — every action is a",
+			"command, and users/policies/audit/webhooks are CLI or Web UI for now.",
 		}, "\n")
 		return stylePane.Width(w-2).Height(h).Render(fillHeight(help, h-2))
 
@@ -475,6 +539,17 @@ func (m serverModel) renderBody(w, h int) string {
 		return SplitTwo("Policies", left, "Detail", detail, w, h, 40)
 
 	default:
+		// Same reasoning as the client TUI: an operator who opened the admin view
+		// against an uninitialized data dir needs the next command, not blanks.
+		if !m.snap.Exists {
+			body := stylePaneTitle.Render("No server initialized here") + "\n\n" +
+				fmt.Sprintf("Looked in %s\n\n", m.dataDir) +
+				"Set one up:\n\n" +
+				"  contextd init server            guided, opens a setup page\n" +
+				"  contextd init server --noui     headless / over SSH\n\n" +
+				styleMuted.Render("Different data dir? contextd --server-dir <path> tui --server")
+			return stylePane.Width(w-2).Height(h).Render(fillHeight(body, h-2))
+		}
 		cards := []string{
 			fmt.Sprintf("listen     %s", m.snap.Listen),
 			fmt.Sprintf("backend    %s", m.snap.Backend),
@@ -505,10 +580,13 @@ func (m serverModel) renderSpaceDrill(w, h int) string {
 			labels = append(labels, f.Label)
 		}
 		left := renderSelectableList(labels, m.cursor, w*55/100-4, h-4, "(no tracked files)")
-		detail := fmt.Sprintf("Space: %s\n\nenter  versions\nesc    back", m.spaceName)
+		if m.edit.picking {
+			return SplitTwo("Files", left, "Open with", m.edit.renderPicker(), w, h, 55)
+		}
+		detail := fmt.Sprintf("Space: %s\n\nenter  edit\nV      versions\nesc    back", m.spaceName)
 		if m.cursor < len(m.spaceFiles) {
 			f := m.spaceFiles[m.cursor]
-			detail = fmt.Sprintf("Space: %s\nFile: %s\nVersion: %s\n\nenter versions · esc back",
+			detail = fmt.Sprintf("Space: %s\nFile: %s\nVersion: %s\n\nenter edit · V versions · esc back",
 				m.spaceName, f.Path, storage.DisplayVersion(storage.Version(f.Version)))
 		}
 		return SplitTwo("Files", left, "Detail", detail, w, h, 55)
@@ -533,6 +611,42 @@ func (m serverModel) renderSpaceDrill(w, h int) string {
 		}
 		return SplitTwo("Spaces", left, "Detail", detail, w, h, 40)
 	}
+}
+
+// reloadSpaceFiles refreshes the file list so a new vN shows up right away.
+func (m serverModel) reloadSpaceFiles() tea.Cmd {
+	space := m.spaceName
+	dir := m.dataDir
+	if space == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		fl, err := openServerSpaceFileLog(dir, space)
+		if err != nil {
+			return spaceFilesMsg{space: space, err: err}
+		}
+		files, err := listTrackedFiles(fl)
+		return spaceFilesMsg{space: space, files: files, err: err}
+	}
+}
+
+// launchSpaceEdit edits a server space file through the same FileLog the API and
+// Web UI write to, so the edit lands as a new version instead of a silent
+// on-disk change.
+func (m *serverModel) launchSpaceEdit() tea.Cmd {
+	dir := m.dataDir
+	space := m.spaceName
+	m.busy = true
+	return m.edit.launch(
+		func() (*storage.FileLog, error) { return openServerSpaceFileLog(dir, space) },
+		func(data []byte, expected storage.Version) (storage.Version, error) {
+			fl, err := openServerSpaceFileLog(dir, space)
+			if err != nil {
+				return "", err
+			}
+			return fl.Put(context.Background(), m.edit.path, data, expected)
+		},
+	)
 }
 
 func (m serverModel) spaceEnter() tea.Cmd {

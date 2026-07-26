@@ -12,7 +12,7 @@ import (
 func newAuditCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "audit",
-		Short: "Query the server audit log (Phase 3)",
+		Short: "Query the server audit log",
 		Long:  `Read append-only JSONL under <server-dir>/audit/. Requires sys/audit capability (admin or auditor).`,
 	}
 	cmd.AddCommand(newAuditListCmd())

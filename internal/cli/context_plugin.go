@@ -159,7 +159,7 @@ func newPluginInstallCmd() *cobra.Command {
 				if fi, err := os.Stdin.Stat(); err == nil && (fi.Mode()&os.ModeCharDevice) == 0 {
 					interactive = false
 				}
-				results, err := plugins.ApplyDetected(cat, vars, plugins.ApplyOpts{Interactive: interactive})
+				results, err := plugins.ApplyDetected(cat, vars, plugins.ApplyOpts{Interactive: interactive, Chooser: pluginChooser})
 				if err != nil {
 					return err
 				}
@@ -202,7 +202,7 @@ func applySessionStartPlugins(spaceRoot, cwd, project string, silent bool) error
 	if fi, err := os.Stdin.Stat(); err == nil && (fi.Mode()&os.ModeCharDevice) == 0 {
 		interactive = false
 	}
-	results, err := plugins.ApplyDetected(cat, vars, plugins.ApplyOpts{Interactive: interactive})
+	results, err := plugins.ApplyDetected(cat, vars, plugins.ApplyOpts{Interactive: interactive, Chooser: pluginChooser})
 	if err != nil {
 		return err
 	}

@@ -1,0 +1,16 @@
+id: opencode
+display: opencode
+detect:
+  - bin: opencode
+  - path: ~/.config/opencode/
+  - path: ~/.local/share/opencode/
+mechanism: instructions-slot
+target: "{{cwd}}/AGENTS.md"
+merge: marked-block
+payload: payload.tmpl
+notes: static snapshot refreshed on activate; AGENTS.md is shared ground, so we own a marked block rather than the file
+manual: |
+  Add the ContextVerse block to {{cwd}}/AGENTS.md (or run:
+  contextd plugin install opencode). opencode reads AGENTS.md from the project
+  root — and so do several other agents, which is why contextd writes a marked
+  block instead of replacing the file.

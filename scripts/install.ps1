@@ -176,6 +176,42 @@ Write-Info "Installed contextd → $binPath"
 try { & $binPath version } catch { }
 
 Write-Host ""
-Write-Host "Done. Next (new shell may be needed for PATH):"
-Write-Host "  contextd init solo"
-Write-Host "  cd <project>; contextd activate"
+Write-Host "Installed."
+
+# Hand off to `contextd init`, which owns the mode picker and explains each
+# choice. The installer does not reimplement that menu.
+#
+# `irm … | iex` leaves the host non-interactive, and a wizard nobody can answer
+# is worse than a printed command — so we only offer when a real console is
+# attached, and print instructions otherwise.
+$interactive = $false
+try {
+    $interactive = -not [Console]::IsInputRedirected -and $Host.UI.RawUI -ne $null
+} catch {
+    $interactive = $false
+}
+
+if (-not $interactive) {
+    Write-Host ""
+    Write-Host "Next (a new shell may be needed for PATH):"
+    Write-Host "  contextd init          guided setup (solo / client / server)"
+    Write-Host "  cd <project>; contextd activate"
+    return
+}
+
+Write-Host ""
+$answer = Read-Host "Run guided setup now? [Y/n]"
+if ($answer -match '^(n|no)$') {
+    Write-Host ""
+    Write-Host "Skipped. Run it whenever you like:"
+    Write-Host "  contextd init"
+    return
+}
+
+try {
+    & $binPath init
+} catch {
+    Write-Host ""
+    Write-Host "Setup did not finish. You can re-run it any time:"
+    Write-Host "  contextd init"
+}

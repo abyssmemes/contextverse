@@ -39,6 +39,7 @@ type Config struct {
 	Server    ClientServer `yaml:"server,omitempty"` // client mode
 	Sync      SyncState    `yaml:"sync,omitempty"`   // client sync markers
 	Daemon    DaemonConfig `yaml:"daemon,omitempty"` // client background poller
+	Editor    string       `yaml:"editor,omitempty"` // remembered TUI editor choice (binary id)
 }
 
 // DaemonConfig controls contextd daemon (client head poll → pull).

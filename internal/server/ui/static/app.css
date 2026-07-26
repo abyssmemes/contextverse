@@ -340,6 +340,15 @@ body.auth .shell.setup .footer {
   margin: 0 0 0.55rem 0.55rem;
 }
 
+/* Group headings inside the nav need breathing room above them, but not before
+   the first one — the nav's own padding already provides that. */
+.app-nav .sidebar-label {
+  margin-top: 1.1rem;
+}
+.app-nav .sidebar-label:first-child {
+  margin-top: 0;
+}
+
 .app-nav {
   display: flex;
   flex-direction: column;

@@ -17,6 +17,16 @@ const (
 	MechanismManual           = "manual"
 )
 
+// Merge strategies for slot targets.
+const (
+	// MergeReplaceFile owns the whole file. Correct only when the target is a
+	// dedicated contextd file the user has no reason to edit.
+	MergeReplaceFile = "replace-file"
+	// MergeMarkedBlock owns a delimited block inside a file shared with the user
+	// or with other tools (AGENTS.md and friends).
+	MergeMarkedBlock = "marked-block"
+)
+
 // DetectProbe is one any-match detection rule.
 type DetectProbe struct {
 	Path string `yaml:"path,omitempty"`

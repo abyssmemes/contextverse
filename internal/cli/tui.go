@@ -19,15 +19,18 @@ func newTUICmd() *cobra.Command {
 		Long: `Full-screen TUI over the same operations as the CLI.
 
 Uses the full terminal (header, tabs, split panes, scrollable output).
+It adds no capability the CLI lacks — every action maps to a command.
 
 Client/solo:
-  1 Space · 2 Projects · 3 Plugins · 4 Output · ? Help
+  1 Space · 2 Projects · 3 Files · 4 Plugins · 5 Output · ? Help
   a=activate  i=plugin install  s=status  u/U=pull/push (client)
-  r=refresh  j/k=move  q=quit
+  Files: enter=versions  v=preview  R=restore
+  r=refresh  j/k=move  !=shell  q=quit
 
 Server admin (--server):
-  1 Overview · 2 Spaces · 3 Users · 4 Policies · 5 Backend · 6 Output
-  s=status  H=health  r=refresh  q=quit
+  1 Overview · 2 Spaces · 3 Users · 4 Policies · 5 Backend · 6 Output · ? Help
+  s=status  H=health  enter=drill in  v=preview  R=restore
+  r=refresh  j/k=move  !=shell  q=quit
 
 Wish SSH (Model B): contextd tui ssh enable && server start
 Host login (Model A): contextd tui login enable [--server] [--user name]`,

@@ -110,6 +110,14 @@ func applyCommandHook(in *Integration, vars Vars) (*ApplyResult, error) {
 	return &ApplyResult{ID: in.ID, Target: target, Action: action}, nil
 }
 
+// Markers delimiting the region contextd owns inside a file it shares with the
+// user. HTML comments render as nothing in Markdown and are inert in the plain
+// text rules files, so they are safe across every slot target we write.
+const (
+	slotBlockBegin = "<!-- >>> contextverse >>> -->"
+	slotBlockEnd   = "<!-- <<< contextverse <<< -->"
+)
+
 func applySlot(in *Integration, vars Vars) (*ApplyResult, error) {
 	target := Expand(in.Target, vars)
 	body, err := renderPayload(in, vars)
@@ -119,11 +127,65 @@ func applySlot(in *Integration, vars Vars) (*ApplyResult, error) {
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return nil, err
 	}
+
+	// A slot target the user also writes (AGENTS.md is read by several agents and
+	// usually hand-authored) must not be overwritten wholesale — contextd owns a
+	// marked block inside it and leaves everything else alone.
+	if in.Merge == MergeMarkedBlock {
+		action, err := mergeSlotBlock(target, body)
+		if err != nil {
+			return nil, err
+		}
+		logx.L().Info("plugin slot merged", "id", in.ID, "target", target, "mechanism", in.Mechanism, "action", action)
+		return &ApplyResult{ID: in.ID, Target: target, Action: action}, nil
+	}
+
 	if err := os.WriteFile(target, []byte(body), 0o644); err != nil {
 		return nil, err
 	}
 	logx.L().Info("plugin slot applied", "id", in.ID, "target", target, "mechanism", in.Mechanism)
 	return &ApplyResult{ID: in.ID, Target: target, Action: "wrote"}, nil
+}
+
+// mergeSlotBlock writes body between the contextd markers in target, keeping any
+// content the user put around them. A file without markers gets the block
+// appended; a missing file is created holding only the block.
+func mergeSlotBlock(target, body string) (string, error) {
+	block := slotBlockBegin + "\n" + strings.TrimRight(body, "\n") + "\n" + slotBlockEnd + "\n"
+
+	raw, err := os.ReadFile(target)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+		return "wrote", os.WriteFile(target, []byte(block), 0o644)
+	}
+
+	existing := string(raw)
+	i := strings.Index(existing, slotBlockBegin)
+	if i < 0 {
+		out := existing
+		if out != "" && !strings.HasSuffix(out, "\n") {
+			out += "\n"
+		}
+		if out != "" {
+			out += "\n"
+		}
+		return "merged", os.WriteFile(target, []byte(out+block), 0o644)
+	}
+
+	jRel := strings.Index(existing[i:], slotBlockEnd)
+	if jRel < 0 {
+		// Half a block means someone edited inside our region; refusing is safer
+		// than guessing where it ended and eating their text.
+		return "", fmt.Errorf("%s: contextverse begin marker without end — fix or remove the block, then re-run", target)
+	}
+	j := i + jRel + len(slotBlockEnd)
+	for j < len(existing) && (existing[j] == '\n' || existing[j] == '\r') {
+		j++
+	}
+	out := existing[:i] + block + existing[j:]
+	return "merged", os.WriteFile(target, []byte(out), 0o644)
 }
 
 func renderPayload(in *Integration, vars Vars) (string, error) {

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -34,11 +35,11 @@ func newInitClientCmd() *cobra.Command {
 			}
 			if !nonInteractive {
 				in := bufio.NewReader(cmd.InOrStdin())
-				url = prompt(in, "Server URL", orDefault(url, "http://127.0.0.1:8743"))
-				token = prompt(in, "API token", token)
-				spaceName = prompt(in, "Space name", orDefault(spaceName, "team"))
-				name = prompt(in, "Your name", name)
-				language = prompt(in, "Preferred language", orDefault(language, "English"))
+				url = askLine(in, "Server URL", orDefault(url, "http://127.0.0.1:8743"))
+				token = askLine(in, "API token", token)
+				spaceName = askLine(in, "Space name", orDefault(spaceName, "team"))
+				name = askLine(in, "Your name", name)
+				language = askLine(in, "Preferred language", orDefault(language, "English"))
 			}
 			if url == "" || token == "" || spaceName == "" {
 				return fmt.Errorf("--url, --token, and --space are required")
@@ -118,6 +119,16 @@ func newInitClientCmd() *cobra.Command {
 	return cmd
 }
 
+// SyncReport is the structured form of pull and push. Updated/Skipped belong to
+// pull, Applied to push; both carry the head so a script can gate on it.
+type SyncReport struct {
+	Updated int    `json:"updated,omitempty" yaml:"updated,omitempty"`
+	Skipped int    `json:"skipped,omitempty" yaml:"skipped,omitempty"`
+	Applied int    `json:"applied,omitempty" yaml:"applied,omitempty"`
+	Head    string `json:"head" yaml:"head"`
+	DryRun  bool   `json:"dry_run,omitempty" yaml:"dry_run,omitempty"`
+}
+
 func newPullCmd() *cobra.Command {
 	var check bool
 	cmd := &cobra.Command{
@@ -148,9 +159,12 @@ func newPullCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			rep := SyncReport{Updated: res.Updated, Skipped: res.Skipped, Head: res.Head, DryRun: check}
 			if check {
-				fmt.Fprintf(cmd.OutOrStdout(), "would update %d files (skip %d); head=%s\n", res.Updated, res.Skipped, res.Head)
-				return nil
+				return emit(cmd.OutOrStdout(), rep, func(w io.Writer) error {
+					fmt.Fprintf(w, "would update %d files (skip %d); head=%s\n", rep.Updated, rep.Skipped, rep.Head)
+					return nil
+				})
 			}
 			if err := syncclient.SaveState(root, st); err != nil {
 				return err
@@ -160,8 +174,10 @@ func newPullCmd() *cobra.Command {
 			if err := config.Save(cfg); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "pulled %d files (skipped %d); head=%s\n", res.Updated, res.Skipped, res.Head)
-			return nil
+			return emit(cmd.OutOrStdout(), rep, func(w io.Writer) error {
+				fmt.Fprintf(w, "pulled %d files (skipped %d); head=%s\n", rep.Updated, rep.Skipped, rep.Head)
+				return nil
+			})
 		},
 	}
 	cmd.Flags().BoolVar(&check, "check", false, "dry-run")
@@ -204,16 +220,22 @@ func newPushCmd() *cobra.Command {
 				return err
 			}
 			if check {
-				fmt.Fprintf(cmd.OutOrStdout(), "would push %d ops; expected_head=%s\n", res.Applied, expected)
-				return nil
+				rep := SyncReport{Applied: res.Applied, Head: expected, DryRun: true}
+				return emit(cmd.OutOrStdout(), rep, func(w io.Writer) error {
+					fmt.Fprintf(w, "would push %d ops; expected_head=%s\n", rep.Applied, rep.Head)
+					return nil
+				})
 			}
 			cfg.Sync.LastHead = res.Head
 			cfg.Sync.LastSyncAt = time.Now().UTC()
 			if err := config.Save(cfg); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "pushed %d ops; head=%s\n", res.Applied, res.Head)
-			return nil
+			rep := SyncReport{Applied: res.Applied, Head: res.Head}
+			return emit(cmd.OutOrStdout(), rep, func(w io.Writer) error {
+				fmt.Fprintf(w, "pushed %d ops; head=%s\n", rep.Applied, rep.Head)
+				return nil
+			})
 		},
 	}
 	cmd.Flags().BoolVar(&check, "check", false, "dry-run")

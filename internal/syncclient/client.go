@@ -119,6 +119,31 @@ func (c *Client) WhoAmI(ctx context.Context) (user, role string, err error) {
 	return out.User, out.Role, nil
 }
 
+// SpaceInfo is one space the caller is allowed to see.
+type SpaceInfo struct {
+	Name string `json:"name"`
+	Head string `json:"head,omitempty"`
+}
+
+// ListSpaces returns the spaces this token can see. The server has always
+// exposed this; the client never asked, so joining a team meant typing a space
+// name you had to be told out of band.
+func (c *Client) ListSpaces(ctx context.Context) ([]SpaceInfo, error) {
+	res, err := c.do(ctx, http.MethodGet, "/api/v1/spaces", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return nil, apiErr(res)
+	}
+	var out []SpaceInfo
+	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // Head returns space head.
 func (c *Client) Head(ctx context.Context) (string, error) {
 	res, err := c.do(ctx, http.MethodGet, "/api/v1/spaces/"+c.Space+"/head", nil)
@@ -321,7 +346,11 @@ func (c *Client) Push(ctx context.Context, spaceRoot string, expectedHead string
 	}
 	defer res.Body.Close()
 	if res.StatusCode == http.StatusPreconditionFailed {
-		return nil, fmt.Errorf("version_conflict: pull and retry")
+		return nil, &APIError{
+			Status:  http.StatusPreconditionFailed,
+			Code:    "version_conflict",
+			Message: "the server moved ahead of your last sync — pull and retry",
+		}
 	}
 	if res.StatusCode != 200 {
 		return nil, apiErr(res)
@@ -442,6 +471,33 @@ func ParseSync(meta map[string]any) spacesvc.SyncConfig {
 	return sc
 }
 
+// APIError carries the HTTP status alongside the server's error envelope.
+// Callers map the status to an exit code (auth vs. conflict vs. everything
+// else); without it they would have to pattern-match on message text.
+type APIError struct {
+	Status  int
+	Code    string
+	Message string
+}
+
+func (e *APIError) Error() string {
+	if e.Code != "" {
+		return fmt.Sprintf("%s: %s", e.Code, e.Message)
+	}
+	return fmt.Sprintf("http %d: %s", e.Status, e.Message)
+}
+
+// Unauthorized reports a credential or permission failure.
+func (e *APIError) Unauthorized() bool {
+	return e.Status == http.StatusUnauthorized || e.Status == http.StatusForbidden
+}
+
+// Conflict reports a compare-and-swap failure (the 412 the API returns when the
+// caller's version marker is stale).
+func (e *APIError) Conflict() bool {
+	return e.Status == http.StatusPreconditionFailed || e.Status == http.StatusConflict
+}
+
 func apiErr(res *http.Response) error {
 	raw, _ := io.ReadAll(res.Body)
 	var env struct {
@@ -451,7 +507,7 @@ func apiErr(res *http.Response) error {
 		} `json:"error"`
 	}
 	if json.Unmarshal(raw, &env) == nil && env.Error.Code != "" {
-		return fmt.Errorf("%s: %s", env.Error.Code, env.Error.Message)
+		return &APIError{Status: res.StatusCode, Code: env.Error.Code, Message: env.Error.Message}
 	}
-	return fmt.Errorf("http %d: %s", res.StatusCode, string(raw))
+	return &APIError{Status: res.StatusCode, Message: string(raw)}
 }

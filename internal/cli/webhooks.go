@@ -15,7 +15,7 @@ import (
 func newWebhooksCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "webhooks",
-		Short: "Manage outbound webhooks (Phase 3)",
+		Short: "Manage outbound webhooks",
 	}
 	cmd.AddCommand(newWebhooksListCmd())
 	cmd.AddCommand(newWebhooksAddCmd())

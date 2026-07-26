@@ -18,7 +18,7 @@ import (
 func newFreshnessCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "freshness",
-		Short: "Check stale-after / last-validated metadata (Phase 3)",
+		Short: "Track which context has gone stale and who owns it",
 		Long:  `Scan markdown frontmatter for stale-after. Use nag to emit freshness.stale webhooks on the server.`,
 	}
 	cmd.AddCommand(newFreshnessCheckCmd())

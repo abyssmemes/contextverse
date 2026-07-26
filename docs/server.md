@@ -1,6 +1,46 @@
 # Server
 
-Self-hosted `contextd server` — HTTP API, admin UI, sync, webhooks, audit, metrics.
+Self-hosted `contextd server` — HTTP API, admin console, sync, path ACL, webhooks, audit, metrics.
+
+## Set it up
+
+```bash
+contextd init server
+# opens the setup page at http://127.0.0.1:8743/setup
+```
+
+Headless — the path to use over SSH or in a provisioning script:
+
+```bash
+contextd init server --noui --non-interactive \
+  --data-dir /srv/contextverse \
+  --address 0.0.0.0 --port 8743 \
+  --space team --admin admin
+```
+
+!!! warning "The bootstrap token expires"
+    The first admin token is printed **once** and also written to `<data-dir>/auth/bootstrap_admin.token`. It expires after 24 hours by design. Copy it, delete that file, then issue a long-lived one with `contextd auth token create admin`.
+
+Everything below assumes `--server-dir` (or `CONTEXTVERSE_SERVER_DIR`) points at that data directory. A server at `/srv/contextverse` is found automatically.
+
+## Spaces and users
+
+```bash
+contextd space list                              # what this server hosts
+contextd space create design --template solo-default
+contextd space show design                       # template, head, size, sync rules
+contextd space delete design --yes               # irreversible — takes history with it
+
+contextd user add alice
+contextd user role alice contributor             # admin | space-lead | contributor | viewer
+contextd user reset-token alice                  # prints a token once — hand it over
+contextd user list --json
+contextd user disable alice                      # suspend and revoke tokens at once
+```
+
+Give Alice the server URL and her token; she runs `contextd init` and picks **client**.
+
+Fine-grained access is in [Auth & ACL](auth-acl.md).
 
 ## Lifecycle
 
@@ -104,10 +144,10 @@ auth:
 
 Expired tokens are refused on use and pruned at start-up. The first-run token
 written to `auth/bootstrap_admin.token` always expires after 24 hours — copy it,
-delete the file, and issue a real token with `contextd server token create`.
+delete the file, and issue a real token with `contextd auth token create`.
 Password login answers `invalid credentials` for every failure (unknown user,
 wrong password, token-only account) and locks an account for 15 minutes after 5
-failed attempts. `contextd server user disable <name>` suspends an account and
+failed attempts. `contextd user disable <name>` suspends an account and
 revokes its tokens immediately.
 
 ## Webhooks & audit
@@ -131,12 +171,11 @@ events are dropped rather than queued forever; `contextd_webhook_dropped_total`
 counts them. The dead-letter file is capped at 8 MiB and rotated once, so a
 broken endpoint cannot fill the disk.
 
-Each audit record carries the hash of the record before it. `contextd server
-audit verify` recomputes the chain and reports the first line that was edited,
+Each audit record carries the hash of the record before it. `contextd audit verify` recomputes the chain and reports the first line that was edited,
 removed or reordered:
 
 ```bash
-contextd server audit verify
+contextd audit verify
 # audit chain intact: 1284 entries verified
 ```
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -110,13 +111,13 @@ For scripts/CI or headless installs, pass --noui (and typically --non-interactiv
 			// --noui: classic CLI install
 			if !nonInteractive {
 				in := bufio.NewReader(cmd.InOrStdin())
-				dataDir = prompt(in, "Data directory", dataDir)
-				address = prompt(in, "Listen address", address)
-				portStr := prompt(in, "Port", strconv.Itoa(port))
+				dataDir = askLine(in, "Data directory", dataDir)
+				address = askLine(in, "Listen address", address)
+				portStr := askLine(in, "Port", strconv.Itoa(port))
 				port, _ = strconv.Atoi(portStr)
-				spaceName = prompt(in, "Default space name", orDefault(spaceName, "team"))
-				admin = prompt(in, "Admin username", orDefault(admin, "admin"))
-				templateName = prompt(in, "Template", orDefault(templateName, "solo-default"))
+				spaceName = askLine(in, "Default space name", orDefault(spaceName, "team"))
+				admin = askLine(in, "Admin username", orDefault(admin, "admin"))
+				templateName = askLine(in, "Template", orDefault(templateName, "solo-default"))
 			}
 			if spaceName == "" {
 				spaceName = "team"
@@ -203,6 +204,13 @@ func orDefaultInt(v, def int) int {
 		return def
 	}
 	return v
+}
+
+// UserEntry is one row of `user list`.
+type UserEntry struct {
+	Name     string   `json:"name" yaml:"name"`
+	Role     string   `json:"role" yaml:"role"`
+	Policies []string `json:"policies" yaml:"policies"`
 }
 
 func newServerCmd() *cobra.Command {
@@ -677,11 +685,20 @@ func newUserCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			out := make([]UserEntry, 0, len(users))
 			for _, u := range users {
-				pols := strings.Join(u.EffectivePolicies(), ",")
-				fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\n", u.Name, u.Role, pols)
+				out = append(out, UserEntry{
+					Name:     u.Name,
+					Role:     string(u.Role),
+					Policies: u.EffectivePolicies(),
+				})
 			}
-			return nil
+			return emit(cmd.OutOrStdout(), out, func(w io.Writer) error {
+				for _, u := range out {
+					fmt.Fprintf(w, "%s\t%s\t%s\n", u.Name, u.Role, strings.Join(u.Policies, ","))
+				}
+				return nil
+			})
 		},
 	})
 	cmd.AddCommand(&cobra.Command{

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/abyssmemes/contextverse/internal/config"
 	"github.com/abyssmemes/contextverse/internal/storage"
 	"github.com/abyssmemes/contextverse/internal/version"
 )
@@ -48,6 +50,8 @@ type model struct {
 	fileVersions  []FileVersionRow
 	fileVerMode   bool // true = browsing versions of filePath
 	filesErr      string
+
+	edit editState
 }
 
 type refreshMsg Snapshot
@@ -166,6 +170,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesErr = ""
 		return m, nil
 
+	case editSavedMsg:
+		m.busy = false
+		m.edit.pending = nil
+		switch {
+		case msg.err != nil:
+			m.snap.Err = msg.err.Error()
+			m.snap.LastMsg = msg.err.Error()
+			return m, nil
+		case !msg.changed:
+			m.snap.Err = ""
+			m.snap.LastMsg = "no changes to " + msg.path
+			return m, nil
+		default:
+			m.snap.Err = ""
+			m.snap.LastMsg = fmt.Sprintf("saved %s → %s", msg.path, storage.DisplayVersion(msg.version))
+			// Reload the list so the new vN is visible immediately.
+			return m, tea.Batch(loadFilesCmd(m.spaceRoot), refreshCmd(m.spaceRoot))
+		}
+
 	case shellDoneMsg:
 		if msg.err != nil {
 			m.snap.LastMsg = "shell: " + msg.err.Error()
@@ -256,6 +279,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.resizeViewport()
 			return m, nil
 		case "esc":
+			if m.edit.picking {
+				m.edit.cancel()
+				return m, nil
+			}
 			if m.tab == tabFiles && m.fileVerMode {
 				m.fileVerMode = false
 				m.filePath = ""
@@ -295,7 +322,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "enter":
-			if m.tab == tabFiles {
+			if m.tab != tabFiles {
+				return m, nil
+			}
+			// Picker open: Enter picks the editor and launches it.
+			if m.edit.picking {
+				m.edit.remember(m.spaceRoot)
+				return m, m.launchEdit()
+			}
+			// Version list: Enter previews, as before.
+			if m.fileVerMode {
+				m.busy = true
+				return m, tea.Batch(m.filesPreview(), m.spin.Tick)
+			}
+			// File list: Enter edits — the action a file list implies.
+			if m.cursor >= 0 && m.cursor < len(m.files) {
+				if flash := m.edit.begin(m.files[m.cursor].Path, m.editorPreference()); flash != "" {
+					m.snap.LastMsg = flash
+				}
+			}
+			return m, nil
+		case "V":
+			// Version history moved off Enter when Enter became edit.
+			if m.tab == tabFiles && !m.fileVerMode && !m.edit.picking {
 				m.busy = true
 				return m, tea.Batch(m.filesEnter(), m.spin.Tick)
 			}
@@ -307,12 +356,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "v":
-			if m.tab == tabFiles && m.fileVerMode {
-				m.busy = true
+			if m.tab != tabFiles || m.edit.picking {
+				return m, nil
+			}
+			m.busy = true
+			if m.fileVerMode {
 				return m, tea.Batch(m.filesPreview(), m.spin.Tick)
 			}
-			return m, nil
+			// Previously dead on the file list: preview the live version.
+			return m, tea.Batch(m.filesPreviewCurrent(), m.spin.Tick)
 		case "up", "k":
+			if m.edit.picking {
+				m.edit.moveCursor(-1)
+				return m, nil
+			}
 			if m.tab == tabOutput {
 				m.vp.LineUp(1)
 				return m, nil
@@ -322,6 +379,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "down", "j":
+			if m.edit.picking {
+				m.edit.moveCursor(1)
+				return m, nil
+			}
 			if m.tab == tabOutput {
 				m.vp.LineDown(1)
 				return m, nil
@@ -426,7 +487,14 @@ func (m model) View() string {
 		keys = "a activate · i install · u/U pull/push · s status · r refresh · 1–5 · j/k · ? · q"
 	}
 	if m.tab == tabFiles {
-		keys = "enter open · R restore · v preview · esc back · r refresh · 1–5 · q"
+		switch {
+		case m.edit.picking:
+			keys = "enter open in editor · j/k choose · esc cancel"
+		case m.fileVerMode:
+			keys = "enter/v preview · R restore · esc back · r refresh · 1–5 · q"
+		default:
+			keys = "enter edit · v preview · V versions · esc back · r refresh · 1–5 · q"
+		}
 	}
 
 	return Frame{
@@ -454,22 +522,33 @@ func (m model) renderBody(w, h int) string {
 			"  j/k ↑↓      move/scroll   g / G      top / bottom",
 			"  pgup/pgdn   page output   esc        back",
 			"",
-			"Actions (same as CLI)",
-			"  a           activate entry points + session-start hooks",
-			"  i           plugin install (detected AI clients)",
-			"  s           status",
+			"Set up and inspect",
+			"  s           status                  → contextd status",
+			"  a           activate entry points   → contextd activate",
+			"  r           refresh from disk",
+			"",
+			"Work on your context space (tab 3 · Files)",
+			"  enter       edit selected file      → contextd file edit",
+			"  v           preview (live body, or the selected version)",
+			"  V           version history         → contextd file history",
+			"  R           restore selected version → contextd file revert",
+			"  esc         cancel picker / back to the file list",
+			"",
+			"Sync and storage",
+			"  u / U       pull / push             → contextd pull|push",
+			"              (client mode only)",
+			"",
+			"Deliver context to AI tools (tab 4 · Plugins)",
+			"  i           wire detected clients   → contextd plugin install",
+			"",
+			"Interfaces",
 			"  !           spawn $SHELL (return with exit; Model A / local)",
-			"  u / U       pull / push (client mode only)",
-			"  r           refresh snapshot from disk",
 			"  q           quit (under Model A login → host shell)",
 			"",
-			"Files (tab 3) — version switch",
-			"  enter       open versions for selected file",
-			"  v           preview selected version",
-			"  R           restore selected version as current",
-			"  esc         back to file list",
-			"",
-			"Everything here wraps contextd CLI / FileLog — no extra authority.",
+			"Groups match contextd --help. Every action here runs the same core the",
+			"CLI does — edits go through the FileLog, so each save is a new version",
+			"and never a silent write to disk. The TUI adds no capability the CLI",
+			"lacks; anything missing here exists as a command.",
 		}, "\n")
 		return stylePane.Width(w - 2).Height(h).Render(fillHeight(help, h-2))
 
@@ -543,10 +622,14 @@ func (m model) renderFiles(w, h int) string {
 		leftLabels = append(leftLabels, f.Label)
 	}
 	left := renderSelectableList(leftLabels, m.cursor, w*55/100-4, h-4, "(no tracked files)")
-	detail := "Select a file, Enter for version history.\n\nSame as Web UI / contextd file list|history|revert"
+	if m.edit.picking {
+		return SplitTwo("Files", left, "Open with", m.edit.renderPicker(), w, h, 55)
+	}
+	detail := "Select a file, Enter to edit it.\n\nSame as Web UI / contextd file edit|list|history|revert"
 	if m.cursor < len(m.files) {
 		f := m.files[m.cursor]
-		detail = fmt.Sprintf("File: %s\nVersion: %s\n\nenter  versions\nr      refresh list", f.Path, storage.DisplayVersion(storage.Version(f.Version)))
+		detail = fmt.Sprintf("File: %s\nVersion: %s\n\nenter  edit in your editor\nv      preview\nV      version history\nr      refresh list",
+			f.Path, storage.DisplayVersion(storage.Version(f.Version)))
 	}
 	return SplitTwo("Files", left, "Detail", detail, w, h, 55)
 }
@@ -560,6 +643,59 @@ func (m model) filesEnter() tea.Cmd {
 	}
 	path := m.files[m.cursor].Path
 	return tea.Batch(loadFileVersionsCmd(m.spaceRoot, path), m.spin.Tick)
+}
+
+// editorPreference returns the editor remembered in this space's config, if any.
+func (m model) editorPreference() string {
+	cfg, err := config.Load(m.spaceRoot)
+	if err != nil {
+		return ""
+	}
+	return cfg.Editor
+}
+
+// launchEdit checks the selected file out, runs the chosen editor, and writes
+// the result back through the FileLog so the edit gets its own version.
+func (m *model) launchEdit() tea.Cmd {
+	root := m.spaceRoot
+	m.busy = true
+	return m.edit.launch(
+		func() (*storage.FileLog, error) { return openClientFileLog(root) },
+		func(data []byte, expected storage.Version) (storage.Version, error) {
+			fl, err := openClientFileLog(root)
+			if err != nil {
+				return "", err
+			}
+			return fl.Put(context.Background(), m.edit.path, data, expected)
+		},
+	)
+}
+
+// filesPreviewCurrent previews the live body straight from the file list. Before
+// this, `v` only worked inside the version list, so pressing it on a file did
+// nothing at all.
+func (m model) filesPreviewCurrent() tea.Cmd {
+	if m.cursor < 0 || m.cursor >= len(m.files) {
+		return nil
+	}
+	path := m.files[m.cursor].Path
+	root := m.spaceRoot
+	return func() tea.Msg {
+		fl, err := openClientFileLog(root)
+		if err != nil {
+			return actionDoneMsg{err: err}
+		}
+		data, ver, err := fl.Get(context.Background(), path)
+		if err != nil {
+			return actionDoneMsg{err: err}
+		}
+		body := string(data)
+		if len(body) > 4000 {
+			body = body[:4000] + "\n… (truncated — open with enter to see all of it)"
+		}
+		return actionDoneMsg{msg: fmt.Sprintf("%s @ %s (%d bytes)\n\n%s",
+			path, storage.DisplayVersion(ver), len(data), body)}
+	}
 }
 
 func (m model) filesPreview() tea.Cmd {
@@ -636,6 +772,21 @@ func loadFileVersionsCmd(spaceRoot, path string) tea.Cmd {
 }
 
 func (m model) spaceDetail() string {
+	// An empty directory is the first thing a new user can land on, and showing
+	// them an empty shell teaches nothing. Send them to the wizard instead.
+	if !m.snap.HasConfig {
+		var b strings.Builder
+		b.WriteString(stylePaneTitle.Render("No context space here yet"))
+		b.WriteString("\n\n")
+		b.WriteString(fmt.Sprintf("Looked in %s\n\n", m.spaceRoot))
+		b.WriteString("Create one — the setup asks a few questions and explains each:\n\n")
+		b.WriteString("  contextd init\n\n")
+		b.WriteString(styleMuted.Render("Already have a space somewhere else?\nPoint at it with: contextd --dir <path> tui"))
+		b.WriteString("\n\n")
+		b.WriteString(styleMuted.Render("q quits back to your shell."))
+		return b.String()
+	}
+
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("Space     %s\n", m.spaceRoot))
 	b.WriteString(fmt.Sprintf("Mode      %s\n", m.snap.Mode))
@@ -659,7 +810,7 @@ func (m model) spaceDetail() string {
 	b.WriteString("\n\n")
 	b.WriteString("Quick:\n")
 	b.WriteString("  a  activate   i  install hooks\n")
-	b.WriteString("  s  status     3  plugins tab\n")
+	b.WriteString("  s  status     3  files tab   4  plugins tab\n")
 	if m.cursor < len(m.snap.Layers) {
 		l := m.snap.Layers[m.cursor]
 		b.WriteString("\n")

@@ -315,9 +315,63 @@ main() {
   ensure_path_note "$dest"
 
   log ""
-  log "✅ Done. Next:"
-  log "  contextd init solo"
-  log "  cd <project> && contextd activate"
+  log "✅ Installed."
+  offer_setup "$bin_path"
+}
+
+# offer_setup hands off to `contextd init`, which owns the mode picker and the
+# per-choice explanations. The installer deliberately does not reimplement that
+# menu — one picker, in the binary, so the two can never disagree.
+#
+# The tricky part is `curl … | sh`: stdin is the script itself, not the user, so
+# a prompt read from stdin would consume the script and `contextd init` would
+# see a non-terminal and refuse. Everything interactive therefore goes through
+# /dev/tty, and when that is unavailable we print the command instead of
+# guessing. Installers must never start something interactive nobody can answer.
+#
+# Note the check: `[[ -r /dev/tty ]]` is not enough. On macOS the device node
+# passes -r/-w even with no controlling terminal, and the failure only shows up
+# on open. So we actually open it.
+has_tty() {
+  { exec 3<>/dev/tty; } 2>/dev/null || return 1
+  exec 3>&-
+  return 0
+}
+
+offer_setup() {
+  local bin_path="$1"
+
+  if ! has_tty; then
+    log ""
+    log "Next:"
+    log "  contextd init          guided setup (solo / client / server)"
+    log "  cd <project> && contextd activate"
+    return 0
+  fi
+
+  local answer=""
+  printf '\nRun guided setup now? [Y/n] ' >/dev/tty
+  if ! IFS= read -r answer </dev/tty; then
+    log ""
+    log "Next: contextd init"
+    return 0
+  fi
+
+  case "$answer" in
+    [nN]|[nN][oO])
+      log ""
+      log "Skipped. Run it whenever you like:"
+      log "  contextd init"
+      return 0
+      ;;
+  esac
+
+  # Give the wizard the terminal, not the pipe this script is being read from.
+  "$bin_path" init </dev/tty >/dev/tty 2>&1 || {
+    log ""
+    log "Setup did not finish. You can re-run it any time:"
+    log "  contextd init"
+  }
 }
 
 main "$@"

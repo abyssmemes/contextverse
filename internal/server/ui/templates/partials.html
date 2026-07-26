@@ -34,15 +34,16 @@
 <header class="topbar">
   <a class="brand" href="/">ContextVerse</a>
   {{if .User}}
+  {{/* Order mirrors the sidebar groups: space, then storage, then admin. */}}
   <nav class="nav" aria-label="Primary">
     <a href="/" class="{{if eq .Active "dash"}}active{{end}}">Dashboard</a>
     <a href="/ui/spaces" class="{{if eq .Active "spaces"}}active{{end}}">Spaces</a>
+    <a href="/ui/freshness" class="{{if eq .Active "freshness"}}active{{end}}">Freshness</a>
+    <a href="/ui/backends" class="{{if eq .Active "backends"}}active{{end}}">Backends</a>
     <a href="/ui/users" class="{{if eq .Active "users"}}active{{end}}">Users</a>
     <a href="/ui/policies" class="{{if eq .Active "policies"}}active{{end}}">Policies</a>
-    <a href="/ui/backends" class="{{if eq .Active "backends"}}active{{end}}">Backends</a>
     <a href="/ui/audit" class="{{if eq .Active "audit"}}active{{end}}">Audit</a>
     <a href="/ui/webhooks" class="{{if eq .Active "webhooks"}}active{{end}}">Webhooks</a>
-    <a href="/ui/freshness" class="{{if eq .Active "freshness"}}active{{end}}">Freshness</a>
     <a href="/ui/logout">Logout</a>
   </nav>
   <div style="display:flex;align-items:center;gap:10px;">
@@ -66,16 +67,24 @@
 <div class="app-frame">
   <aside class="app-sidebar" aria-label="Sidebar">
     <a class="brand" href="/">ContextVerse</a>
-    <div class="sidebar-label">Menu</div>
+    {{/* Grouped with the same headings as `contextd --help`, so the CLI and the
+         dashboard describe the product the same way. A flat list of eight was
+         the same wall the CLI had before its commands were grouped. */}}
     <nav class="app-nav">
       <a href="/" class="{{if eq .Active "dash"}}active{{end}}">Dashboard</a>
+
+      <div class="sidebar-label">Context space</div>
       <a href="/ui/spaces" class="{{if eq .Active "spaces"}}active{{end}}">Spaces</a>
+      <a href="/ui/freshness" class="{{if eq .Active "freshness"}}active{{end}}">Freshness</a>
+
+      <div class="sidebar-label">Sync and storage</div>
+      <a href="/ui/backends" class="{{if eq .Active "backends"}}active{{end}}">Backends</a>
+
+      <div class="sidebar-label">Administer</div>
       <a href="/ui/users" class="{{if eq .Active "users"}}active{{end}}">Users</a>
       <a href="/ui/policies" class="{{if eq .Active "policies"}}active{{end}}">Policies</a>
-      <a href="/ui/backends" class="{{if eq .Active "backends"}}active{{end}}">Backends</a>
       <a href="/ui/audit" class="{{if eq .Active "audit"}}active{{end}}">Audit</a>
       <a href="/ui/webhooks" class="{{if eq .Active "webhooks"}}active{{end}}">Webhooks</a>
-      <a href="/ui/freshness" class="{{if eq .Active "freshness"}}active{{end}}">Freshness</a>
     </nav>
     <div class="app-side-foot">
       <div class="who"><strong>{{.User}}</strong><br>{{.Role}}</div>
