@@ -23,37 +23,21 @@ import (
 
 var update = flag.Bool("update", false, "rewrite the golden files")
 
-// unstable strips what legitimately differs between machines and runs, so the
-// snapshot fails for changed output rather than for a changed temp directory.
+// unstable strips what legitimately differs between runs. Paths are not in this
+// list — they are fixed before rendering instead; see settle.
 var unstable = []*regexp.Regexp{
-	regexp.MustCompile(`/(var|private|tmp)/[^\s│]*`), // temp paths
-	// The panel wraps long paths, so the tail of a temp directory arrives on
-	// its own line with the leading slash already gone.
-	regexp.MustCompile(`[A-Za-z]*\d{6,}/\d{3}[^\s│]*`),
 	regexp.MustCompile(`\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2})?`), // timestamps
 	regexp.MustCompile(`\d+(\.\d+)?(ms|µs|s)\b`),              // durations
-	// Plugin detection reads the machine, not the space: a laptop with Cursor
-	// installed and a CI runner without it would disagree forever.
-	regexp.MustCompile(`\d+ detected / \d+ known`),
 }
-
-var manySpaces = regexp.MustCompile(`  +`)
 
 func snapshot(t *testing.T, name, got string) {
 	t.Helper()
 	for _, re := range unstable {
 		got = re.ReplaceAllString(got, "<redacted>")
 	}
+	// Trailing padding is invisible on screen and noisy in a diff.
 	lines := strings.Split(got, "\n")
 	for i := range lines {
-		// A redacted run rarely has the same width as what it replaced, so the
-		// panel's padding to the closing border shifts with the length of a
-		// random temp path. Collapse the spacing on those lines: their layout
-		// is an artefact of the redaction, not something worth asserting.
-		if strings.Contains(lines[i], "<redacted>") {
-			lines[i] = manySpaces.ReplaceAllString(lines[i], " ")
-		}
-		// Trailing padding is invisible on screen and noisy in a diff.
 		lines[i] = strings.TrimRight(lines[i], " ")
 	}
 	got = strings.TrimRight(strings.Join(lines, "\n"), "\n") + "\n"
@@ -95,6 +79,28 @@ func upgradedModel(t *testing.T) model {
 	m.files = files
 	if msg, ok := loadGraphCmd(root)().(graphLoadedMsg); ok && msg.err == nil {
 		m.graph = msg.g
+	}
+	return settle(m)
+}
+
+// settle replaces everything that reflects the machine rather than the space,
+// before the panels are laid out.
+//
+// Redacting the rendered text afterwards is too late. A temp directory is short
+// on Linux and long on macOS, so the panel wraps it onto a second line on one
+// platform and not the other — the line count differs, every following line
+// shifts, and no amount of substitution on the output can put that back. The
+// snapshot then fails on a CI runner for having a different name for /tmp,
+// which teaches everyone to ignore it.
+func settle(m model) model {
+	m.spaceRoot = "/space"
+	m.cwd = "/work"
+	m.snap.SpaceRoot = "/space"
+	// Plugin detection reads the machine: a laptop with Cursor installed and a
+	// CI runner without it would disagree forever.
+	for i := range m.snap.Plugins {
+		m.snap.Plugins[i].Detected = false
+		m.snap.Plugins[i].How = ""
 	}
 	return m
 }
@@ -142,5 +148,39 @@ func TestRenderedTabsDoNotContradictEachOther(t *testing.T) {
 	space := m.View()
 	if strings.Contains(space, "no context") || strings.Contains(space, "0 files") {
 		t.Errorf("the Space tab calls the space empty while the Files tab lists documents:\n%s", space)
+	}
+}
+
+// The snapshots failed on Linux and passed on macOS, because a temp directory
+// is short on one and long on the other: the panel wrapped the path onto a
+// second line on one platform only, every line below it shifted, and the whole
+// snapshot differed. A snapshot that depends on where the space happens to live
+// fails for reasons nobody caused, and a test that cries wolf gets ignored —
+// which costs more than having no test.
+//
+// This asserts the invariant directly rather than trusting the fix: the same
+// space rendered from two different locations must draw the same screen.
+func TestRenderDoesNotDependOnWhereTheSpaceLives(t *testing.T) {
+	stubEditor(t, "nano")
+
+	deep := filepath.Join(t.TempDir(), "a", "very", "deeply", "nested", "path", "that", "wraps")
+	if err := os.MkdirAll(deep, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMPDIR", deep)
+	long := upgradedModel(t)
+
+	t.Setenv("TMPDIR", "/tmp")
+	short := upgradedModel(t)
+
+	for _, tab := range []struct {
+		name string
+		tab  clientTab
+	}{{"space", tabSpace}, {"files", tabFiles}, {"graph", tabGraph}} {
+		long.tab, short.tab = tab.tab, tab.tab
+		if long.View() != short.View() {
+			t.Errorf("the %s tab draws differently depending on the space's path\n\n--- deep ---\n%s\n--- shallow ---\n%s",
+				tab.name, long.View(), short.View())
+		}
 	}
 }

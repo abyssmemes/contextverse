@@ -2,26 +2,26 @@
   1 Space    2 Projects    3 Files    4 Plugins    5 Output    6 Graph    ? Help
 ┌────────────────────────────────────┐┌────────────────────────────────────────────────────────────┐
 │ Layers                             ││ Overview                                                   │
-│  identity       1 files            ││ Space                                                      │
-│ team 3 files ││ <redacted> │
-│ projects 1 files ││ <redacted> │
-│                                    ││ Mode      solo                                             │
-│                                    ││ Identity  test (test)                                      │
+│  identity       1 files            ││ Space     /space                                           │
+│  team           3 files            ││ Mode      solo                                             │
+│  projects       1 files            ││ Identity  test (test)                                      │
 │                                    ││ Projects  0                                                │
-│ ││ Plugins <redacted> │
+│                                    ││ Plugins   0 detected / 5 known                             │
 │                                    ││                                                            │
-│                                    ││ cwd                                                        │
-│ ││ <redacted> │
-│ ││ <redacted> │
+│                                    ││ cwd  /work                                                 │
 │                                    ││                                                            │
 │                                    ││ Quick:                                                     │
 │                                    ││   a  activate   i  install hooks                           │
 │                                    ││   s  status     3  files tab   4  plugins tab              │
 │                                    ││                                                            │
 │                                    ││ identity                                                   │
-│                                    ││ 1 files under                                              │
-│ ││ <redacted> │
-│ ││ <redacted> │
+│                                    ││ 1 files under /space/identity                              │
+│                                    ││                                                            │
+│                                    ││                                                            │
+│                                    ││                                                            │
+│                                    ││                                                            │
+│                                    ││                                                            │
+│                                    ││                                                            │
 │                                    ││                                                            │
 │                                    ││                                                            │
 │                                    ││                                                            │
