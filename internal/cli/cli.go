@@ -73,7 +73,7 @@ func newRoot() *cobra.Command {
 	addGrouped(root, groupSetup,
 		newInitCmd(), newActivateCmd(), newStatusCmd(), newVersionCmd())
 	addGrouped(root, groupSpace,
-		newSpaceCmd(), newFileCmd(), newSearchCmd(), newHistoryCmd(), newIndexCmd(), newTemplateCmd(), newFreshnessCmd())
+		newSpaceCmd(), newFileCmd(), newSearchCmd(), newGraphCmd(), newHistoryCmd(), newIndexCmd(), newTemplateCmd(), newFreshnessCmd())
 	addGrouped(root, groupSync,
 		newPullCmd(), newPushCmd(), newDaemonCmd(), newBackendCmd())
 	addGrouped(root, groupAI,
@@ -289,19 +289,30 @@ func newActivateCmd() *cobra.Command {
 
 // StatusReport is the structured form of `contextd status`.
 type StatusReport struct {
-	SpaceRoot string   `json:"space_root" yaml:"space_root"`
-	Exists    bool     `json:"exists" yaml:"exists"`
-	Mode      string   `json:"mode" yaml:"mode"`
-	Config    string   `json:"config,omitempty" yaml:"config,omitempty"`
-	Identity  string   `json:"identity,omitempty" yaml:"identity,omitempty"`
-	Role      string   `json:"role,omitempty" yaml:"role,omitempty"`
-	Template  string   `json:"template,omitempty" yaml:"template,omitempty"`
-	Backend   string   `json:"backend,omitempty" yaml:"backend,omitempty"`
-	Server    string   `json:"server,omitempty" yaml:"server,omitempty"`
-	Space     string   `json:"space,omitempty" yaml:"space,omitempty"`
-	LastHead  string   `json:"last_head,omitempty" yaml:"last_head,omitempty"`
-	Missing   []string `json:"missing" yaml:"missing"`
-	Projects  []string `json:"projects" yaml:"projects"`
+	SpaceRoot string        `json:"space_root" yaml:"space_root"`
+	Exists    bool          `json:"exists" yaml:"exists"`
+	Mode      string        `json:"mode" yaml:"mode"`
+	Config    string        `json:"config,omitempty" yaml:"config,omitempty"`
+	Identity  string        `json:"identity,omitempty" yaml:"identity,omitempty"`
+	Role      string        `json:"role,omitempty" yaml:"role,omitempty"`
+	Template  string        `json:"template,omitempty" yaml:"template,omitempty"`
+	Backend   string        `json:"backend,omitempty" yaml:"backend,omitempty"`
+	Server    string        `json:"server,omitempty" yaml:"server,omitempty"`
+	Space     string        `json:"space,omitempty" yaml:"space,omitempty"`
+	LastHead  string        `json:"last_head,omitempty" yaml:"last_head,omitempty"`
+	Missing   []string      `json:"missing" yaml:"missing"`
+	Projects  []string      `json:"projects" yaml:"projects"`
+	Graph     *GraphSummary `json:"graph,omitempty" yaml:"graph,omitempty"`
+}
+
+// GraphSummary is the map's shape, surfaced in status so a space that has quietly
+// come apart — orphaned documents, links pointing at nothing — is visible without
+// anyone going looking for it.
+type GraphSummary struct {
+	Nodes   int `json:"nodes" yaml:"nodes"`
+	Links   int `json:"links" yaml:"links"`
+	Orphans int `json:"orphans" yaml:"orphans"`
+	Broken  int `json:"broken" yaml:"broken"`
 }
 
 func newStatusCmd() *cobra.Command {
@@ -349,6 +360,15 @@ func newStatusCmd() *cobra.Command {
 				}
 			}
 
+			if g, err := loadGraph(); err == nil {
+				rep.Graph = &GraphSummary{
+					Nodes:   len(g.Nodes),
+					Links:   len(g.Edges) - len(g.Broken),
+					Orphans: len(g.Orphans),
+					Broken:  len(g.Broken),
+				}
+			}
+
 			return emit(cmd.OutOrStdout(), rep, func(w io.Writer) error {
 				fmt.Fprintf(w, "space_root: %s\n", rep.SpaceRoot)
 				fmt.Fprintf(w, "exists:     %v\n", rep.Exists)
@@ -379,6 +399,16 @@ func newStatusCmd() *cobra.Command {
 					fmt.Fprintf(w, "projects:   (none)\n")
 				} else {
 					fmt.Fprintf(w, "projects:   %s\n", strings.Join(rep.Projects, ", "))
+				}
+				if g := rep.Graph; g != nil {
+					line := fmt.Sprintf("%d nodes, %d links", g.Nodes, g.Links)
+					if g.Orphans > 0 {
+						line += fmt.Sprintf(", %d orphans", g.Orphans)
+					}
+					if g.Broken > 0 {
+						line += fmt.Sprintf(", %d broken", g.Broken)
+					}
+					fmt.Fprintf(w, "graph:      %s\n", line)
 				}
 				return nil
 			})
