@@ -6,8 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -15,6 +13,7 @@ import (
 	"github.com/abyssmemes/contextverse/internal/editor"
 	"github.com/abyssmemes/contextverse/internal/logx"
 	"github.com/abyssmemes/contextverse/internal/prompt"
+	"github.com/abyssmemes/contextverse/internal/spacefiles"
 	"github.com/abyssmemes/contextverse/internal/storage"
 )
 
@@ -56,34 +55,24 @@ func newFileListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			ctx := cmd.Context()
-			entries, err := fl.Backend.List(ctx, "")
+			root, err := resolveSpaceRoot()
 			if err != nil {
 				return err
 			}
-			type row struct {
-				path string
-				ver  storage.Version
+			entries, err := spacefiles.List(cmd.Context(), fl, root)
+			if err != nil {
+				return err
 			}
-			var rows []row
-			for _, e := range entries {
-				if strings.HasPrefix(e.Path, storage.SnapshotPrefix) || storage.IsFileLogInternal(e.Path) {
-					continue
-				}
-				if strings.HasPrefix(e.Path, "_health/") || strings.HasPrefix(e.Path, "_heads/") {
-					continue
-				}
-				ver := e.Version
-				if lv, lerr := fl.LiveVersion(ctx, e.Path); lerr == nil {
-					ver = lv
-				}
-				rows = append(rows, row{e.Path, ver})
-			}
-			sort.Slice(rows, func(i, j int) bool { return rows[i].path < rows[j].path })
 
-			out := make([]FileEntry, 0, len(rows))
-			for _, r := range rows {
-				out = append(out, FileEntry{Path: r.path, Version: storage.DisplayVersion(r.ver)})
+			out := make([]FileEntry, 0, len(entries))
+			for _, e := range entries {
+				shown := e.Display()
+				if shown == "" {
+					// A document with no history yet. It is in the space, so it
+					// is in the list; writing to it records v1.
+					shown = "—"
+				}
+				out = append(out, FileEntry{Path: e.Path, Version: shown})
 			}
 			return emit(cmd.OutOrStdout(), out, func(w io.Writer) error {
 				if len(out) == 0 {

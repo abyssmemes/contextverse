@@ -1,0 +1,32 @@
+ ContextVerse  solo · CLI wrapper                                                         0.0.0-dev
+  1 Space    2 Projects    3 Files    4 Plugins    5 Output    6 Graph    ? Help
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Navigation                                                                                       │
+│   1–5 / ?     tabs          tab        toggle focus                                              │
+│   j/k ↑↓      move/scroll   g / G      top / bottom                                              │
+│   pgup/pgdn   page output   esc        back                                                      │
+│                                                                                                  │
+│ Set up and inspect                                                                               │
+│   s           status                  → contextd status                                          │
+│   a           activate entry points   → contextd activate                                        │
+│   r           refresh from disk                                                                  │
+│                                                                                                  │
+│ Work on your context space (tab 3 · Files)                                                       │
+│   enter       edit selected file      → contextd file edit                                       │
+│   v           preview (live body, or the selected version)                                       │
+│   V           version history         → contextd file history                                    │
+│   R           restore selected version → contextd file revert                                    │
+│   esc         cancel picker / back to the file list                                              │
+│                                                                                                  │
+│ Sync and storage                                                                                 │
+│   u / U       pull / push             → contextd pull|push                                       │
+│               (client mode only)                                                                 │
+│                                                                                                  │
+│ Deliver context to AI tools (tab 4 · Plugins)                                                    │
+│   i           wire detected clients   → contextd plugin install                                  │
+│                                                                                                  │
+│ Move through the space (tab 6 · Graph)                                                           │
+│   enter       open a document's connections, then walk them                                      │
+│                                                                                                  │
+│                                                                                                  │
+ a activate · i install · s status · ! shell · r refresh · 1–5 · j/k · ? · q

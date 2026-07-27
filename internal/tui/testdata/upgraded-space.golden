@@ -1,0 +1,32 @@
+ ContextVerse  solo · CLI wrapper                                                         0.0.0-dev
+  1 Space    2 Projects    3 Files    4 Plugins    5 Output    6 Graph    ? Help
+┌────────────────────────────────────┐┌────────────────────────────────────────────────────────────┐
+│ Layers                             ││ Overview                                                   │
+│  identity       1 files            ││ Space                                                      │
+│ team 3 files ││ <redacted> │
+│ projects 1 files ││ <redacted> │
+│                                    ││ Mode      solo                                             │
+│                                    ││ Identity  test (test)                                      │
+│                                    ││ Projects  0                                                │
+│ ││ Plugins <redacted> │
+│                                    ││                                                            │
+│                                    ││ cwd                                                        │
+│ ││ <redacted> │
+│ ││ <redacted> │
+│                                    ││                                                            │
+│                                    ││ Quick:                                                     │
+│                                    ││   a  activate   i  install hooks                           │
+│                                    ││   s  status     3  files tab   4  plugins tab              │
+│                                    ││                                                            │
+│                                    ││ identity                                                   │
+│                                    ││ 1 files under                                              │
+│ ││ <redacted> │
+│ ││ <redacted> │
+│                                    ││                                                            │
+│                                    ││                                                            │
+│                                    ││                                                            │
+│                                    ││                                                            │
+│                                    ││                                                            │
+│                                    ││                                                            │
+│                                    ││                                                            │
+ a activate · i install · s status · ! shell · r refresh · 1–5 · j/k · ? · q

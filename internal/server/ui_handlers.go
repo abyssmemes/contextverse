@@ -449,6 +449,7 @@ func (s *Server) handleUISpace(w http.ResponseWriter, r *http.Request) {
 	pg.Title = name
 	pg.Data = map[string]any{
 		"Name":     name,
+		"Slug":     name, // on a server the two are the same; see space.html
 		"Head":     string(head),
 		"Template": meta.Template,
 		"Files":    files,

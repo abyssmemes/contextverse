@@ -4,13 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/abyssmemes/contextverse/internal/config"
+	"github.com/abyssmemes/contextverse/internal/spacefiles"
 	"github.com/abyssmemes/contextverse/internal/storage"
 )
 
@@ -72,70 +71,25 @@ func openServerSpaceFileLog(dataDir, space string) (*storage.FileLog, error) {
 // directory has to be openable, whether or not contextd has recorded a version
 // of it yet — editing it is what creates one.
 func listSpaceFiles(fl *storage.FileLog, spaceRoot string) ([]TrackedFile, error) {
-	ctx := context.Background()
-
-	versions := map[string]storage.Version{}
-	if entries, err := fl.Backend.List(ctx, ""); err == nil {
-		for _, e := range entries {
-			if skipStoragePath(e.Path) {
-				continue
-			}
-			ver := e.Version
-			if lv, lerr := fl.LiveVersion(ctx, e.Path); lerr == nil {
-				ver = lv
-			}
-			versions[e.Path] = ver
-		}
+	entries, err := spacefiles.List(context.Background(), fl, spaceRoot)
+	if err != nil {
+		return nil, err
 	}
-
-	seen := map[string]bool{}
-	var out []TrackedFile
-	add := func(rel string, ver storage.Version, tracked bool) {
-		if seen[rel] {
-			return
-		}
-		seen[rel] = true
-		label := fmt.Sprintf("%s  %s", rel, storage.DisplayVersion(ver))
-		if !tracked {
+	out := make([]TrackedFile, 0, len(entries))
+	for _, e := range entries {
+		shown := e.Display()
+		if shown == "" {
 			// Not an error state, just a file whose first version has not been
 			// written yet. Saying so beats hiding it.
-			label = fmt.Sprintf("%s  %s", rel, "—")
+			shown = "—"
 		}
-		out = append(out, TrackedFile{Path: rel, Version: string(ver), Label: label, Untracked: !tracked})
-	}
-
-	if spaceRoot != "" {
-		_ = filepath.WalkDir(spaceRoot, func(p string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return nil
-			}
-			if d.IsDir() {
-				switch d.Name() {
-				case ".contextverse", ".sync", ".git", "node_modules":
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			rel, err := filepath.Rel(spaceRoot, p)
-			if err != nil {
-				return nil
-			}
-			rel = filepath.ToSlash(rel)
-			if strings.HasPrefix(rel, ".") || rel == "config.yaml" {
-				return nil
-			}
-			ver, tracked := versions[rel]
-			add(rel, ver, tracked)
-			return nil
+		out = append(out, TrackedFile{
+			Path:      e.Path,
+			Version:   string(e.Version),
+			Label:     fmt.Sprintf("%s  %s", e.Path, shown),
+			Untracked: !e.Tracked,
 		})
 	}
-	// Anything the log knows that is no longer on disk still belongs in the list:
-	// its history is reachable even though the file was removed.
-	for rel, ver := range versions {
-		add(rel, ver, true)
-	}
-
-	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out, nil
 }
 

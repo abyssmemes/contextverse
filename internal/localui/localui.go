@@ -36,7 +36,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -45,6 +44,7 @@ import (
 	"github.com/abyssmemes/contextverse/internal/graph"
 	"github.com/abyssmemes/contextverse/internal/logx"
 	"github.com/abyssmemes/contextverse/internal/server/ui"
+	"github.com/abyssmemes/contextverse/internal/spacefiles"
 	"github.com/abyssmemes/contextverse/internal/storage"
 	"github.com/abyssmemes/contextverse/internal/version"
 )
@@ -262,6 +262,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 
 type spaceView struct {
 	Name     string
+	Slug     string // route segment; the console answers on /ui/spaces/local
 	Head     string
 	Template string
 	Files    []fileRow
@@ -278,7 +279,7 @@ func (s *Server) handleSpace(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	view := spaceView{Name: filepath.Base(s.opts.SpaceRoot), Files: rows, Head: s.opts.Mode}
+	view := spaceView{Name: filepath.Base(s.opts.SpaceRoot), Slug: spaceName, Files: rows, Head: s.opts.Mode}
 	if cfg, err := config.Load(s.opts.SpaceRoot); err == nil {
 		view.Template = cfg.Template
 		if cfg.Sync.LastHead != "" {
@@ -291,26 +292,16 @@ func (s *Server) handleSpace(w http.ResponseWriter, r *http.Request) {
 	_ = ui.Render(w, "space.html", s.page(r, "Space", "spaces", view))
 }
 
+// listFiles lists what is in the space, not merely what has a version.
 func (s *Server) listFiles(ctx context.Context) ([]fileRow, error) {
-	entries, err := s.opts.FileLog.Backend.List(ctx, "")
+	entries, err := spacefiles.List(ctx, s.opts.FileLog, s.opts.SpaceRoot)
 	if err != nil {
 		return nil, err
 	}
-	var rows []fileRow
+	rows := make([]fileRow, 0, len(entries))
 	for _, e := range entries {
-		if strings.HasPrefix(e.Path, storage.SnapshotPrefix) || storage.IsFileLogInternal(e.Path) {
-			continue
-		}
-		if strings.HasPrefix(e.Path, "_health/") || strings.HasPrefix(e.Path, "_heads/") {
-			continue
-		}
-		ver := e.Version
-		if lv, err := s.opts.FileLog.LiveVersion(ctx, e.Path); err == nil {
-			ver = lv
-		}
-		rows = append(rows, fileRow{Path: e.Path, Version: storage.DisplayVersion(ver)})
+		rows = append(rows, fileRow{Path: e.Path, Version: e.Display()})
 	}
-	sort.Slice(rows, func(i, j int) bool { return rows[i].Path < rows[j].Path })
 	return rows, nil
 }
 

@@ -19,8 +19,11 @@
         <tbody>
         {{range .Data.Files}}
           <tr>
-            <td><a href="/ui/spaces/{{$.Data.Name}}/files/{{.Path}}">{{.Path}}</a></td>
-            <td class="mono muted">v{{.Version}}</td>
+            {{/* Slug, not Name: the heading shows what the space is called, the
+                 link has to be what the router answers to. The local console
+                 titles itself after its directory but routes on "local". */}}
+            <td><a href="/ui/spaces/{{$.Data.Slug}}/files/{{.Path}}">{{.Path}}</a></td>
+            <td class="mono muted">{{if .Version}}v{{.Version}}{{else}}—{{end}}</td>
           </tr>
         {{else}}
           <tr><td colspan="2"><div class="empty"><strong>Empty space</strong>No files yet.</div></td></tr>

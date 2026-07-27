@@ -1,0 +1,32 @@
+ ContextVerse  solo · CLI wrapper                                                         0.0.0-dev
+  1 Space    2 Projects    3 Files    4 Plugins    5 Output    6 Graph    ? Help
+┌────────────────────────────────────────────────────────┐┌────────────────────────────────────────┐
+│ Graph                                                  ││ Detail                                 │
+│  identity/me.md                          2 in  0 o…    ││ 8 nodes · 4 links · 5 orphans          │
+│  team/principles.md                      2 in  0 o…    ││                                        │
+│  context-entry.md                        0 in  2 o…    ││ identity/me.md                         │
+│  decisions.md                            0 in  0 o…    ││ Me                                     │
+│  projects/README.md                      0 in  0 o…    ││                                        │
+│  space-index.md                          0 in  2 o…    ││ 2 references in · 0 out                │
+│  team/skill-map.md                       0 in  0 o…    ││                                        │
+│  team/space-map.md                       0 in  0 o…    ││ enter  open its connections            │
+│                                                        ││ r      re-derive                       │
+│                                                        ││                                        │
+│                                                        ││ 5 document(s) nothing links to         │
+│                                                        ││                                        │
+│                                                        ││                                        │
+│                                                        ││                                        │
+│                                                        ││                                        │
+│                                                        ││                                        │
+│                                                        ││                                        │
+│                                                        ││                                        │
+│                                                        ││                                        │
+│                                                        ││                                        │
+│                                                        ││                                        │
+│                                                        ││                                        │
+│                                                        ││                                        │
+│                                                        ││                                        │
+│                                                        ││                                        │
+│                                                        ││                                        │
+│                                                        ││                                        │
+ enter connections · j/k move · r re-derive · 1–6 · q

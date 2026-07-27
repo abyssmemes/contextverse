@@ -81,7 +81,9 @@
       <div class="sidebar-label">Context space</div>
       <a href="/ui/spaces/local" class="{{if eq .Active "spaces"}}active{{end}}">Files</a>
       <a href="/ui/graph" class="{{if eq .Active "graph"}}active{{end}}">Graph</a>
-      <a href="/ui/freshness" class="{{if eq .Active "freshness"}}active{{end}}">Freshness</a>
+      {{/* No Freshness entry: the local console does not serve that page yet,
+           and a menu item that 404s is worse than one that is absent. Use
+           `contextd freshness check` until it exists here. */}}
       {{else}}
       <a href="/" class="{{if eq .Active "dash"}}active{{end}}">Dashboard</a>
 
