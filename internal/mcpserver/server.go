@@ -9,6 +9,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/abyssmemes/contextverse/internal/config"
+	"github.com/abyssmemes/contextverse/internal/graph"
 	"github.com/abyssmemes/contextverse/internal/logx"
 	"github.com/abyssmemes/contextverse/internal/search"
 	"github.com/abyssmemes/contextverse/internal/space"
@@ -55,6 +57,16 @@ func Run(ctx context.Context, opts Options) error {
 		Description: "Search file names and contents in the space for a query string (case-insensitive).",
 	}, h.search)
 
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "context_neighbors",
+		Description: "Show what a document links to and what links back to it. Use this to move around the space instead of reading every file.",
+	}, h.neighbors)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "context_map",
+		Description: "The map of the space: documents ranked by how often they are referenced. Start here, then fetch only what you need.",
+	}, h.contextMap)
+
 	server.AddResource(&mcp.Resource{
 		URI:         "contextverse://local/context-entry.md",
 		Name:        "context-entry",
@@ -80,6 +92,14 @@ type emptyIn struct{}
 
 type getIn struct {
 	Path string `json:"path" jsonschema:"relative path within the space, e.g. identity/me.md"`
+}
+
+type neighborsIn struct {
+	Path string `json:"path" jsonschema:"relative path within the space, e.g. team/principles.md"`
+}
+
+type mapIn struct {
+	Budget int `json:"budget,omitempty" jsonschema:"approximate token budget for the map (default 700)"`
 }
 
 type searchIn struct {
@@ -161,6 +181,68 @@ func (h *handlers) search(ctx context.Context, req *mcp.CallToolRequest, in sear
 		lines = append(lines, fmt.Sprintf("%s:%d: %s", m.Path, m.Line, m.Text))
 	}
 	return textResult(strings.Join(lines, "\n")), nil, nil
+}
+
+// neighbors and contextMap give the model a way to navigate rather than
+// consume: ask what a document connects to, or ask for the map, instead of
+// being handed every file at session start.
+func (h *handlers) neighbors(ctx context.Context, req *mcp.CallToolRequest, in neighborsIn) (*mcp.CallToolResult, any, error) {
+	g, err := h.graph()
+	if err != nil {
+		return toolErr(err), nil, nil
+	}
+	node, ok := g.Node(in.Path)
+	if !ok {
+		return toolErr(fmt.Errorf("%s is not in the space", in.Path)), nil, nil
+	}
+	out, back := g.Neighbours(in.Path)
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s — %s\n\n", node.Path, node.Title)
+	if node.Stale {
+		fmt.Fprintf(&b, "WARNING: past its review date; treat with suspicion.\n\n")
+	}
+	fmt.Fprintf(&b, "Points at:\n")
+	if len(out) == 0 {
+		fmt.Fprintf(&b, "  (nothing)\n")
+	}
+	for _, e := range out {
+		mark := ""
+		if e.Broken {
+			mark = "  [MISSING]"
+		} else if e.Code {
+			mark = "  [code]"
+		}
+		fmt.Fprintf(&b, "  %s%s\n", e.To, mark)
+	}
+	fmt.Fprintf(&b, "\nPointed at by:\n")
+	if len(back) == 0 {
+		fmt.Fprintf(&b, "  (nothing)\n")
+	}
+	for _, e := range back {
+		fmt.Fprintf(&b, "  %s\n", e.From)
+	}
+	return textResult(b.String()), nil, nil
+}
+
+func (h *handlers) contextMap(ctx context.Context, req *mcp.CallToolRequest, in mapIn) (*mcp.CallToolResult, any, error) {
+	g, err := h.graph()
+	if err != nil {
+		return toolErr(err), nil, nil
+	}
+	return textResult(graph.RenderMap(g, graph.MapOptions{Budget: in.Budget, SpaceRoot: h.root})), nil, nil
+}
+
+// graph derives the space map, resolving code references against the project
+// checkouts activate recorded.
+func (h *handlers) graph() (*graph.Graph, error) {
+	anchors := map[string]string{}
+	if cfg, err := config.Load(h.root); err == nil {
+		for _, a := range cfg.Anchors {
+			anchors[a.Project] = a.Path
+		}
+	}
+	return graph.Load(graph.Options{Root: h.root, Anchors: anchors})
 }
 
 func (h *handlers) readResource(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {

@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bufio"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,10 +15,12 @@ import (
 
 	"github.com/abyssmemes/contextverse/internal/config"
 	"github.com/abyssmemes/contextverse/internal/entrypoint"
+	"github.com/abyssmemes/contextverse/internal/graph"
 	"github.com/abyssmemes/contextverse/internal/logx"
 	"github.com/abyssmemes/contextverse/internal/mcpserver"
 	"github.com/abyssmemes/contextverse/internal/plugins"
 	"github.com/abyssmemes/contextverse/internal/space"
+	"github.com/abyssmemes/contextverse/internal/storage"
 	templatepkg "github.com/abyssmemes/contextverse/internal/template"
 	"github.com/abyssmemes/contextverse/internal/version"
 )
@@ -423,20 +427,73 @@ func newIndexCmd() *cobra.Command {
 	}
 	cmd.AddCommand(&cobra.Command{
 		Use:   "update",
-		Short: "Regenerate space-index.md from projects/ and key files",
+		Short: "Regenerate space-index.md and team/space-map.md from the graph",
+		Long: `Rewrite the space's own maps from the links it actually contains.
+
+Both files used to be fiction: space-index.md came from a hardcoded format
+string whose Dependencies column was a literal em dash, and team/space-map.md
+was a drawing seeded once at init that never learned about a file again — while
+context-entry.md told every AI to read the first one for "what exists".`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			root, err := resolveSpaceRoot()
 			if err != nil {
 				return err
 			}
-			if err := space.UpdateIndex(root); err != nil {
+			g, err := loadGraph()
+			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Updated %s/space-index.md\n", root)
+			now := time.Now().UTC()
+			written, err := writeSpaceMaps(root, g, now)
+			if err != nil {
+				return err
+			}
+			for _, p := range written {
+				fmt.Fprintf(cmd.OutOrStdout(), "updated %s\n", p)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "%s\n", g.Summary())
 			return nil
 		},
 	})
 	return cmd
+}
+
+// writeSpaceMaps regenerates the space's index and map from the graph, through
+// the FileLog so both land as ordinary versioned edits rather than mystery
+// changes on disk.
+func writeSpaceMaps(root string, g *graph.Graph, now time.Time) ([]string, error) {
+	fl, err := openFileLog()
+	if err != nil {
+		return nil, err
+	}
+	ctx := context.Background()
+
+	files := []struct {
+		path string
+		body string
+	}{
+		{"space-index.md", graph.RenderIndex(g, now)},
+		{"team/space-map.md", graph.RenderSpaceMap(g, now)},
+	}
+
+	var written []string
+	for _, f := range files {
+		current, ver, err := fl.Get(ctx, f.path)
+		if err != nil && !errors.Is(err, storage.ErrNotFound) {
+			return written, err
+		}
+		if string(current) == f.body {
+			continue // regenerating identical content would add a pointless version
+		}
+		if _, err := fl.Put(ctx, f.path, []byte(f.body), ver); err != nil {
+			return written, fmt.Errorf("%s: %w", f.path, err)
+		}
+		if err := writeCLITreeFile(root, f.path, []byte(f.body)); err != nil {
+			logx.L().Warn("write generated map", "path", f.path, "err", err)
+		}
+		written = append(written, f.path)
+	}
+	return written, nil
 }
 
 func newTemplateCmd() *cobra.Command {

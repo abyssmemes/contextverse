@@ -1,11 +1,14 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/abyssmemes/contextverse/internal/graph"
 	"github.com/abyssmemes/contextverse/internal/logx"
 	"github.com/abyssmemes/contextverse/internal/plugins"
 	templatepkg "github.com/abyssmemes/contextverse/internal/template"
@@ -25,6 +28,8 @@ func newContextInjectCmd() *cobra.Command {
 		format  string
 		list    bool
 		project string
+		mode    string
+		budget  int
 	)
 	cmd := &cobra.Command{
 		Use:   "inject",
@@ -44,7 +49,15 @@ func newContextInjectCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			out, err := plugins.Inject(format, root, cwd, project)
+			var out string
+			switch mode {
+			case "map":
+				out, err = injectMap(root, cwd, project, format, budget)
+			case "", "entry-set":
+				out, err = plugins.Inject(format, root, cwd, project)
+			default:
+				return fmt.Errorf("unknown --mode %q (entry-set, map)", mode)
+			}
 			if err != nil {
 				return err
 			}
@@ -55,7 +68,44 @@ func newContextInjectCmd() *cobra.Command {
 	cmd.Flags().StringVar(&format, "format", "claude-hook", "output format (claude-hook|text)")
 	cmd.Flags().BoolVar(&list, "list", false, "list known inject formats")
 	cmd.Flags().StringVar(&project, "project", "", "active project under projects/ (default: infer from cwd)")
+	cmd.Flags().StringVar(&mode, "mode", "entry-set", "entry-set (send the documents) or map (send the graph and let the model fetch)")
+	cmd.Flags().IntVar(&budget, "budget", 700, "approximate token budget for --mode map")
 	return cmd
+}
+
+// injectMap emits the graph map instead of the entry set.
+//
+// This is the other arm of the eager-versus-lazy question, and it is opt-in on
+// purpose. Whether a model does better handed the whole entry set or handed a
+// map plus the means to fetch has never been measured, and switching the
+// default on an unmeasured belief is precisely the mistake the benchmark exists
+// to prevent.
+func injectMap(root, cwd, project, format string, budget int) (string, error) {
+	if project == "" {
+		project = plugins.ResolveProject(root, cwd)
+	}
+	g, err := loadGraph()
+	if err != nil {
+		return "", err
+	}
+	body := graph.RenderMap(g, graph.MapOptions{Project: project, Budget: budget, SpaceRoot: root})
+
+	switch strings.TrimSpace(strings.ToLower(format)) {
+	case "claude-hook", "claude":
+		payload := map[string]any{
+			"hookSpecificOutput": map[string]any{
+				"hookEventName":     "SessionStart",
+				"additionalContext": body,
+			},
+		}
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			return "", err
+		}
+		return string(raw) + "\n", nil
+	default:
+		return body, nil
+	}
 }
 
 func newPluginCmd() *cobra.Command {
