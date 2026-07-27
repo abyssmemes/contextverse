@@ -80,7 +80,7 @@ func newRoot() *cobra.Command {
 	addGrouped(root, groupServer,
 		newServerCmd(), newUserCmd(), newAuthCmd(), newPolicyCmd(), newACLCmd(), newAuditCmd(), newWebhooksCmd())
 	addGrouped(root, groupInterface,
-		newTUICmd(), newCompletionCmd())
+		newTUICmd(), newUICmd(), newCompletionCmd())
 	root.SetHelpCommandGroupID(groupInterface)
 
 	return root

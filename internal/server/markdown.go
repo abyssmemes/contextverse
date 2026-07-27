@@ -1,32 +1,15 @@
 package server
 
 import (
-	"bytes"
 	"html/template"
-	"path"
-	"strings"
 
-	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/extension"
-	"github.com/yuin/goldmark/renderer/html"
+	"github.com/abyssmemes/contextverse/internal/server/ui"
 )
 
-func isMarkdownPath(p string) bool {
-	ext := strings.ToLower(path.Ext(p))
-	return ext == ".md" || ext == ".markdown" || ext == ".mdown"
-}
+// The implementation moved to internal/server/ui so `contextd ui` renders space
+// content through exactly the same code — including the decision to keep raw
+// HTML escaped. These wrappers keep the call sites in this package unchanged.
 
-func renderMarkdownHTML(src []byte) template.HTML {
-	md := goldmark.New(
-		goldmark.WithExtensions(extension.GFM),
-		goldmark.WithRendererOptions(
-			html.WithHardWraps(),
-			// No WithUnsafe — untrusted space content stays escaped.
-		),
-	)
-	var buf bytes.Buffer
-	if err := md.Convert(src, &buf); err != nil {
-		return template.HTML("<pre class=\"file-pre\">" + template.HTMLEscapeString(string(src)) + "</pre>")
-	}
-	return template.HTML(buf.String())
-}
+func isMarkdownPath(p string) bool { return ui.IsMarkdownPath(p) }
+
+func renderMarkdownHTML(src []byte) template.HTML { return ui.RenderMarkdown(src) }

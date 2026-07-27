@@ -63,4 +63,10 @@ type Page struct {
 	// by every form. Both are stamped by the server at render time.
 	Nonce string
 	CSRF  string
+
+	// Local marks a page served by `contextd ui` against a solo/client space
+	// rather than by a server. The templates are shared deliberately — one set
+	// of markup, two hosts — and this hides the parts a local space has no
+	// concept of: users, policies, audit, webhooks, logout.
+	Local bool
 }

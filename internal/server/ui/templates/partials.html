@@ -71,6 +71,16 @@
          dashboard describe the product the same way. A flat list of eight was
          the same wall the CLI had before its commands were grouped. */}}
     <nav class="app-nav">
+      {{if .Local}}
+      {{/* `contextd ui` against a solo/client space: no users, policies, audit
+           or webhooks exist here, so listing them would advertise routes that
+           cannot answer. Same markup, same styles — fewer entries. */}}
+      <a href="/" class="{{if eq .Active "dash"}}active{{end}}">Overview</a>
+
+      <div class="sidebar-label">Context space</div>
+      <a href="/ui/spaces/local" class="{{if eq .Active "spaces"}}active{{end}}">Files</a>
+      <a href="/ui/freshness" class="{{if eq .Active "freshness"}}active{{end}}">Freshness</a>
+      {{else}}
       <a href="/" class="{{if eq .Active "dash"}}active{{end}}">Dashboard</a>
 
       <div class="sidebar-label">Context space</div>
@@ -85,14 +95,23 @@
       <a href="/ui/policies" class="{{if eq .Active "policies"}}active{{end}}">Policies</a>
       <a href="/ui/audit" class="{{if eq .Active "audit"}}active{{end}}">Audit</a>
       <a href="/ui/webhooks" class="{{if eq .Active "webhooks"}}active{{end}}">Webhooks</a>
+      {{end}}
     </nav>
     <div class="app-side-foot">
+      {{if .Local}}
+      <div class="who"><strong>Local space</strong><br>contextd ui</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        {{template "theme-btn" .}}
+      </div>
+      <div class="muted" style="font-size:0.75rem;">Serving your own space on this machine. Stop with <span class="kbd">Ctrl-C</span>.</div>
+      {{else}}
       <div class="who"><strong>{{.User}}</strong><br>{{.Role}}</div>
       <div style="display:flex;gap:8px;align-items:center;">
         {{template "theme-btn" .}}
         <a class="btn secondary" href="/ui/logout" style="flex:1;text-align:center;padding:8px 12px;font-size:0.85rem;">Logout</a>
       </div>
       <div class="muted" style="font-size:0.75rem;">Theme <span class="kbd">d</span> · canvas only</div>
+      {{end}}
     </div>
   </aside>
   <div class="app-main" id="main">

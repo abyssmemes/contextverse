@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -452,7 +453,23 @@ func createSoloSpace(cmd *cobra.Command, root string, s soloSetup) error {
 	if err := config.Save(cfg); err != nil {
 		return err
 	}
-	logx.L().Info("solo space created", "space_root", root, "template", cfg.Template, "backend", cfg.Backend.Driver)
+
+	// Record the seeded tree as version 1 of each file.
+	//
+	// The template is written straight to disk, so without this the version log
+	// knows nothing about the files the user actually starts with: `file list`
+	// reported "(no files)" on a fresh space with eleven Markdown files in it,
+	// `file history` was empty for every one of them, and the Files tab in the
+	// TUI and the local console showed nothing. History only began at the first
+	// write through contextd, which is not when the content began.
+	seeded, err := seedFileLog(cmd, root)
+	if err != nil {
+		// A space that exists but has no baseline history is still usable, so
+		// this warns rather than unwinding a successful creation.
+		logx.L().Warn("seed version history", "space_root", root, "err", err)
+	}
+
+	logx.L().Info("solo space created", "space_root", root, "template", cfg.Template, "backend", cfg.Backend.Driver, "seeded_files", seeded)
 	if s.Quiet {
 		return nil
 	}
@@ -908,4 +925,55 @@ func printSpaceMap(out io.Writer, root, mode string) {
 	fmt.Fprintf(out, "  cd <your-project> && contextd activate   point your AI tools at this space\n")
 	fmt.Fprintf(out, "  contextd tui                        browse and edit it full-screen\n")
 	fmt.Fprintf(out, "  contextd status                     check what is wired\n")
+}
+
+// seedFileLog records every file of a freshly seeded working tree as version 1,
+// so version history covers the space from the moment it exists rather than
+// from the first time someone happens to edit through contextd.
+//
+// Files already known to the log are skipped, which makes this safe to run on a
+// re-seed: it fills gaps instead of stacking a duplicate version on content
+// that has not changed.
+func seedFileLog(cmd *cobra.Command, root string) (int, error) {
+	fl, err := openFileLog()
+	if err != nil {
+		return 0, err
+	}
+	ctx := cmd.Context()
+
+	var seeded int
+	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			// Never walk into contextd's own storage or a VCS directory.
+			switch d.Name() {
+			case ".contextverse", ".sync", ".git":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if rel == "config.yaml" || strings.HasPrefix(rel, ".") {
+			return nil
+		}
+		if _, err := fl.LiveVersion(ctx, rel); err == nil {
+			return nil // already tracked
+		}
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if _, err := fl.Put(ctx, rel, body, ""); err != nil {
+			return fmt.Errorf("%s: %w", rel, err)
+		}
+		seeded++
+		return nil
+	})
+	return seeded, err
 }

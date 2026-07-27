@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/abyssmemes/contextverse/internal/config"
 	"github.com/abyssmemes/contextverse/internal/logx"
+	"github.com/abyssmemes/contextverse/internal/prompt"
 )
 
 // Autostart for the client sync daemon.
@@ -316,4 +318,164 @@ func serviceSupported() bool {
 	default:
 		return false
 	}
+}
+
+// --- standing local console service -----------------------------------------
+//
+// Same per-user mechanism as the daemon, separate label so the two can be
+// installed, started and removed independently.
+
+const localUILabel = "dev.contextverse.ui"
+
+func uiServicePath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		return filepath.Join(home, "Library", "LaunchAgents", localUILabel+".plist"), nil
+	case "linux":
+		return filepath.Join(home, ".config", "systemd", "user", "contextd-ui.service"), nil
+	default:
+		return "", fmt.Errorf("a standing console is not supported on %s; run contextd ui when you need it", runtime.GOOS)
+	}
+}
+
+func installUIService(addr string) (string, error) {
+	path, err := uiServicePath()
+	if err != nil {
+		return "", err
+	}
+	root, err := resolveSpaceRoot()
+	if err != nil {
+		return "", err
+	}
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	bin, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return "", err
+	}
+
+	args := []string{"ui", "--dir", abs, "--addr", addr, "--open=false"}
+	var body string
+	switch runtime.GOOS {
+	case "darwin":
+		body = launchdAgent(localUILabel, bin, args, filepath.Join(abs, ".sync", "ui.log"))
+	case "linux":
+		body = systemdUserService("ContextVerse local console", bin, args)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		return "", err
+	}
+	if runtime.GOOS == "linux" {
+		_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+	}
+	logx.L().Info("local ui service installed", "path", path, "addr", addr, "space", abs)
+	return path, nil
+}
+
+func uninstallUIService() (string, bool, error) {
+	path, err := uiServicePath()
+	if err != nil {
+		return "", false, err
+	}
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return path, false, nil
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		_ = exec.Command("launchctl", "unload", "-w", path).Run()
+	case "linux":
+		_ = exec.Command("systemctl", "--user", "disable", "--now", "contextd-ui.service").Run()
+	}
+	if err := os.Remove(path); err != nil {
+		return path, false, err
+	}
+	if runtime.GOOS == "linux" {
+		_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+	}
+	return path, true, nil
+}
+
+// launchdAgent renders a plist for an arbitrary argv, so the daemon and the
+// console describe themselves the same way instead of via two near-copies.
+func launchdAgent(label, bin string, args []string, logPath string) string {
+	var argv strings.Builder
+	argv.WriteString("\t\t<string>" + bin + "</string>\n")
+	for _, a := range args {
+		argv.WriteString("\t\t<string>" + a + "</string>\n")
+	}
+	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>%s</string>
+	<key>ProgramArguments</key>
+	<array>
+%s	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+	<key>ProcessType</key>
+	<string>Background</string>
+	<key>StandardOutPath</key>
+	<string>%s</string>
+	<key>StandardErrorPath</key>
+	<string>%s</string>
+</dict>
+</plist>
+`, label, argv.String(), logPath, logPath)
+}
+
+func systemdUserService(desc, bin string, args []string) string {
+	return fmt.Sprintf(`[Unit]
+Description=%s
+Documentation=https://abyssmemes.github.io/contextverse/
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%s %s
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target
+`, desc, bin, strings.Join(args, " "))
+}
+
+// confirmStandingConsole makes the trade explicit before leaving a web server
+// running on someone's machine indefinitely.
+func confirmStandingConsole(cmd *cobra.Command) (bool, error) {
+	if !prompt.Interactive() {
+		return true, nil // scripted install: the flag is the consent
+	}
+	ok, err := prompt.Confirm(
+		"Leave the local console running whenever you are logged in?",
+		"It can write to your context files and has no login. Loopback only, with Host and Origin checks — but a standing door rather than one you open when needed.",
+		false)
+	if err != nil {
+		if errors.Is(err, prompt.ErrCancelled) {
+			return false, nil
+		}
+		return false, err
+	}
+	if !ok {
+		fmt.Fprintln(cmd.OutOrStdout(), "Nothing installed. Run contextd ui when you want the console.")
+	}
+	return ok, nil
 }

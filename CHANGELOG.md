@@ -16,6 +16,11 @@ Releases are cut automatically from `main` by CI; the tag and the GitHub release
 - `contextd daemon logs [-n]` — the log has always been written to `.sync/daemon.log`, with no command to read it.
 - `contextd daemon status` gained `--json` / `--yaml`, the last sync time, and whether autostart is installed.
 - The client wizard now offers background sync. It existed with no way to discover it: nothing in setup mentioned it, and nothing installed it, so a working client went stale the moment its terminal closed.
+- **`contextd ui`** — a local web console for solo and client spaces, on demand: it prints a URL, serves until Ctrl-C, and exits. Bound to loopback, a fresh one-time key per run, `Host` and `Origin` validated so a page in another tab cannot drive it, and double-submit CSRF on writes. `contextd ui install` keeps it running for people who want that, after confirming the trade. Deliberately not on by default: a standing web server with write access to your context files, for someone who may never open it, is a door left open — the TUI covers the same ground and listens on nothing. It shares the server console's templates and stylesheet rather than duplicating them.
+
+### Fixed
+
+- **A fresh space had no version history at all.** `space.Create` writes the template straight to the working tree, so nothing it seeded was ever recorded in the version log: `contextd file list` reported "(no files)" on a space containing eleven Markdown files, `file history` was empty for every one of them, and the Files tab in the TUI showed nothing. History began at the first write through contextd rather than when the content began. Setup now records the seeded tree as `v1`.
 
 ### Changed
 
