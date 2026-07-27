@@ -15,6 +15,7 @@ import (
 	"github.com/abyssmemes/contextverse/internal/entrypoint"
 	"github.com/abyssmemes/contextverse/internal/logx"
 	"github.com/abyssmemes/contextverse/internal/mcpserver"
+	"github.com/abyssmemes/contextverse/internal/plugins"
 	"github.com/abyssmemes/contextverse/internal/space"
 	templatepkg "github.com/abyssmemes/contextverse/internal/template"
 	"github.com/abyssmemes/contextverse/internal/version"
@@ -262,6 +263,12 @@ func newActivateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// Remember where this project's code lives. activate is the only
+			// moment contextd is ever told, and until now it forgot immediately:
+			// the space could describe a project without knowing where on disk it
+			// was, so a document mentioning ./scripts/deploy.sh could not be
+			// checked against anything.
+			recordProjectAnchor(root, cwd, project)
 			// Session-start delivery: wire detected client slots (Claude hook, Cursor rules, …).
 			if err := applySessionStartPlugins(root, cwd, project, silent); err != nil {
 				logx.L().Warn("session-start plugins", "err", err)
@@ -533,4 +540,36 @@ func orDefault(v, def string) string {
 		return def
 	}
 	return v
+}
+
+// recordProjectAnchor persists where a project was activated, so the context
+// graph can resolve a document's reference to ./scripts/deploy.sh against real
+// files instead of taking the path on faith.
+//
+// Best-effort throughout: activate has already done its job by this point, and
+// failing to note a path is not a reason to report that wiring the AI tools
+// failed.
+func recordProjectAnchor(root, cwd, project string) {
+	if project == "" {
+		project = plugins.ResolveProject(root, cwd)
+	}
+	if project == "" {
+		return // not inside a known project; nothing to anchor
+	}
+	cfg, err := config.Load(root)
+	if err != nil {
+		return
+	}
+	abs, err := filepath.Abs(cwd)
+	if err != nil {
+		return
+	}
+	if !cfg.RecordAnchor(project, abs, time.Now().UTC()) {
+		return // unchanged; do not rewrite config on every activate
+	}
+	if err := config.Save(cfg); err != nil {
+		logx.L().Warn("record project anchor", "project", project, "path", abs, "err", err)
+		return
+	}
+	logx.L().Info("project anchored", "project", project, "path", abs)
 }

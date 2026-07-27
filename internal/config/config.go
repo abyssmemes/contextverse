@@ -29,17 +29,67 @@ const (
 
 // Config is persisted at <space_root>/config.yaml.
 type Config struct {
-	Mode      Mode      `yaml:"mode"`
-	SpaceRoot string    `yaml:"space_root"`
-	CreatedAt time.Time `yaml:"created_at"`
-	UpdatedAt time.Time `yaml:"updated_at"`
-	Identity  Identity  `yaml:"identity"`
-	Template  string    `yaml:"template,omitempty"`
-	Backend   Backend   `yaml:"backend,omitempty"`
+	Mode      Mode         `yaml:"mode"`
+	SpaceRoot string       `yaml:"space_root"`
+	CreatedAt time.Time    `yaml:"created_at"`
+	UpdatedAt time.Time    `yaml:"updated_at"`
+	Identity  Identity     `yaml:"identity"`
+	Template  string       `yaml:"template,omitempty"`
+	Backend   Backend      `yaml:"backend,omitempty"`
 	Server    ClientServer `yaml:"server,omitempty"` // client mode
 	Sync      SyncState    `yaml:"sync,omitempty"`   // client sync markers
 	Daemon    DaemonConfig `yaml:"daemon,omitempty"` // client background poller
 	Editor    string       `yaml:"editor,omitempty"` // remembered TUI editor choice (binary id)
+
+	// Anchors record where each project's code actually lives, learned from the
+	// directory `contextd activate` was run in.
+	//
+	// Without this the space can describe a project but has no idea where it is,
+	// so a document that mentions ./scripts/deploy.sh cannot be checked against
+	// anything. It is what lets the context graph reach past prose into code.
+	Anchors []Anchor `yaml:"anchors,omitempty"`
+}
+
+// Anchor ties a project in the space to a working directory on this machine.
+//
+// Deliberately per-machine: a checkout path is local truth, not something to
+// push to teammates whose repositories live somewhere else entirely.
+type Anchor struct {
+	Project  string    `yaml:"project"`
+	Path     string    `yaml:"path"`
+	LastSeen time.Time `yaml:"last_seen"`
+}
+
+// RecordAnchor remembers that a project was activated in dir, replacing any
+// previous path for that project. Reports whether anything changed, so callers
+// can skip a config write on the common case of activating in the same place.
+func (c *Config) RecordAnchor(project, dir string, now time.Time) bool {
+	if project == "" || dir == "" {
+		return false
+	}
+	for i := range c.Anchors {
+		if c.Anchors[i].Project != project {
+			continue
+		}
+		// A moved checkout should follow the project, not accumulate as a second
+		// entry that leaves the graph guessing which one is live.
+		moved := c.Anchors[i].Path != dir
+		c.Anchors[i].Path = dir
+		c.Anchors[i].LastSeen = now
+		return moved
+	}
+	c.Anchors = append(c.Anchors, Anchor{Project: project, Path: dir, LastSeen: now})
+	return true
+}
+
+// AnchorFor returns the recorded path for a project.
+func (c *Config) AnchorFor(project string) (string, bool) {
+	for _, a := range c.Anchors {
+		if a.Project == project {
+			return a.Path, true
+		}
+	}
+	return "", false
 }
 
 // DaemonConfig controls contextd daemon (client head poll → pull).
@@ -55,7 +105,7 @@ type Backend struct {
 	GitRemote   string `yaml:"git_remote,omitempty"`
 	GitUser     string `yaml:"git_user,omitempty"`      // HTTPS username (often "git" or GitHub username)
 	GitToken    string `yaml:"git_token,omitempty"`     // HTTPS PAT / password; prefer env CONTEXTVERSE_GIT_TOKEN
-	GitSSHKey   string `yaml:"git_ssh_key,omitempty"`  // path to private key for SSH remotes
+	GitSSHKey   string `yaml:"git_ssh_key,omitempty"`   // path to private key for SSH remotes
 	GitAutoPush bool   `yaml:"git_auto_push,omitempty"` // push after each write (default true when remote set)
 
 	// S3 (driver=s3) — works with AWS and MinIO / S3-compatible
@@ -103,7 +153,18 @@ func Load(spaceRoot string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse config %s: %w", path, err)
 	}
-	if cfg.SpaceRoot == "" {
+
+	// Where we just read from is authoritative, and it is stored absolute.
+	//
+	// The recorded space_root was whatever string --dir happened to carry at
+	// init, so a relative one made Save resolve against the *calling* working
+	// directory: running `contextd activate` from a project wrote a stray
+	// config.yaml under that project and left the real one untouched. In client
+	// mode that silently dropped Sync.LastHead, so the client re-pulled
+	// everything every time and pushed against a stale head.
+	if abs, err := filepath.Abs(spaceRoot); err == nil {
+		cfg.SpaceRoot = abs
+	} else if cfg.SpaceRoot == "" {
 		cfg.SpaceRoot = spaceRoot
 	}
 	return &cfg, nil
@@ -113,6 +174,11 @@ func Load(spaceRoot string) (*Config, error) {
 func Save(cfg *Config) error {
 	if cfg.SpaceRoot == "" {
 		return fmt.Errorf("space_root is empty")
+	}
+	// Belt and braces for configs built in memory rather than loaded: a relative
+	// root here would write wherever the caller happens to be standing.
+	if abs, err := filepath.Abs(cfg.SpaceRoot); err == nil {
+		cfg.SpaceRoot = abs
 	}
 	cfg.UpdatedAt = time.Now().UTC()
 	if cfg.CreatedAt.IsZero() {

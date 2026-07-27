@@ -117,7 +117,7 @@ type ACMEConfig struct {
 	Email     string        `yaml:"email"`
 	Domains   []string      `yaml:"domains"`
 	CacheDir  string        `yaml:"cache_dir,omitempty"`
-	HTTPAddr  string        `yaml:"http_addr,omitempty"`  // default :80 for HTTP-01
+	HTTPAddr  string        `yaml:"http_addr,omitempty"` // default :80 for HTTP-01
 	Challenge string        `yaml:"challenge,omitempty"` // http-01 (default) | dns-01
 	DNS       ACMEDNSConfig `yaml:"dns,omitempty"`
 }
