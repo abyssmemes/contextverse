@@ -28,6 +28,7 @@ func newFileCmd() *cobra.Command {
 	cmd.AddCommand(newFileGetCmd())
 	cmd.AddCommand(newFilePutCmd())
 	cmd.AddCommand(newFileEditCmd())
+	cmd.AddCommand(newFileDiffCmd())
 	cmd.AddCommand(newFileRevertCmd())
 	cmd.AddCommand(newFileUndeleteCmd())
 	cmd.AddCommand(newFileDestroyCmd())

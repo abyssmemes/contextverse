@@ -72,7 +72,7 @@ func newRoot() *cobra.Command {
 	addGrouped(root, groupSetup,
 		newInitCmd(), newActivateCmd(), newStatusCmd(), newVersionCmd())
 	addGrouped(root, groupSpace,
-		newSpaceCmd(), newFileCmd(), newHistoryCmd(), newIndexCmd(), newTemplateCmd(), newFreshnessCmd())
+		newSpaceCmd(), newFileCmd(), newSearchCmd(), newHistoryCmd(), newIndexCmd(), newTemplateCmd(), newFreshnessCmd())
 	addGrouped(root, groupSync,
 		newPullCmd(), newPushCmd(), newDaemonCmd(), newBackendCmd())
 	addGrouped(root, groupAI,

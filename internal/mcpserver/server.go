@@ -10,6 +10,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/abyssmemes/contextverse/internal/logx"
+	"github.com/abyssmemes/contextverse/internal/search"
 	"github.com/abyssmemes/contextverse/internal/space"
 	"github.com/abyssmemes/contextverse/internal/version"
 )
@@ -137,54 +138,29 @@ func (h *handlers) get(ctx context.Context, req *mcp.CallToolRequest, in getIn) 
 }
 
 func (h *handlers) search(ctx context.Context, req *mcp.CallToolRequest, in searchIn) (*mcp.CallToolResult, any, error) {
-	if strings.TrimSpace(in.Query) == "" {
-		return toolErr(fmt.Errorf("query is required")), nil, nil
-	}
+	// Shared with `contextd search`, deliberately: the AI and the person whose
+	// space it is must get the same answers to "what is in here". Two search
+	// implementations is how those quietly diverge.
 	limit := in.Limit
 	if limit <= 0 {
 		limit = 20
 	}
-	files, err := listFiles(h.root, "")
+	res, err := search.Search(search.Options{Root: h.root, Query: in.Query, Limit: limit})
 	if err != nil {
 		return toolErr(err), nil, nil
 	}
-	q := strings.ToLower(in.Query)
-	var hits []string
-	for _, rel := range files {
-		if len(hits) >= limit {
-			break
-		}
-		matched := strings.Contains(strings.ToLower(rel), q)
-		if !matched {
-			body, err := readSpaceFile(h.root, rel)
-			if err != nil {
-				continue
-			}
-			matched = strings.Contains(strings.ToLower(body), q)
-			if matched {
-				// include a short snippet
-				idx := strings.Index(strings.ToLower(body), q)
-				start := idx - 40
-				if start < 0 {
-					start = 0
-				}
-				end := idx + len(q) + 40
-				if end > len(body) {
-					end = len(body)
-				}
-				snippet := strings.ReplaceAll(body[start:end], "\n", " ")
-				hits = append(hits, fmt.Sprintf("%s: …%s…", rel, snippet))
-				continue
-			}
-		}
-		if matched {
-			hits = append(hits, rel)
-		}
-	}
-	if len(hits) == 0 {
+	if len(res.Matches) == 0 {
 		return textResult("(no matches)"), nil, nil
 	}
-	return textResult(strings.Join(hits, "\n")), nil, nil
+	lines := make([]string, 0, len(res.Matches))
+	for _, m := range res.Matches {
+		if m.Name {
+			lines = append(lines, m.Path+" (filename)")
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("%s:%d: %s", m.Path, m.Line, m.Text))
+	}
+	return textResult(strings.Join(lines, "\n")), nil, nil
 }
 
 func (h *handlers) readResource(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {

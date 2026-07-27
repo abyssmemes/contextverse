@@ -28,9 +28,9 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
-	"html/template"
 	"errors"
 	"fmt"
+	"html/template"
 	"net"
 	"net/http"
 	"net/url"
@@ -383,7 +383,7 @@ func (s *Server) renderFile(w http.ResponseWriter, r *http.Request, flashErr str
 		v.Editable = false
 	}
 	if v.IsMarkdown && v.ViewMode == "preview" {
-			v.MarkdownHTML = ui.RenderMarkdown([]byte(v.Content))
+		v.MarkdownHTML = ui.RenderMarkdown([]byte(v.Content))
 	}
 
 	pg := s.page(r, path, "spaces", v)
