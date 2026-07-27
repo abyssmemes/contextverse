@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -552,8 +553,80 @@ func runClientWizard(cmd *cobra.Command) error {
 		fmt.Fprintf(cmd.ErrOrStderr(), "AI client wiring skipped: %v\n", err)
 	}
 
+	if err := wizardBackgroundSync(cmd, cfg); err != nil {
+		logx.L().Warn("wizard background sync step", "err", err)
+		fmt.Fprintf(cmd.ErrOrStderr(), "background sync setup skipped: %v\n", err)
+	}
+
 	printSpaceMap(out, root, "client")
 	fmt.Fprintf(out, "  contextd pull / contextd push        sync with %s\n", url)
+	return nil
+}
+
+// wizardBackgroundSync offers the sync daemon at the one moment the question
+// makes sense. It existed for a while with no way to discover it: nothing in
+// setup mentioned it, and nothing installed it, so a client that had been
+// running fine went stale the moment its terminal closed.
+func wizardBackgroundSync(cmd *cobra.Command, cfg *config.Config) error {
+	choices := []prompt.Choice{
+		{
+			ID:    "install",
+			Label: "Yes — keep it current in the background",
+			Desc:  "Installs a per-user service that starts at login and pulls when the server moves. Never pushes: publishing stays an explicit contextd push.",
+			Note:  "recommended",
+		},
+		{
+			ID:    "session",
+			Label: "Just for this session",
+			Desc:  "Runs until you close the terminal or reboot. Start it again later with contextd daemon start.",
+		},
+		{
+			ID:    "manual",
+			Label: "No — I'll pull myself",
+			Desc:  "contextd activate soft-pulls when you enter a project, and contextd pull is always there. Set it up later with contextd daemon install.",
+		},
+	}
+	if !serviceSupported() {
+		// Offering to install a service this platform has no template for would
+		// be a promise the next screen breaks.
+		choices = choices[1:]
+	}
+
+	i, err := prompt.Select("Keep this machine in sync automatically?",
+		"The daemon polls the server and pulls when someone else publishes.", choices, 0)
+	if err != nil {
+		if errors.Is(err, prompt.ErrCancelled) {
+			return nil
+		}
+		return err
+	}
+
+	out := cmd.OutOrStdout()
+	switch choices[i].ID {
+	case "install":
+		bin, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		abs, err := filepath.Abs(cfg.SpaceRoot)
+		if err != nil {
+			return err
+		}
+		path, err := installService(bin, abs, daemonInterval(cfg))
+		if err != nil {
+			return err
+		}
+		if err := startService(); err != nil {
+			fmt.Fprintf(out, "  ✅ autostart installed → %s\n", path)
+			fmt.Fprintf(cmd.ErrOrStderr(), "  (not started yet: %v — start with %s)\n", err, startHint())
+			return nil
+		}
+		fmt.Fprintf(out, "  ✅ background sync running, and will start at login\n")
+	case "session":
+		fmt.Fprintln(out, "  Start it with: contextd daemon start")
+	default:
+		fmt.Fprintln(out, "  No background sync. contextd pull when you want the latest.")
+	}
 	return nil
 }
 

@@ -10,7 +10,16 @@ Releases are cut automatically from `main` by CI; the tag and the GitHub release
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- **The sync daemon can now start at login.** `contextd daemon install` writes a per-user launchd agent (macOS) or `systemd --user` unit (Linux); `daemon uninstall` removes it, `daemon unit` prints it without installing. Deliberately per-user, never system-wide: the daemon reads your token and syncs your space, so running it as root would use the wrong identity against a credential it should not be able to read.
+- `contextd daemon logs [-n]` — the log has always been written to `.sync/daemon.log`, with no command to read it.
+- `contextd daemon status` gained `--json` / `--yaml`, the last sync time, and whether autostart is installed.
+- The client wizard now offers background sync. It existed with no way to discover it: nothing in setup mentioned it, and nothing installed it, so a working client went stale the moment its terminal closed.
+
+### Changed
+
+- **The daemon backs off when the server is unreachable.** A fixed ticker meant an identical failed request every interval forever — log noise, load on a server that is probably already unwell, and a flat battery on a laptop off the VPN. Failures now double the interval up to 15 minutes and the first success restores it. A single failure still retries at the normal interval, so one dropped packet does not push the next attempt out to minutes.
 
 ## [0.7.0] — 2026-07-27
 
