@@ -60,7 +60,7 @@ func runInitWizard(cmd *cobra.Command) error {
 
 	switch mode {
 	case 0:
-		return runSoloWizard(cmd)
+		return runSoloWizard(cmd, false)
 	case 1:
 		return runClientWizard(cmd)
 	default:
@@ -328,13 +328,21 @@ func wizardErr(err error) error {
 	return err
 }
 
-func runSoloWizard(cmd *cobra.Command) error {
+// runSoloWizard walks through creating a solo space. force carries --force from
+// the command line, so a decision the user already made is not asked again.
+func runSoloWizard(cmd *cobra.Command, force bool) error {
 	out := cmd.OutOrStdout()
 	root, err := resolveSpaceRoot()
 	if err != nil {
 		return err
 	}
-	if config.Exists(root) {
+
+	// overwrite must reach space.Create. Confirming here and then not passing it
+	// through meant the wizard asked whether to overwrite, was told yes, ran
+	// every remaining question, and only then refused — the worst possible place
+	// to fail, and it made --force do nothing at all on this path.
+	overwrite := force
+	if config.Exists(root) && !force {
 		ok, err := prompt.Confirm(
 			"A space already exists at "+root,
 			"Continuing rewrites config.yaml and re-seeds template files. identity/me.md is kept.",
@@ -345,6 +353,7 @@ func runSoloWizard(cmd *cobra.Command) error {
 		if !ok {
 			return fmt.Errorf("setup cancelled — existing space at %s left alone", root)
 		}
+		overwrite = true
 	}
 
 	// --- identity -----------------------------------------------------------
@@ -382,6 +391,7 @@ func runSoloWizard(cmd *cobra.Command) error {
 	if err := createSoloSpace(cmd, root, soloSetup{
 		Name: name, Role: role, Language: language, Tools: tools,
 		Template: templateName, Backend: backend, GitRemote: gitRemote,
+		Force: overwrite,
 	}); err != nil {
 		return err
 	}

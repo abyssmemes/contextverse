@@ -186,8 +186,9 @@ func newInitSoloCmd() *cobra.Command {
 				// A person typed `init solo` with nothing else. This is the
 				// command everyone reaches for out of habit, so it should lead
 				// to the guided setup rather than four bare prompts with no
-				// explanation of what any of them are for.
-				return runSoloWizard(cmd)
+				// explanation of what any of them are for. --force travels with
+				// it; dropping it here is what made the flag a no-op.
+				return runSoloWizard(cmd, force)
 			default:
 				in := bufio.NewReader(cmd.InOrStdin())
 				name = askLine(in, "Your name", name)
