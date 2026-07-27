@@ -559,7 +559,7 @@ func newServerUnitCmd() *cobra.Command {
 	var (
 		outPath string
 		binPath string
-		user     string
+		user    string
 	)
 	cmd := &cobra.Command{
 		Use:   "unit",

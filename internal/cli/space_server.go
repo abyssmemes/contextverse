@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -10,6 +11,7 @@ import (
 	"github.com/abyssmemes/contextverse/internal/config"
 	"github.com/abyssmemes/contextverse/internal/logx"
 	"github.com/abyssmemes/contextverse/internal/spacesvc"
+	"github.com/abyssmemes/contextverse/internal/storage"
 )
 
 // Server-side space management.
@@ -222,4 +224,68 @@ content might be wanted again (contextd history snapshot).`,
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "confirm irreversible deletion")
 	return cmd
+}
+
+// newSpaceAdoptCmd brings an existing working tree into the version log.
+//
+// Spaces created before setup recorded a baseline have their documents on disk
+// and nothing in the log. Everything that reads through the FileLog — `file
+// list`, `file history`, the TUI Files tab, the local console — therefore shows
+// an empty space while the files are plainly there. That contradiction is the
+// most confusing state contextd can be in, and this is the way out of it.
+func newSpaceAdoptCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "adopt",
+		Short: "Record existing files as version 1 so they become visible",
+		Long: `Bring a working tree that predates version tracking into the log.
+
+Files already tracked are left alone, so this fills gaps rather than creating
+duplicate versions. Run it once; contextd also does it for you on activate.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			root, err := resolveSpaceRoot()
+			if err != nil {
+				return err
+			}
+			n, err := seedFileLog(cmd, root)
+			if err != nil {
+				return err
+			}
+			if n == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "nothing to adopt — every file is already tracked")
+				return nil
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "adopted %d file(s) as v1 — they are now visible to file list, the TUI and the console\n", n)
+			return nil
+		},
+	}
+}
+
+// adoptUntrackedFiles is the automatic path. It says nothing when there is
+// nothing to do, so it can sit inside commands people already run.
+func adoptUntrackedFiles(cmd *cobra.Command, root string) {
+	fl, err := openFileLog()
+	if err != nil {
+		return
+	}
+	// Only act on the pathological case: a log that knows nothing at all while
+	// the tree has content. A partially tracked space is somebody's deliberate
+	// state and is not ours to rewrite.
+	entries, err := fl.Backend.List(cmd.Context(), "")
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !storage.IsFileLogInternal(e.Path) && !strings.HasPrefix(e.Path, storage.SnapshotPrefix) {
+			return
+		}
+	}
+	n, err := seedFileLog(cmd, root)
+	if err != nil {
+		logx.L().Warn("adopt existing files", "err", err)
+		return
+	}
+	if n > 0 {
+		logx.L().Info("adopted untracked files", "count", n, "space_root", root)
+		fmt.Fprintf(cmd.ErrOrStderr(), "recorded %d existing file(s) as v1 so they are visible to file list and the TUI\n", n)
+	}
 }

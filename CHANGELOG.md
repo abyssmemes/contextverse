@@ -29,6 +29,11 @@ Releases are cut automatically from `main` by CI; the tag and the GitHub release
 
 ### Fixed
 
+- **Spaces created before version tracking existed showed as empty.** Their documents were on disk with nothing in the version log, so `contextd file list` said "(no files)" while eight of them sat right there, the TUI Files tab was blank, and there was nothing to open — the tool contradicting itself about its own contents. `contextd space adopt` records them as `v1`, and `activate` now does it automatically when it finds a log that knows nothing about a tree that has content. The earlier fix only covered newly created spaces; every space that already existed stayed broken.
+- **`contextd init solo` gave four bare prompts instead of the guided setup.** The wizard was added to `contextd init`, and `init solo` — the command everyone types out of habit, and the one every version of the documentation has printed — was left on the old path. Run interactively with no flags, it now runs the same guided setup. `init client` likewise.
+- **Flags alone were not enough to set up in one command.** Passing `--name` and `--role` still stopped to ask for them unless `--non-interactive` was also given: a flag naming the mechanism rather than the intent. Supplying flags now means using them. `--non-interactive` remains for scripts that want the guarantee.
+- **The local console linked to a page that does not exist there.** The shared space template offered "All spaces", which belongs to a server.
+
 - **A relative `--dir` sent config writes to the wrong file.** `space_root` was stored as whatever string `--dir` carried at init, and `Save` resolved it against the *calling* working directory — so running `contextd activate` inside a project wrote a stray `config.yaml` under that project and left the real one untouched. In client mode that silently dropped `Sync.LastHead`, so the client re-pulled the whole space every run and pushed against a stale head, inviting conflicts that were not real. The space root is now resolved to an absolute path on load and on save.
 ### Fixed
 

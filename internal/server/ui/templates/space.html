@@ -9,7 +9,7 @@
       <h1>{{.Data.Name}}</h1>
       <p class="lede">head <span class="mono">{{.Data.Head}}</span> · template {{.Data.Template}}</p>
     </div>
-    <a class="btn secondary" href="/ui/spaces">All spaces</a>
+    {{if not .Local}}<a class="btn secondary" href="/ui/spaces">All spaces</a>{{end}}
   </header>
   <div class="panel">
     <h2 class="section-title">Files</h2>

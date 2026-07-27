@@ -927,13 +927,17 @@ func printSpaceMap(out io.Writer, root, mode string) {
 	fmt.Fprintf(out, "  contextd status                     check what is wired\n")
 }
 
-// seedFileLog records every file of a freshly seeded working tree as version 1,
-// so version history covers the space from the moment it exists rather than
-// from the first time someone happens to edit through contextd.
+// seedFileLog records every file of the working tree as version 1 for anything
+// the version log does not already know.
 //
-// Files already known to the log are skipped, which makes this safe to run on a
-// re-seed: it fills gaps instead of stacking a duplicate version on content
-// that has not changed.
+// It runs at creation, and again for spaces made before creation did this: a
+// space seeded by an earlier build has its files on disk and nothing in the log,
+// so `file list` says "(no files)" while eight documents sit right there, the
+// TUI Files tab is empty, and there is nothing to open. Adoption is what makes
+// those spaces whole.
+//
+// Files already known are skipped, so running it repeatedly fills gaps rather
+// than stacking duplicate versions on unchanged content.
 func seedFileLog(cmd *cobra.Command, root string) (int, error) {
 	fl, err := openFileLog()
 	if err != nil {

@@ -19,6 +19,7 @@ import (
 	"github.com/abyssmemes/contextverse/internal/logx"
 	"github.com/abyssmemes/contextverse/internal/mcpserver"
 	"github.com/abyssmemes/contextverse/internal/plugins"
+	"github.com/abyssmemes/contextverse/internal/prompt"
 	"github.com/abyssmemes/contextverse/internal/space"
 	"github.com/abyssmemes/contextverse/internal/storage"
 	templatepkg "github.com/abyssmemes/contextverse/internal/template"
@@ -168,19 +169,34 @@ func newInitSoloCmd() *cobra.Command {
 			}
 			logx.L().Info("init solo starting", "space_root", root)
 
-			if !nonInteractive {
+			// Three ways in, and the tool should recognise which one it is.
+			//
+			// Flags given? Use them and say nothing. Asking for a name that was
+			// just passed on the command line is the tool not listening, and it
+			// meant one-command setup silently required --non-interactive as
+			// well — a flag that describes the mechanism, not the intent.
+			gaveFlags := name != "" || role != "" || tools != "" || cmd.Flags().Changed("language")
+
+			switch {
+			case nonInteractive || gaveFlags:
+				if name == "" {
+					return fmt.Errorf("--name is required when other flags are given (or drop the flags for guided setup)")
+				}
+			case prompt.Interactive():
+				// A person typed `init solo` with nothing else. This is the
+				// command everyone reaches for out of habit, so it should lead
+				// to the guided setup rather than four bare prompts with no
+				// explanation of what any of them are for.
+				return runSoloWizard(cmd)
+			default:
 				in := bufio.NewReader(cmd.InOrStdin())
 				name = askLine(in, "Your name", name)
 				role = askLine(in, "Your role", role)
 				language = askLine(in, "Preferred language", orDefault(language, "English"))
 				tools = askLine(in, "Tools you use", tools)
-			} else {
-				if name == "" {
-					return fmt.Errorf("--name is required with --non-interactive")
-				}
-				if language == "" {
-					language = "English"
-				}
+			}
+			if language == "" {
+				language = "English"
 			}
 
 			if config.Exists(root) && !force {
@@ -273,6 +289,9 @@ func newActivateCmd() *cobra.Command {
 			// was, so a document mentioning ./scripts/deploy.sh could not be
 			// checked against anything.
 			recordProjectAnchor(root, cwd, project)
+			// Spaces made before setup recorded a baseline have files on disk and
+			// nothing in the version log; adopt them so they stop being invisible.
+			adoptUntrackedFiles(cmd, root)
 			// Session-start delivery: wire detected client slots (Claude hook, Cursor rules, …).
 			if err := applySessionStartPlugins(root, cwd, project, silent); err != nil {
 				logx.L().Warn("session-start plugins", "err", err)
@@ -539,6 +558,7 @@ func newSpaceCmd() *cobra.Command {
 	cmd.AddCommand(newSpaceShowCmd())
 	cmd.AddCommand(newSpaceCreateCmd())
 	cmd.AddCommand(newSpaceDeleteCmd())
+	cmd.AddCommand(newSpaceAdoptCmd())
 
 	var (
 		templateName string

@@ -12,6 +12,7 @@ import (
 
 	"github.com/abyssmemes/contextverse/internal/config"
 	"github.com/abyssmemes/contextverse/internal/logx"
+	"github.com/abyssmemes/contextverse/internal/prompt"
 	"github.com/abyssmemes/contextverse/internal/syncclient"
 )
 
@@ -33,7 +34,17 @@ func newInitClientCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if !nonInteractive {
+			// A token is the thing you cannot guess, so its presence is what
+			// distinguishes "I am scripting this" from "walk me through it".
+			// Supplying it and still being asked for it would be absurd.
+			gaveFlags := token != ""
+
+			switch {
+			case nonInteractive || gaveFlags:
+				// Use what was given; anything missing is caught below.
+			case prompt.Interactive():
+				return runClientWizard(cmd)
+			default:
 				in := bufio.NewReader(cmd.InOrStdin())
 				url = askLine(in, "Server URL", orDefault(url, "http://127.0.0.1:8743"))
 				token = askLine(in, "API token", token)
