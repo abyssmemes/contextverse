@@ -37,11 +37,45 @@ The mode lives in your config, not in which subcommand exists — one binary doe
 
 ## Start here
 
-1. **[Install](install.md)** — Homebrew, Scoop, install script, `go install`, `.deb` / `.rpm`
-2. **[Quickstart](quickstart.md)** — from nothing to a wired AI tool
-3. **[CLI](cli.md)** — the command surface, output formats, exit codes
+<!-- Card titles are links, not headings: they are navigation, and as headings
+     they landed in the right-hand table of contents and buried the page's
+     actual sections. -->
 
-Then, as needed: **[Server](server.md)** · **[Auth & ACL](auth-acl.md)** · **[Deploy](deploy.md)**
+<div class="cv-cards" markdown>
+
+<div markdown>
+**[Install →](install.md)**{ .cv-card-title }
+Homebrew, Scoop, install script, `go install`, `.deb` / `.rpm`.
+</div>
+
+<div markdown>
+**[Quickstart →](quickstart.md)**{ .cv-card-title }
+From nothing to an AI tool reading your context.
+</div>
+
+<div markdown>
+**[Concepts →](concepts.md)**{ .cv-card-title }
+The five ideas the rest of the docs assume. Read once.
+</div>
+
+<div markdown>
+**[CLI reference →](cli.md)**{ .cv-card-title }
+Every command, structured output, exit codes.
+</div>
+
+<div markdown>
+**[Server →](server.md)**{ .cv-card-title }
+Run it for a team: spaces, users, TLS, webhooks.
+</div>
+
+<div markdown>
+**[Auth & ACL →](auth-acl.md)**{ .cv-card-title }
+Policies, path rules, tokens, audit.
+</div>
+
+</div>
+
+New to it? **[Concepts](concepts.md)** is fifteen minutes and makes everything else obvious.
 
 ## What makes it different
 

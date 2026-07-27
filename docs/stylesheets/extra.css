@@ -1,0 +1,153 @@
+/* ContextVerse documentation theme.
+ *
+ * Deliberately small: Material already handles typography and layout well.
+ * These rules do three things — align the accent with the product's own
+ * teal/ink palette, make the landing page's card grid readable, and calm down
+ * the elements that were shouting (oversized tables, unstyled keyboard keys).
+ */
+
+:root {
+  --cv-teal: #0f7a6c;
+  --cv-teal-bright: #2dd4bf;
+  --cv-ink: #0b1f33;
+  --cv-muted: #5a7085;
+}
+
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: var(--cv-teal);
+  --md-accent-fg-color: var(--cv-teal);
+  --md-typeset-a-color: var(--cv-teal);
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #12332f;
+  --md-accent-fg-color: var(--cv-teal-bright);
+  --md-typeset-a-color: var(--cv-teal-bright);
+  --md-default-bg-color: #0e1a24;
+}
+
+/* Landing hero -------------------------------------------------------------
+   The first screen states what the product is, once, without a wall of nav. */
+
+.cv-hero {
+  text-align: center;
+  padding: 2.2rem 0 1.4rem;
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+  margin-bottom: 2rem;
+}
+
+.cv-hero h1 {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.4rem;
+}
+
+.cv-hero .cv-tagline {
+  font-size: 1.15rem;
+  color: var(--md-default-fg-color--light);
+  margin: 0 auto 1.2rem;
+  max-width: 34rem;
+}
+
+.cv-hero .cv-badges {
+  font-size: 0.75rem;
+  color: var(--md-default-fg-color--light);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Card grid ---------------------------------------------------------------- */
+
+.cv-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1rem;
+  margin: 1.4rem 0 2rem;
+}
+
+.cv-cards > * {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.5rem;
+  padding: 1rem 1.1rem;
+  transition: border-color 120ms, transform 120ms;
+}
+
+.cv-cards > *:hover {
+  border-color: var(--md-accent-fg-color);
+  transform: translateY(-1px);
+}
+
+/* Card titles are links rather than headings, so they stay out of the page's
+   table of contents. They still need to read as titles. */
+.cv-cards .cv-card-title {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.cv-cards .cv-card-title a {
+  text-decoration: none;
+}
+
+.cv-cards p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--md-default-fg-color--light);
+  line-height: 1.5;
+}
+
+/* The whole card is a target, not just the six words of the link. */
+.cv-cards > *:hover .cv-card-title a {
+  color: var(--md-accent-fg-color);
+}
+
+/* Tables ------------------------------------------------------------------- */
+
+.md-typeset table:not([class]) {
+  font-size: 0.75rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+}
+
+.md-typeset table:not([class]) th {
+  font-weight: 600;
+  background: var(--md-default-fg-color--lightest);
+}
+
+/* Keyboard keys, used in the TUI docs -------------------------------------- */
+
+.md-typeset kbd {
+  display: inline-block;
+  padding: 0.05rem 0.35rem;
+  font-size: 0.75em;
+  border-radius: 0.25rem;
+  border: 1px solid var(--md-default-fg-color--lighter);
+  box-shadow: 0 1px 0 var(--md-default-fg-color--lighter);
+  background: var(--md-default-bg-color);
+}
+
+/* Admonitions: quieter borders, since the docs use them for real caveats
+   rather than decoration. */
+
+.md-typeset .admonition,
+.md-typeset details {
+  border-width: 0 0 0 3px;
+  border-radius: 0.3rem;
+  font-size: 0.76rem;
+}
+
+/* Code blocks -------------------------------------------------------------- */
+
+.md-typeset pre > code {
+  font-size: 0.74rem;
+  line-height: 1.55;
+}
+
+/* A footer note style for the honest-limits statements. */
+.cv-caveat {
+  font-size: 0.78rem;
+  color: var(--md-default-fg-color--light);
+  border-left: 3px solid var(--md-default-fg-color--lighter);
+  padding-left: 0.9rem;
+  margin: 1.2rem 0;
+}

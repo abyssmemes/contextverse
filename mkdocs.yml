@@ -1,66 +1,118 @@
 site_name: ContextVerse
-site_description: Portable, vendor-neutral context for AI — contextd docs
+site_description: Context as a Service — one context for every AI tool. Self-hosted, vendor-neutral, open source.
 site_url: https://abyssmemes.github.io/contextverse/
 repo_url: https://github.com/abyssmemes/contextverse
 repo_name: abyssmemes/contextverse
 edit_uri: edit/main/docs/
+copyright: BUSL-1.1 — source-available. Each version converts to Apache-2.0 four years after release.
 
 theme:
   name: material
+  language: en
+  # Teal/ink: the same palette the TUI and the server console use, so the
+  # documentation reads as part of the product instead of a default template.
   palette:
-    - scheme: default
-      primary: indigo
-      accent: indigo
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Follow system theme
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: teal
       toggle:
         icon: material/brightness-7
-        name: Switch to dark mode
-    - scheme: slate
-      primary: indigo
-      accent: indigo
+        name: Switch to dark
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: teal
       toggle:
         icon: material/brightness-4
-        name: Switch to light mode
+        name: Switch to light
+  font:
+    text: Inter
+    code: JetBrains Mono
   features:
-    - navigation.tabs
+    # Sections in the sidebar, no tabs: the page count is small enough that
+    # tabs would only add a second place to look for the same links.
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.tracking
     - navigation.sections
-    - navigation.expand
     - navigation.top
+    - navigation.footer
+    - toc.follow
     - search.suggest
     - search.highlight
+    - search.share
     - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
     - content.action.edit
   icon:
     repo: fontawesome/brands/github
+    edit: material/pencil
+
+extra_css:
+  - stylesheets/extra.css
 
 plugins:
   - search
 
 markdown_extensions:
+  - abbr
   - admonition
-  - pymdownx.details
-  - pymdownx.superfences
-  - pymdownx.tabbed:
-      alternate_style: true
-  - pymdownx.highlight:
-      anchor_linenums: true
-  - pymdownx.inlinehilite
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
   - tables
   - toc:
       permalink: true
-  - attr_list
+      permalink_title: Link to this section
+      toc_depth: 3
+  - pymdownx.betterem
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets:
+      base_path: [.]
+      check_paths: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
 
 nav:
   - Home: index.md
-  - Install: install.md
-  - Quickstart: quickstart.md
-  - CLI: cli.md
-  - Server: server.md
-  - Deploy (Docker & Helm): deploy.md
-  - Auth & ACL: auth-acl.md
-  - Packaging & releases: packaging.md
-  - Contributing: contributing.md
+  - Getting started:
+      - Install: install.md
+      - Quickstart: quickstart.md
+      - Concepts: concepts.md
+  - Using contextd:
+      - CLI reference: cli.md
+      - Templates: templates.md
+  - Running a server:
+      - Server: server.md
+      - Auth & ACL: auth-acl.md
+      - Deploy: deploy.md
+  - Project:
+      - Changelog: changelog.md
+      - Packaging & releases: packaging.md
+      - Contributing: contributing.md
 
 extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/abyssmemes/contextverse
+      name: ContextVerse on GitHub
