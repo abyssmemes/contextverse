@@ -5,9 +5,10 @@
 <script nonce="{{.Nonce}}">
 (function(){try{var t=localStorage.getItem("contextverse-theme");if(t==="dark")document.documentElement.setAttribute("data-theme","dark");else document.documentElement.setAttribute("data-theme","light");}catch(e){document.documentElement.setAttribute("data-theme","light");}})();
 </script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+{{/* No web fonts. The console now uses the system monospace stack, so a
+     machine that is offline, behind a proxy, or simply slow renders exactly
+     what everyone else sees — and a tool that edits your files does not need to
+     announce every page load to a font CDN. */}}
 <link rel="stylesheet" href="/ui/static/app.css">
 <script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfVWEgJBjdVuMkbOmLA" crossorigin="anonymous"></script>
 <script defer src="/ui/static/theme.js"></script>
@@ -104,14 +105,16 @@
       <div style="display:flex;gap:8px;align-items:center;">
         {{template "theme-btn" .}}
       </div>
-      <div class="muted" style="font-size:0.75rem;">Serving your own space on this machine. Stop with <span class="kbd">Ctrl-C</span>.</div>
+      <div class="muted" style="font-size:0.72rem;">Serving your own space on this machine. Stop with <span class="kbd">Ctrl-C</span>.</div>
+      <a class="side-docs" href="https://abyssmemes.github.io/contextverse/" target="_blank" rel="noreferrer noopener">Documentation ↗</a>
       {{else}}
       <div class="who"><strong>{{.User}}</strong><br>{{.Role}}</div>
       <div style="display:flex;gap:8px;align-items:center;">
         {{template "theme-btn" .}}
         <a class="btn secondary" href="/ui/logout" style="flex:1;text-align:center;padding:8px 12px;font-size:0.85rem;">Logout</a>
       </div>
-      <div class="muted" style="font-size:0.75rem;">Theme <span class="kbd">d</span> · canvas only</div>
+      <div class="muted" style="font-size:0.72rem;">Theme <span class="kbd">d</span></div>
+      <a class="side-docs" href="https://abyssmemes.github.io/contextverse/" target="_blank" rel="noreferrer noopener">Documentation ↗</a>
       {{end}}
     </div>
   </aside>

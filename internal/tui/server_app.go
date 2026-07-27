@@ -625,7 +625,7 @@ func (m serverModel) reloadSpaceFiles() tea.Cmd {
 		if err != nil {
 			return spaceFilesMsg{space: space, err: err}
 		}
-		files, err := listTrackedFiles(fl)
+		files, err := listSpaceFiles(fl, svcSpaceRoot(dir, space))
 		return spaceFilesMsg{space: space, files: files, err: err}
 	}
 }
@@ -662,7 +662,7 @@ func (m serverModel) spaceEnter() tea.Cmd {
 			if err != nil {
 				return spaceFilesMsg{space: space, err: err}
 			}
-			files, err := listTrackedFiles(fl)
+			files, err := listSpaceFiles(fl, svcSpaceRoot(dir, space))
 			return spaceFilesMsg{space: space, files: files, err: err}
 		}
 	case 1:

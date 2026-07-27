@@ -1,72 +1,99 @@
 /* ContextVerse space UI — gradient sidebar + white/dark canvas.
    Dark mode flips only the canvas (main) surface; sidebar gradient stays. */
 
-:root {
-  --sidebar-grad: linear-gradient(
-    165deg,
-    #5b4db8 0%,
-    #7a5fc7 28%,
-    #c27a9a 62%,
-    #e8a078 100%
-  );
-  --sidebar-text: #ffffff;
-  --sidebar-muted: rgba(255, 255, 255, 0.62);
-  --sidebar-active: rgba(255, 255, 255, 0.18);
+/* ContextVerse console — minimal brutalism.
+ *
+ * A tool for people who live in a terminal should not look like a marketing
+ * page. The previous theme led with a pink-to-violet gradient, a serif display
+ * face, soft shadows and 16px radii: decoration that carried no information and
+ * competed with the content for attention.
+ *
+ * The rules here are the boring ones that make tool interfaces legible:
+ *   · one type family, monospace, because every value on screen is a path, a
+ *     version, an identifier or a command — things you compare character by
+ *     character;
+ *   · flat surfaces, hairline borders, no shadows: depth is not a fact about
+ *     the data;
+ *   · square corners, because rounding says "soft consumer app" and this is a
+ *     file editor with a version log;
+ *   · colour reserved for meaning — accent marks the current thing, red marks
+ *     danger, amber marks stale. Nothing is coloured to be pretty;
+ *   · high contrast in both themes, since half the audience works at night.
+ */
 
-  --ink: #1a1f36;
-  --ink-soft: #8b93a7;
+:root {
+  --ink: #12151a;
+  --ink-soft: #5b6470;
   --paper: #ffffff;
-  --paper-2: #f5f6fa;
+  --paper-2: #f4f5f7;
   --panel: #ffffff;
   --panel-solid: #ffffff;
-  --line: #e8ebf2;
-  --line-soft: rgba(26, 31, 54, 0.08);
-  --accent: #4f6ef7;
-  --accent-soft: #eef1ff;
-  --accent-glow: rgba(79, 110, 247, 0.22);
+  --line: #12151a;
+  --line-soft: #d8dbe0;
+  --accent: #0f7a6c;
+  --accent-soft: #e3f2ef;
+  --accent-glow: transparent;
   --on-accent: #ffffff;
   --on-ink: #ffffff;
-  --ok: #2f7a52;
-  --ok-soft: #eaf7ef;
-  --danger: #b54a3c;
-  --danger-soft: #fdeeee;
-  --token-bg: #1a1f36;
-  --token-fg: #eef0f6;
+  --ok: #1a6b3c;
+  --ok-soft: #e6f4ec;
+  --danger: #a32b1c;
+  --danger-soft: #fdecea;
+  --warn: #8a5a00;
+  --warn-soft: #fdf3e0;
+  --token-bg: #12151a;
+  --token-fg: #f4f5f7;
   --input-bg: #ffffff;
-  --shadow: 0 8px 30px rgba(26, 31, 54, 0.06);
-  --hover: #f3f0ff;
-  --radius: 16px;
-  --radius-sm: 12px;
-  --font-display: "Fraunces", "Georama", Georgia, serif;
-  --font-body: "IBM Plex Sans", "Georama", "Segoe UI", sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  --sidebar-w: 248px;
+  --shadow: none;
+  --hover: #eef0f2;
+
+  --sidebar-bg: #12151a;
+  --sidebar-text: #f4f5f7;
+  --sidebar-muted: #8b939e;
+  --sidebar-active: #0f7a6c;
+  --sidebar-grad: var(--sidebar-bg);
+
+  --radius: 0px;
+  --radius-sm: 0px;
+
+  /* One family. Tool interfaces are read as data, not as prose. */
+  --font-display: ui-monospace, "SF Mono", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+  --font-body: ui-monospace, "SF Mono", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+
+  --sidebar-w: 236px;
   color-scheme: light;
 }
 
 html[data-theme="dark"] {
-  --ink: #eef0f6;
-  --ink-soft: #9aa3b5;
-  --paper: #171a24;
-  --paper-2: #1e2330;
-  --panel: #1e2330;
-  --panel-solid: #1e2330;
-  --line: #2a3040;
-  --line-soft: rgba(238, 240, 246, 0.08);
-  --accent: #7b93ff;
-  --accent-soft: #243056;
-  --accent-glow: rgba(123, 147, 255, 0.28);
-  --on-accent: #ffffff;
-  --on-ink: #171a24;
-  --ok: #8fd4a8;
-  --ok-soft: #1d3228;
-  --danger: #f0a8a0;
-  --danger-soft: #3a2222;
-  --token-bg: #0e1118;
-  --token-fg: #eef0f6;
-  --input-bg: #171a24;
-  --shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
-  --hover: #252a3a;
+  --ink: #e6e9ed;
+  --ink-soft: #8b939e;
+  --paper: #0d1014;
+  --paper-2: #14181d;
+  --panel: #0d1014;
+  --panel-solid: #14181d;
+  --line: #2b323b;
+  --line-soft: #222831;
+  --accent: #2dd4bf;
+  --accent-soft: #10312d;
+  --on-accent: #0d1014;
+  --on-ink: #0d1014;
+  --ok: #4ade80;
+  --ok-soft: #10281a;
+  --danger: #f87171;
+  --danger-soft: #2c1616;
+  --warn: #fbbf24;
+  --warn-soft: #2b2210;
+  --token-bg: #000000;
+  --token-fg: #e6e9ed;
+  --input-bg: #0d1014;
+  --hover: #1a1f26;
+
+  --sidebar-bg: #080a0d;
+  --sidebar-text: #e6e9ed;
+  --sidebar-muted: #6f7883;
+  --sidebar-active: #2dd4bf;
+  --sidebar-grad: var(--sidebar-bg);
   color-scheme: dark;
 }
 
@@ -75,16 +102,17 @@ html { height: 100%; scroll-behavior: smooth; }
 html, body { margin: 0; min-height: 100%; }
 body {
   font-family: var(--font-body);
+  font-size: 13px;
   color: var(--ink);
-  background: #1a1428;
+  background: var(--paper);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
 body.app {
-  background: var(--sidebar-grad);
+  background: var(--paper);
 }
 body.auth {
-  background: var(--sidebar-grad);
+  background: var(--paper-2);
   min-height: 100vh;
 }
 
@@ -968,3 +996,132 @@ ul.plain {
 ul.plain li {
   padding: 0.15rem 0;
 }
+
+/* ── Brutalist corrections ────────────────────────────────────────────────
+   Applied after the original rules so no existing selector has to be hunted
+   down and edited; these win on order. */
+
+.app-sidebar {
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--line);
+}
+
+.app-sidebar .brand,
+.hero .brand {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+}
+
+.app-nav a {
+  border-radius: 0;
+  border-left: 2px solid transparent;
+  font-size: 0.82rem;
+}
+
+.app-nav a.active {
+  background: transparent;
+  border-left-color: var(--sidebar-active);
+  color: var(--sidebar-active);
+  font-weight: 700;
+}
+
+.sidebar-label {
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+}
+
+/* Panels: a box is a box. */
+.panel,
+.flash,
+.table-wrap,
+.wizard-steps li,
+input, select, textarea, .btn, .chip, .file-pre, pre, code {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+  margin-bottom: 14px;
+}
+
+.section-title {
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  font-weight: 700;
+}
+
+/* Tables read as data: hairlines, no zebra, aligned monospace. */
+table { font-size: 0.8rem; }
+table th {
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--line);
+}
+table td { border-bottom: 1px solid var(--line-soft); }
+tr:hover td { background: var(--hover); }
+
+.btn {
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  padding: 6px 12px;
+}
+.btn:hover { background: var(--ink); color: var(--on-ink); }
+.btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.1); }
+
+.chip {
+  border: 1px solid var(--line-soft);
+  font-size: 0.7rem;
+  padding: 1px 6px;
+}
+.chip:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+
+/* Long content must never push the page sideways — the graph page's Mermaid
+   block and any wide table were doing exactly that. */
+.app-main { overflow-x: hidden; }
+.panel > p, .panel > .muted, .lede { overflow-wrap: anywhere; }
+.table-wrap { overflow-x: auto; }
+
+.file-pre, pre {
+  background: var(--token-bg);
+  color: var(--token-fg);
+  border: 1px solid var(--line);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  padding: 12px 14px;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.muted { color: var(--ink-soft); }
+
+.kbd {
+  font-family: var(--font-mono);
+  border: 1px solid var(--line-soft);
+  padding: 0 4px;
+  font-size: 0.72rem;
+}
+
+/* Docs link in the sidebar footer. */
+.side-docs {
+  display: block;
+  margin-top: 10px;
+  font-size: 0.74rem;
+  color: var(--sidebar-muted);
+  text-decoration: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  padding-top: 10px;
+}
+.side-docs:hover { color: var(--sidebar-text); text-decoration: underline; }

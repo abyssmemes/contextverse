@@ -681,15 +681,19 @@ func (m model) renderFiles(w, h int) string {
 	for _, f := range m.files {
 		leftLabels = append(leftLabels, f.Label)
 	}
-	left := renderSelectableList(leftLabels, m.cursor, w*55/100-4, h-4, "(no tracked files)")
+	left := renderSelectableList(leftLabels, m.cursor, w*55/100-4, h-4, "(this space has no files)")
 	if m.edit.picking {
 		return SplitTwo("Files", left, "Open with", m.edit.renderPicker(), w, h, 55)
 	}
 	detail := "Select a file, Enter to edit it.\n\nSame as Web UI / contextd file edit|list|history|revert"
 	if m.cursor < len(m.files) {
 		f := m.files[m.cursor]
+		ver := storage.DisplayVersion(storage.Version(f.Version))
+		if f.Untracked {
+			ver = "not yet versioned — editing it records v1"
+		}
 		detail = fmt.Sprintf("File: %s\nVersion: %s\n\nenter  edit in your editor\nv      preview\nV      version history\nr      refresh list",
-			f.Path, storage.DisplayVersion(storage.Version(f.Version)))
+			f.Path, ver)
 	}
 	return SplitTwo("Files", left, "Detail", detail, w, h, 55)
 }
@@ -815,7 +819,7 @@ func loadFilesCmd(spaceRoot string) tea.Cmd {
 		if err != nil {
 			return filesLoadedMsg{err: err}
 		}
-		files, err := listTrackedFiles(fl)
+		files, err := listSpaceFiles(fl, spaceRoot)
 		return filesLoadedMsg{files: files, err: err}
 	}
 }

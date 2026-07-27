@@ -123,3 +123,9 @@ func RunServerAction(a ServerAction, dataDir string) (string, error) {
 	out, err := cmd.CombinedOutput()
 	return strings.TrimSpace(string(out)), err
 }
+
+// svcSpaceRoot is where a server keeps a space's working tree, so the Files
+// drill-down can list what is there rather than only what has a version.
+func svcSpaceRoot(dataDir, space string) string {
+	return filepath.Join(dataDir, "spaces", space)
+}
