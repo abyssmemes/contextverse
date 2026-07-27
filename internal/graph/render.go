@@ -273,3 +273,47 @@ func RenderSpaceMap(g *Graph, now time.Time) string {
 	}
 	return b.String()
 }
+
+// Mermaid renders the top-ranked slice of the graph as a diagram source.
+//
+// Deliberately a slice: a whole graph of any size renders as an unreadable
+// hairball, and a picture nobody can read is worse than a list.
+func Mermaid(g *Graph, limit int) string {
+	if limit <= 0 || limit > len(g.Nodes) {
+		limit = len(g.Nodes)
+	}
+	keep := map[string]string{}
+	for i, n := range g.Nodes[:limit] {
+		keep[n.Path] = fmt.Sprintf("n%d", i)
+	}
+
+	var b strings.Builder
+	b.WriteString("graph LR\n")
+
+	paths := make([]string, 0, len(keep))
+	for p := range keep {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	for _, p := range paths {
+		node, _ := g.Node(p)
+		label := node.Title
+		if label == "" {
+			label = p
+		}
+		label = strings.ReplaceAll(label, `"`, "'")
+		b.WriteString(fmt.Sprintf("  %s[\"%s\"]\n", keep[p], label))
+	}
+	for _, e := range g.Edges {
+		if e.Broken || e.Code {
+			continue
+		}
+		from, okF := keep[e.From]
+		to, okT := keep[e.To]
+		if !okF || !okT || from == to {
+			continue
+		}
+		b.WriteString(fmt.Sprintf("  %s --> %s\n", from, to))
+	}
+	return b.String()
+}

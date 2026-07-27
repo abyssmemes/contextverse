@@ -42,6 +42,7 @@ import (
 	"time"
 
 	"github.com/abyssmemes/contextverse/internal/config"
+	"github.com/abyssmemes/contextverse/internal/graph"
 	"github.com/abyssmemes/contextverse/internal/logx"
 	"github.com/abyssmemes/contextverse/internal/server/ui"
 	"github.com/abyssmemes/contextverse/internal/storage"
@@ -61,6 +62,7 @@ type Options struct {
 	Addr      string // host:port; port 0 picks a free one
 	FileLog   *storage.FileLog
 	Mode      string
+	Anchors   map[string]string // project → checkout, so code links can be checked
 }
 
 // Server is a local web console.
@@ -138,6 +140,7 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("GET /auth", s.handleAuth)
 	mux.HandleFunc("GET /{$}", s.guard(s.handleOverview))
 	mux.HandleFunc("GET /ui/spaces/local", s.guard(s.handleSpace))
+	mux.HandleFunc("GET /ui/graph", s.guard(s.handleGraph))
 	mux.HandleFunc("GET /ui/spaces/local/files/{path...}", s.guard(s.handleFile))
 	mux.HandleFunc("POST /ui/spaces/local/files/{path...}", s.guard(s.handleFileSave))
 	return s.secure(mux)
@@ -309,6 +312,62 @@ func (s *Server) listFiles(ctx context.Context) ([]fileRow, error) {
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Path < rows[j].Path })
 	return rows, nil
+}
+
+// graphView is the graph page's model. The console shows the graph as something
+// you click through rather than a drawing: rendering a picture needs a layout
+// engine, and vendoring one would put a megabyte of JavaScript in the binary for
+// a single page. The Mermaid source is offered instead, for anywhere that
+// already renders it.
+type graphView struct {
+	Summary string
+	Rows    []graphRow
+	Orphans []string
+	Broken  []graph.Edge
+	Mermaid string
+}
+
+type graphRow struct {
+	Path      string
+	Title     string
+	Stale     bool
+	InDegree  int
+	OutDegree int
+	Links     []string
+}
+
+func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
+	g, err := graph.Load(graph.Options{Root: s.opts.SpaceRoot, Anchors: s.opts.Anchors})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	v := graphView{
+		Summary: g.Summary(),
+		Orphans: g.Orphans,
+		Broken:  g.Broken,
+		Mermaid: graph.Mermaid(g, 40),
+	}
+	for _, n := range g.Nodes {
+		out, _ := g.Neighbours(n.Path)
+		links := make([]string, 0, len(out))
+		for _, e := range out {
+			if e.Broken || e.Code {
+				continue
+			}
+			links = append(links, e.To)
+		}
+		v.Rows = append(v.Rows, graphRow{
+			Path:      n.Path,
+			Title:     n.Title,
+			Stale:     n.Stale,
+			InDegree:  n.InDegree,
+			OutDegree: n.OutDegree,
+			Links:     links,
+		})
+	}
+	_ = ui.Render(w, "graph.html", s.page(r, "Graph", "graph", v))
 }
 
 type fileView struct {

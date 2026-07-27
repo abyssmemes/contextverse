@@ -1,0 +1,81 @@
+{{define "graph.html"}}
+<!doctype html>
+<html lang="en">
+<head>{{template "head" .}}</head>
+<body class="app">
+  {{template "app-open" .}}
+  <header class="page-head">
+    <div>
+      <h1>Graph</h1>
+      <p class="lede">{{.Data.Summary}} · derived from the links in your documents, not from a model</p>
+    </div>
+  </header>
+
+  {{if .Data.Broken}}
+  <div class="panel">
+    <h2 class="section-title">Links pointing at nothing ({{len .Data.Broken}})</h2>
+    <p class="muted">A document names a file that is not there. For a code path, the script moved or was deleted.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>In</th><th>Line</th><th>Points at</th></tr></thead>
+        <tbody>
+        {{range .Data.Broken}}
+          <tr>
+            <td><a href="/ui/spaces/local/files/{{.From}}">{{.From}}</a></td>
+            <td class="mono">{{.Line}}</td>
+            <td class="mono">{{.Raw}}{{if .Code}} <span class="muted">(code)</span>{{end}}</td>
+          </tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {{end}}
+
+  <div class="panel">
+    <h2 class="section-title">Documents</h2>
+    <p class="muted">Ranked by how much of the space leads here, lifted by declared importance and cut when a document is past its review date.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Document</th><th>In</th><th>Out</th><th>Links to</th></tr></thead>
+        <tbody>
+        {{range .Data.Rows}}
+          <tr>
+            <td>
+              <a href="/ui/spaces/local/files/{{.Path}}">{{.Path}}</a>
+              {{if .Stale}}<span class="muted"> ⚠ past review</span>{{end}}
+              {{if .Title}}<br><span class="muted">{{.Title}}</span>{{end}}
+            </td>
+            <td class="mono">{{.InDegree}}</td>
+            <td class="mono">{{.OutDegree}}</td>
+            <td>
+              {{range .Links}}<a href="/ui/graph#{{.}}" class="chip">{{.}}</a> {{end}}
+              {{if not .Links}}<span class="muted">—</span>{{end}}
+            </td>
+          </tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {{if .Data.Orphans}}
+  <div class="panel">
+    <h2 class="section-title">Nothing links here ({{len .Data.Orphans}})</h2>
+    <p class="muted">Reachable only if someone already knows the path — which an AI following your entry point does not.</p>
+    <ul class="plain">
+      {{range .Data.Orphans}}<li><a href="/ui/spaces/local/files/{{.}}">{{.}}</a></li>{{end}}
+    </ul>
+  </div>
+  {{end}}
+
+  <div class="panel">
+    <h2 class="section-title">Diagram source</h2>
+    <p class="muted">Mermaid, for pasting into a document or a wiki that renders it. The console does not draw the graph itself: that needs a layout engine, and shipping one would mean a megabyte of JavaScript for one page.</p>
+    <pre class="file-pre">{{.Data.Mermaid}}</pre>
+  </div>
+
+  {{template "app-close" .}}
+</body>
+</html>
+{{end}}

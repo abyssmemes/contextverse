@@ -939,3 +939,32 @@ tr:hover td { background: var(--hover); }
   align-items: center;
   margin-bottom: 14px;
 }
+
+/* Graph page ---------------------------------------------------------------
+   A chip is a link to another document; several fit on a row where a list
+   would push the table height past what fits on screen. */
+
+.chip {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  margin: 0 0.15rem 0.2rem 0;
+  border: 1px solid var(--md-default-fg-color--lightest, rgba(128, 128, 128, 0.3));
+  border-radius: 0.75rem;
+  font-size: 0.72rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.chip:hover {
+  border-color: currentColor;
+}
+
+ul.plain {
+  list-style: none;
+  padding-left: 0;
+  margin: 0.4rem 0 0;
+}
+
+ul.plain li {
+  padding: 0.15rem 0;
+}

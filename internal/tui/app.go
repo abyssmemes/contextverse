@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/abyssmemes/contextverse/internal/config"
+	"github.com/abyssmemes/contextverse/internal/graph"
 	"github.com/abyssmemes/contextverse/internal/storage"
 	"github.com/abyssmemes/contextverse/internal/version"
 )
@@ -24,39 +25,53 @@ const (
 	tabFiles
 	tabPlugins
 	tabOutput
+	tabGraph
 	tabHelp
 )
 
-var clientTabNames = []string{"1 Space", "2 Projects", "3 Files", "4 Plugins", "5 Output", "? Help"}
+// Graph is appended rather than slotted next to Files, where it arguably
+// belongs: renumbering the existing tabs would break the muscle memory of
+// anyone already using them, for a tidier list nobody asked for.
+var clientTabNames = []string{"1 Space", "2 Projects", "3 Files", "4 Plugins", "5 Output", "6 Graph", "? Help"}
 
 type model struct {
-	spaceRoot string
-	cwd       string
-	width     int
-	height    int
-	snap      Snapshot
-	tab       clientTab
-	cursor    int
+	spaceRoot  string
+	cwd        string
+	width      int
+	height     int
+	snap       Snapshot
+	tab        clientTab
+	cursor     int
 	focusRight bool // Output viewport focused for scrolling
-	busy      bool
-	quitting  bool
-	spin      spinner.Model
-	vp        viewport.Model
-	ready     bool
+	busy       bool
+	quitting   bool
+	spin       spinner.Model
+	vp         viewport.Model
+	ready      bool
 
 	// Files tab (version switch)
-	files         []TrackedFile
-	filePath      string
-	fileVersions  []FileVersionRow
-	fileVerMode   bool // true = browsing versions of filePath
-	filesErr      string
+	files        []TrackedFile
+	filePath     string
+	fileVersions []FileVersionRow
+	fileVerMode  bool // true = browsing versions of filePath
+	filesErr     string
 
 	edit editState
+
+	// Graph tab
+	graph      *graph.Graph
+	graphErr   string
+	graphFocus string // when set, showing this document's neighbourhood
 }
 
 type refreshMsg Snapshot
 type actionDoneMsg struct {
 	msg string
+	err error
+}
+
+type graphLoadedMsg struct {
+	g   *graph.Graph
 	err error
 }
 
@@ -143,6 +158,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resizeViewport()
 		cmds = append(cmds, refreshCmd(m.spaceRoot), m.spin.Tick)
 		return m, tea.Batch(cmds...)
+
+	case graphLoadedMsg:
+		m.busy = false
+		if msg.err != nil {
+			m.graphErr = msg.err.Error()
+			return m, nil
+		}
+		m.graph = msg.g
+		m.graphErr = ""
+		return m, nil
 
 	case filesLoadedMsg:
 		m.busy = false
@@ -278,9 +303,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.focusRight = true
 			m.resizeViewport()
 			return m, nil
+		case "6":
+			m.tab = tabGraph
+			m.cursor = 0
+			m.graphFocus = ""
+			m.busy = true
+			return m, tea.Batch(loadGraphCmd(m.spaceRoot), m.spin.Tick)
 		case "esc":
 			if m.edit.picking {
 				m.edit.cancel()
+				return m, nil
+			}
+			if m.tab == tabGraph && m.graphFocus != "" {
+				m.graphFocus = ""
+				m.cursor = 0
 				return m, nil
 			}
 			if m.tab == tabFiles && m.fileVerMode {
@@ -322,6 +358,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "enter":
+			if m.tab == tabGraph {
+				if p := m.graphSelection(); p != "" {
+					m.graphFocus = p
+					m.cursor = 0
+				}
+				return m, nil
+			}
 			if m.tab != tabFiles {
 				return m, nil
 			}
@@ -442,6 +485,8 @@ func (m model) maxCursor() int {
 		} else {
 			n = len(m.files)
 		}
+	case tabGraph:
+		n = len(m.graphRows())
 	case tabPlugins:
 		n = len(m.snap.Plugins)
 	default:
@@ -485,6 +530,13 @@ func (m model) View() string {
 	keys := "a activate · i install · s status · ! shell · r refresh · 1–5 · j/k · ? · q"
 	if m.snap.Mode == "client" {
 		keys = "a activate · i install · u/U pull/push · s status · r refresh · 1–5 · j/k · ? · q"
+	}
+	if m.tab == tabGraph {
+		if m.graphFocus != "" {
+			keys = "enter walk · esc back · r re-derive · 1–6 · q"
+		} else {
+			keys = "enter connections · j/k move · r re-derive · 1–6 · q"
+		}
 	}
 	if m.tab == tabFiles {
 		switch {
@@ -541,6 +593,11 @@ func (m model) renderBody(w, h int) string {
 			"Deliver context to AI tools (tab 4 · Plugins)",
 			"  i           wire detected clients   → contextd plugin install",
 			"",
+			"Move through the space (tab 6 · Graph)",
+			"  enter       open a document's connections, then walk them",
+			"  esc         back out to the whole graph",
+			"              → contextd graph",
+			"",
 			"Interfaces",
 			"  !           spawn $SHELL (return with exit; Model A / local)",
 			"  q           quit (under Model A login → host shell)",
@@ -554,7 +611,10 @@ func (m model) renderBody(w, h int) string {
 
 	case tabOutput:
 		header := stylePaneTitle.Render("Command output")
-		return stylePane.Width(w-2).Height(h).Render(header + "\n" + m.vp.View())
+		return stylePane.Width(w - 2).Height(h).Render(header + "\n" + m.vp.View())
+
+	case tabGraph:
+		return m.renderGraph(w, h)
 
 	case tabFiles:
 		return m.renderFiles(w, h)
@@ -596,7 +656,7 @@ func (m model) renderBody(w, h int) string {
 func (m model) renderFiles(w, h int) string {
 	if m.filesErr != "" && len(m.files) == 0 && !m.fileVerMode {
 		body := styleErr.Render(m.filesErr) + "\n\n" + styleMuted.Render("Open a space with a storage backend (config.yaml).")
-		return stylePane.Width(w-2).Height(h).Render(fillHeight(body, h-2))
+		return stylePane.Width(w - 2).Height(h).Render(fillHeight(body, h-2))
 	}
 	if m.fileVerMode {
 		labels := make([]string, 0, len(m.fileVersions))

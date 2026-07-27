@@ -132,11 +132,11 @@ func listPlugins(spaceRoot string) []PluginInfo {
 type Action string
 
 const (
-	ActionActivate     Action = "activate"
+	ActionActivate      Action = "activate"
 	ActionPluginInstall Action = "plugin-install"
-	ActionStatus       Action = "status"
-	ActionPull         Action = "pull"
-	ActionPush         Action = "push"
+	ActionStatus        Action = "status"
+	ActionPull          Action = "pull"
+	ActionPush          Action = "push"
 )
 
 // RunAction runs an action against the space (wrapper over CLI-equivalent ops).

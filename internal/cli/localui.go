@@ -47,6 +47,7 @@ To serve a space to other people, you want a server: contextd init server.`,
 				Addr:      addr,
 				FileLog:   fl,
 				Mode:      string(cfg.Mode),
+				Anchors:   anchorsFrom(cfg),
 			})
 			if err != nil {
 				return err
@@ -139,4 +140,14 @@ func newUIUninstallCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// anchorsFrom flattens the recorded project anchors for the graph, so the
+// console can tell a live code reference from a dead one.
+func anchorsFrom(cfg *config.Config) map[string]string {
+	out := map[string]string{}
+	for _, a := range cfg.Anchors {
+		out[a.Project] = a.Path
+	}
+	return out
 }

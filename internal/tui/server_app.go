@@ -43,11 +43,11 @@ type serverModel struct {
 	vp       viewport.Model
 
 	// Space → files → versions drill-down
-	spaceName    string
-	spaceFiles   []TrackedFile
-	spaceFile    string
-	spaceVers    []FileVersionRow
-	spaceDrill   int // 0=spaces list, 1=files, 2=versions
+	spaceName     string
+	spaceFiles    []TrackedFile
+	spaceFile     string
+	spaceVers     []FileVersionRow
+	spaceDrill    int // 0=spaces list, 1=files, 2=versions
 	spaceFilesErr string
 
 	edit editState
@@ -463,7 +463,7 @@ func (m serverModel) renderBody(w, h int) string {
 		msg := styleErr.Render("Server not initialized.") + "\n\n" +
 			styleMuted.Render("Run: contextd init server") + "\n" +
 			styleMuted.Render("Then: contextd tui --server")
-		return stylePane.Width(w-2).Height(h).Render(fillHeight(msg, h-2))
+		return stylePane.Width(w - 2).Height(h).Render(fillHeight(msg, h-2))
 	}
 
 	switch m.tab {
@@ -498,7 +498,7 @@ func (m serverModel) renderBody(w, h int) string {
 			"Groups match contextd --help. No UI-only ops — every action is a",
 			"command, and users/policies/audit/webhooks are CLI or Web UI for now.",
 		}, "\n")
-		return stylePane.Width(w-2).Height(h).Render(fillHeight(help, h-2))
+		return stylePane.Width(w - 2).Height(h).Render(fillHeight(help, h-2))
 
 	case serverTabOutput:
 		content := m.snap.Output
@@ -510,13 +510,13 @@ func (m serverModel) renderBody(w, h int) string {
 		if m.snap.Output == "" {
 			view = content
 		}
-		return stylePane.Width(w-2).Height(h).Render(stylePaneTitle.Render("Command output") + "\n" + view)
+		return stylePane.Width(w - 2).Height(h).Render(stylePaneTitle.Render("Command output") + "\n" + view)
 
 	case serverTabBackend:
 		body := fmt.Sprintf("Driver / target\n\n%s\n\n%s",
 			m.snap.Backend,
 			styleMuted.Render("Change via: contextd backend …  or admin Web UI"))
-		return stylePane.Width(w-2).Height(h).Render(fillHeight(body, h-2))
+		return stylePane.Width(w - 2).Height(h).Render(fillHeight(body, h-2))
 
 	case serverTabSpaces:
 		return m.renderSpaceDrill(w, h)
@@ -548,7 +548,7 @@ func (m serverModel) renderBody(w, h int) string {
 				"  contextd init server            guided, opens a setup page\n" +
 				"  contextd init server --noui     headless / over SSH\n\n" +
 				styleMuted.Render("Different data dir? contextd --server-dir <path> tui --server")
-			return stylePane.Width(w-2).Height(h).Render(fillHeight(body, h-2))
+			return stylePane.Width(w - 2).Height(h).Render(fillHeight(body, h-2))
 		}
 		cards := []string{
 			fmt.Sprintf("listen     %s", m.snap.Listen),
@@ -562,7 +562,7 @@ func (m serverModel) renderBody(w, h int) string {
 			"",
 			styleMuted.Render("s status · H health · 2 spaces · 3 users · 4 policies"),
 		}
-		return stylePane.Width(w-2).Height(h).Render(
+		return stylePane.Width(w - 2).Height(h).Render(
 			stylePaneTitle.Render("Overview") + "\n" + fillHeight(strings.Join(cards, "\n"), h-3),
 		)
 	}
@@ -573,7 +573,7 @@ func (m serverModel) renderSpaceDrill(w, h int) string {
 	case 1:
 		if m.spaceFilesErr != "" && len(m.spaceFiles) == 0 {
 			body := styleErr.Render(m.spaceFilesErr)
-			return stylePane.Width(w-2).Height(h).Render(fillHeight(body, h-2))
+			return stylePane.Width(w - 2).Height(h).Render(fillHeight(body, h-2))
 		}
 		labels := make([]string, 0, len(m.spaceFiles))
 		for _, f := range m.spaceFiles {

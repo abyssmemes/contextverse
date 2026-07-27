@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/abyssmemes/contextverse/internal/graph"
 )
 
 func stubEditor(t *testing.T, name string) {
@@ -202,5 +204,74 @@ func TestHelpTabMatchesRealKeys(t *testing.T) {
 	}
 	if strings.Contains(help, "3  plugins") {
 		t.Error("help still calls tab 3 the plugins tab; it is Files")
+	}
+}
+
+// The Graph tab is navigation: the cursor and the document it would walk to
+// must not drift apart, and a row that points nowhere must not be walkable.
+func TestGraphTabRowsCarryTheirTarget(t *testing.T) {
+	m := filesModel(t)
+	m.tab = tabGraph
+	m.graph = &graph.Graph{
+		Nodes: []graph.Node{
+			{Path: "context-entry.md", Title: "Entry", OutDegree: 1},
+			{Path: "team/principles.md", Title: "Principles", InDegree: 1},
+		},
+		Edges: []graph.Edge{
+			{From: "context-entry.md", To: "team/principles.md", Line: 3},
+		},
+	}
+	m.graph.Reindex()
+
+	rows := m.graphRows()
+	if len(rows) != 2 {
+		t.Fatalf("got %d rows, want one per document", len(rows))
+	}
+	if rows[0].target != "context-entry.md" {
+		t.Errorf("row 0 targets %q", rows[0].target)
+	}
+
+	// Enter opens the selected document's connections.
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(model)
+	if m.graphFocus != "context-entry.md" {
+		t.Fatalf("focus = %q after enter, want the selected document", m.graphFocus)
+	}
+
+	rows = m.graphRows()
+	if len(rows) != 1 || rows[0].target != "team/principles.md" {
+		t.Fatalf("neighbourhood rows = %+v, want the one outbound edge", rows)
+	}
+
+	// esc backs out to the whole graph rather than leaving the tab.
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = next.(model)
+	if m.graphFocus != "" {
+		t.Error("esc did not back out of the focused document")
+	}
+	if m.tab != tabGraph {
+		t.Error("esc left the Graph tab instead of backing out one level")
+	}
+}
+
+// A broken or code edge is not somewhere to walk to; offering it would send the
+// user to a document that does not exist.
+func TestGraphTabWillNotWalkToNothing(t *testing.T) {
+	m := filesModel(t)
+	m.tab = tabGraph
+	m.graphFocus = "a.md"
+	m.graph = &graph.Graph{
+		Nodes: []graph.Node{{Path: "a.md"}},
+		Edges: []graph.Edge{
+			{From: "a.md", To: "gone.md", Line: 1, Broken: true},
+			{From: "a.md", To: "./x.sh", Line: 2, Code: true},
+		},
+	}
+	m.graph.Reindex()
+
+	for _, r := range m.graphRows() {
+		if r.target != "" {
+			t.Errorf("row %q offers a walk to %q, but it points at nothing reachable", r.label, r.target)
+		}
 	}
 }

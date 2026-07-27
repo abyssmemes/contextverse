@@ -3,8 +3,6 @@ package cli
 import (
 	"fmt"
 	"io"
-	"sort"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -90,7 +88,7 @@ points back.`,
 
 			switch format {
 			case "mermaid":
-				_, err := io.WriteString(cmd.OutOrStdout(), mermaid(g, limit))
+				_, err := io.WriteString(cmd.OutOrStdout(), graph.Mermaid(g, limit))
 				return err
 			case "", "text":
 				return emit(cmd.OutOrStdout(), g, func(w io.Writer) error {
@@ -186,46 +184,4 @@ func showNeighbourhood(cmd *cobra.Command, g *graph.Graph, path string) error {
 		}
 		return nil
 	})
-}
-
-// mermaid renders the top-ranked slice of the graph. Whole graphs of any size
-// render as an unreadable hairball, so this is deliberately a summary.
-func mermaid(g *graph.Graph, limit int) string {
-	if limit <= 0 || limit > len(g.Nodes) {
-		limit = len(g.Nodes)
-	}
-	keep := map[string]string{}
-	for i, n := range g.Nodes[:limit] {
-		keep[n.Path] = fmt.Sprintf("n%d", i)
-	}
-
-	var b strings.Builder
-	b.WriteString("graph LR\n")
-
-	paths := make([]string, 0, len(keep))
-	for p := range keep {
-		paths = append(paths, p)
-	}
-	sort.Strings(paths)
-	for _, p := range paths {
-		node, _ := g.Node(p)
-		label := node.Title
-		if label == "" {
-			label = p
-		}
-		label = strings.ReplaceAll(label, `"`, "'")
-		b.WriteString(fmt.Sprintf("  %s[\"%s\"]\n", keep[p], label))
-	}
-	for _, e := range g.Edges {
-		if e.Broken || e.Code {
-			continue
-		}
-		from, okF := keep[e.From]
-		to, okT := keep[e.To]
-		if !okF || !okT || from == to {
-			continue
-		}
-		b.WriteString(fmt.Sprintf("  %s --> %s\n", from, to))
-	}
-	return b.String()
 }

@@ -95,9 +95,9 @@ func LoadServerSnapshot(dataDir string) ServerSnapshot {
 type ServerAction string
 
 const (
-	ServerActionStatus  ServerAction = "server-status"
-	ServerActionHealth  ServerAction = "server-health"
-	ServerActionUsers   ServerAction = "user-list"
+	ServerActionStatus   ServerAction = "server-status"
+	ServerActionHealth   ServerAction = "server-health"
+	ServerActionUsers    ServerAction = "user-list"
 	ServerActionPolicies ServerAction = "policy-list"
 )
 

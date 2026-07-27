@@ -452,3 +452,7 @@ func importanceFromFrontmatter(raw []byte) string {
 	}
 	return ""
 }
+
+// Reindex rebuilds the path lookup. Exported for callers that construct a Graph
+// directly — tests, and anything decoding one from JSON.
+func (g *Graph) Reindex() { g.reindex() }
