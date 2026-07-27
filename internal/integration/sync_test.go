@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"os"
@@ -226,39 +227,75 @@ func TestPushPull_SQL(t *testing.T) {
 	runPushPullVariant(t, b)
 }
 
+// consoleLogin signs into the web console the way a browser does and returns a
+// client carrying the session.
+//
+// The console is CSRF-protected by double submit: a POST is refused unless it
+// echoes back the token from the `cv_csrf` cookie, and that cookie is only
+// minted on a GET. Posting the credentials straight away — which this test used
+// to do — is exactly the cross-site shape the protection exists to reject, so it
+// earns a 403 rather than a session.
+func consoleLogin(t *testing.T, h *harness) *http.Client {
+	t.Helper()
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{
+		Jar: jar,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	// GET first: this is what mints the CSRF cookie.
+	res, err := client.Get(h.ts.URL + "/ui/login")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+
+	base, _ := url.Parse(h.ts.URL)
+	csrf := ""
+	for _, c := range jar.Cookies(base) {
+		if c.Name == "cv_csrf" {
+			csrf = c.Value
+			break
+		}
+	}
+	if csrf == "" {
+		t.Fatal("console did not set a cv_csrf cookie on GET /ui/login")
+	}
+
+	res, err = client.PostForm(h.ts.URL+"/ui/login", url.Values{
+		"token":      {h.token},
+		"csrf_token": {csrf},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode >= 400 {
+		t.Fatalf("console login failed: status=%d", res.StatusCode)
+	}
+	for _, c := range jar.Cookies(base) {
+		if c.Name == "cv_session" {
+			return client
+		}
+	}
+	t.Fatalf("no session cookie after login; status=%d", res.StatusCode)
+	return nil
+}
+
 func TestMarkdownPreviewUI(t *testing.T) {
 	h := startServer(t, config.Backend{Driver: "local"}, "team")
 	head := h.head()
 	h.push("readme.md", "# Title\n\n**bold**", head)
 
-	// Login via token → session cookie
-	form := url.Values{"token": {h.token}}
-	req, _ := http.NewRequest(http.MethodPost, h.ts.URL+"/ui/login", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	client := &http.Client{
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-	res, err := client.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	res.Body.Close()
-	var cookie *http.Cookie
-	for _, c := range res.Cookies() {
-		if c.Name == "cv_session" {
-			cookie = c
-			break
-		}
-	}
-	if cookie == nil {
-		t.Fatalf("no session cookie; status=%d", res.StatusCode)
-	}
+	client := consoleLogin(t, h)
 
-	req, _ = http.NewRequest(http.MethodGet, h.ts.URL+"/ui/spaces/team/files/readme.md?view=preview", nil)
-	req.AddCookie(cookie)
-	res, err = http.DefaultClient.Do(req)
+	req, _ := http.NewRequest(http.MethodGet, h.ts.URL+"/ui/spaces/team/files/readme.md?view=preview", nil)
+	res, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}

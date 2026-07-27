@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -192,6 +193,14 @@ func TestPreChainEntriesAreTolerated(t *testing.T) {
 }
 
 func TestAuditFilesAreNotWorldReadable(t *testing.T) {
+	// Windows has no Unix permission bits: Go reports every file it creates as
+	// 0666, so this check can only ever fail there. Access on Windows is an ACL
+	// on the data directory, which is the operator's to set — asserting a mode
+	// the platform does not implement tests nothing and turns CI permanently red.
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission bits are not implemented on Windows; the data dir ACL governs access there")
+	}
+
 	dir := t.TempDir()
 	l, err := Open(dir)
 	if err != nil {
