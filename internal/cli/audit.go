@@ -2,7 +2,10 @@ package cli
 
 import (
 	"fmt"
+	"io"
+	"sort"
 	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -37,8 +40,10 @@ func newAuditVerifyCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "audit chain intact: %d entries verified\n", n)
-			return nil
+			return emit(cmd.OutOrStdout(), AuditVerification{Intact: true, Entries: n}, func(w io.Writer) error {
+				fmt.Fprintf(w, "audit chain intact: %d entries verified\n", n)
+				return nil
+			})
 		},
 	}
 }
@@ -83,6 +88,40 @@ func addAuditFilterFlags(cmd *cobra.Command) {
 	cmd.Flags().Int("limit", 50, "max entries (list); 0=default")
 }
 
+// AuditEntry is one audit record, as `audit list` reports it.
+type AuditEntry struct {
+	Time   string `json:"time" yaml:"time"`
+	Actor  string `json:"actor" yaml:"actor"`
+	Action string `json:"action" yaml:"action"`
+	Space  string `json:"space,omitempty" yaml:"space,omitempty"`
+	Target string `json:"target,omitempty" yaml:"target,omitempty"`
+	Result string `json:"result" yaml:"result"`
+}
+
+// AuditActionCount and AuditStats summarise activity. ByAction is a sorted
+// slice rather than a map: a map has no order, and callers comparing two runs
+// need one.
+type AuditActionCount struct {
+	Action string `json:"action" yaml:"action"`
+	Count  int    `json:"count" yaml:"count"`
+}
+
+// AuditStats is the summary `audit stats` reports.
+type AuditStats struct {
+	Entries  int                `json:"entries" yaml:"entries"`
+	Actors   int                `json:"actors" yaml:"actors"`
+	Failed   int                `json:"failed" yaml:"failed"`
+	ByAction []AuditActionCount `json:"by_action" yaml:"by_action"`
+}
+
+// AuditVerification is the verdict from `audit verify`. Intact is always true
+// in a successful payload — a broken chain is an error, not a field — but it is
+// present so a script can assert on it rather than on the absence of output.
+type AuditVerification struct {
+	Intact  bool `json:"intact" yaml:"intact"`
+	Entries int  `json:"entries" yaml:"entries"`
+}
+
 func newAuditListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -100,21 +139,33 @@ func newAuditListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 4, 2, ' ', 0)
-			fmt.Fprintln(w, "TIME\tACTOR\tACTION\tSPACE\tTARGET\tRESULT")
+			out := make([]AuditEntry, 0, len(entries))
 			for _, e := range entries {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
-					e.Timestamp.UTC().Format("2006-01-02T15:04:05Z"),
-					e.Actor.Username,
-					e.Action,
-					e.Space,
-					truncate(e.Target, 40),
-					e.Result,
-				)
+				out = append(out, AuditEntry{
+					Time:   e.Timestamp.UTC().Format(time.RFC3339),
+					Actor:  e.Actor.Username,
+					Action: e.Action,
+					Space:  e.Space,
+					// Untruncated: the table shortens long targets to stay
+					// readable, but a truncated path in a structured payload is
+					// a path a script cannot use.
+					Target: e.Target,
+					Result: e.Result,
+				})
 			}
-			_ = w.Flush()
-			fmt.Fprintf(cmd.OutOrStdout(), "\n%d entries (dir %s)\n", len(entries), l.Dir())
-			return nil
+			return emit(cmd.OutOrStdout(), out, func(wr io.Writer) error {
+				w := tabwriter.NewWriter(wr, 0, 4, 2, ' ', 0)
+				fmt.Fprintln(w, "TIME\tACTOR\tACTION\tSPACE\tTARGET\tRESULT")
+				for _, e := range out {
+					fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+						e.Time, e.Actor, e.Action, e.Space, truncate(e.Target, 40), e.Result)
+				}
+				if err := w.Flush(); err != nil {
+					return err
+				}
+				fmt.Fprintf(wr, "\n%d entries (dir %s)\n", len(out), l.Dir())
+				return nil
+			})
 		},
 	}
 	addAuditFilterFlags(cmd)
@@ -166,14 +217,30 @@ func newAuditStatsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Entries:  %d\n", st.Entries)
-			fmt.Fprintf(cmd.OutOrStdout(), "Actors:   %d\n", st.Actors)
-			fmt.Fprintf(cmd.OutOrStdout(), "Failed:   %d\n", st.Failed)
-			fmt.Fprintln(cmd.OutOrStdout(), "By action:")
-			for a, n := range st.ByAction {
-				fmt.Fprintf(cmd.OutOrStdout(), "  %-28s %d\n", a, n)
+			report := AuditStats{Entries: st.Entries, Actors: st.Actors, Failed: st.Failed}
+			// Sorted, because ranging a map gives a different order every run:
+			// two identical invocations printed different output, which makes
+			// the command useless to diff and unnerving to read.
+			for a := range st.ByAction {
+				report.ByAction = append(report.ByAction, AuditActionCount{Action: a, Count: st.ByAction[a]})
 			}
-			return nil
+			sort.Slice(report.ByAction, func(i, j int) bool {
+				if report.ByAction[i].Count != report.ByAction[j].Count {
+					return report.ByAction[i].Count > report.ByAction[j].Count
+				}
+				return report.ByAction[i].Action < report.ByAction[j].Action
+			})
+
+			return emit(cmd.OutOrStdout(), report, func(w io.Writer) error {
+				fmt.Fprintf(w, "Entries:  %d\n", report.Entries)
+				fmt.Fprintf(w, "Actors:   %d\n", report.Actors)
+				fmt.Fprintf(w, "Failed:   %d\n", report.Failed)
+				fmt.Fprintln(w, "By action:")
+				for _, a := range report.ByAction {
+					fmt.Fprintf(w, "  %-28s %d\n", a.Action, a.Count)
+				}
+				return nil
+			})
 		},
 	}
 	addAuditFilterFlags(cmd)

@@ -32,10 +32,13 @@ func newBackendListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List available storage backend drivers",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			for _, d := range storage.KnownDrivers() {
-				fmt.Fprintln(cmd.OutOrStdout(), d)
-			}
-			return nil
+			drivers := storage.KnownDrivers()
+			return emit(cmd.OutOrStdout(), drivers, func(w io.Writer) error {
+				for _, d := range drivers {
+					fmt.Fprintln(w, d)
+				}
+				return nil
+			})
 		},
 	}
 }
