@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/orkcom-tech/contextverse/internal/auth"
@@ -152,5 +153,62 @@ func TestDisablingAUserDropsTheirLiveTokens(t *testing.T) {
 
 	if code := getSpaces(t, ts, minted); code == http.StatusOK {
 		t.Error("a disabled user's token still works")
+	}
+}
+
+// Per-space limits are what let one server hold a canonical space that stays
+// small and a scratch space that does not — and what lets a hosted fleet give
+// two customers on one instance different plans.
+func TestSpaceQuotasCanBeSetPerSpace(t *testing.T) {
+	ts, adminToken := adminFixture(t)
+
+	body := strings.NewReader(`{"max_file_size": 4096, "max_files": 500}`)
+	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/spaces/team/quotas", body)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	req.Header.Set("Content-Type", "application/json")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("setting quotas returned %d", res.StatusCode)
+	}
+
+	var out struct {
+		Effective struct {
+			MaxFileSize  int64 `json:"max_file_size"`
+			MaxSpaceSize int64 `json:"max_space_size"`
+			MaxFiles     int   `json:"max_files"`
+		} `json:"effective"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Effective.MaxFileSize != 4096 || out.Effective.MaxFiles != 500 {
+		t.Errorf("the override did not take: %+v", out.Effective)
+	}
+	// The caller set two fields; the third has to come back filled in from the
+	// server, or they cannot tell what actually applies.
+	if out.Effective.MaxSpaceSize <= 0 {
+		t.Error("the inherited limit was not reported, so the caller cannot see what applies")
+	}
+}
+
+// A negative limit is a typo, not a policy. Accepting it would silently disable
+// the check it was meant to tighten.
+func TestNegativeQuotasAreRefused(t *testing.T) {
+	ts, adminToken := adminFixture(t)
+
+	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/spaces/team/quotas",
+		strings.NewReader(`{"max_file_size": -1}`))
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Errorf("a negative limit returned %d, want 400", res.StatusCode)
 	}
 }

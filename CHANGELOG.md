@@ -32,6 +32,8 @@ Releases are cut automatically from `main` by CI; the tag and the GitHub release
 
 ### Added
 
+- **Per-space quotas.** `PUT /api/v1/spaces/{space}/quotas` sets `max_file_size`, `max_space_size` and `max_files` for one space; a field left at zero inherits the server value, so raising one limit does not mean restating the others. Server-wide limits were the right default and the wrong only option — one server can hold a canonical space that should stay small and a scratch space that should not. The response echoes what now *applies*, including the inherited values, because a zero in this config means "use the default" and reporting it raw tells an operator their limit is none.
+
 - **The API can now take a token back.** `DELETE /api/v1/users/{name}/tokens` revokes every token a user holds and reports how many went; `POST /api/v1/users/{name}/disable` and `/enable` do the same in one step with the account. The API could mint credentials and never revoke them: it existed as `contextd user disable` on the machine and as a button in the web console, so an operator working over the API — or anything managing a fleet — had no way to cut off a credential they believed was leaked. The count is returned because "revoked 0" and "revoked 3" are different answers when you are closing a door you think was open.
 - **`GET /api/v1/spaces/{space}` reports `bytes` and `files`.** The size has been computed for local quota warnings all along and never returned, so answering "how big is this space" over the network meant shelling into the box.
 

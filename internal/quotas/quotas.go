@@ -8,9 +8,9 @@ import (
 
 // Config is storage quota limits (0 = use default).
 type Config struct {
-	MaxFileSize  int64 `yaml:"max_file_size"`  // bytes; default 5 MiB
-	MaxSpaceSize int64 `yaml:"max_space_size"` // bytes; default 100 MiB
-	MaxFiles     int   `yaml:"max_files"`      // default 5000
+	MaxFileSize  int64 `yaml:"max_file_size" json:"max_file_size"`   // bytes; default 5 MiB
+	MaxSpaceSize int64 `yaml:"max_space_size" json:"max_space_size"` // bytes; default 100 MiB
+	MaxFiles     int   `yaml:"max_files" json:"max_files"`           // default 5000
 }
 
 // Default returns shipped defaults from the server ops note.
@@ -21,6 +21,14 @@ func Default() Config {
 		MaxFiles:     5000,
 	}
 }
+
+// WithDefaults fills unset fields from the built-in defaults, returning what
+// actually applies.
+//
+// Exported because a zero in this struct means "use the default", which is
+// unreadable to anyone being shown the config: reporting max_space_size: 0 to
+// an operator asking what their limit is says "none" when it means 100 MiB.
+func (c Config) WithDefaults() Config { return c.withDefaults() }
 
 func (c Config) withDefaults() Config {
 	d := Default()

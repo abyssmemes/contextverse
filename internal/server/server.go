@@ -195,6 +195,7 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle("POST /api/v1/spaces", s.auth(s.handleCreateSpace))
 		mux.Handle("GET /api/v1/spaces/{space}", s.auth(s.handleGetSpace))
 		mux.Handle("DELETE /api/v1/spaces/{space}", s.auth(s.handleDeleteSpace))
+		mux.Handle("PUT /api/v1/spaces/{space}/quotas", s.auth(s.handlePutSpaceQuotas))
 		mux.Handle("GET /api/v1/spaces/{space}/tree", s.auth(s.handleTree))
 		mux.Handle("GET /api/v1/spaces/{space}/files/{path...}", s.auth(s.handleGetFile))
 		mux.Handle("PUT /api/v1/spaces/{space}/files/{path...}", s.auth(s.handlePutFile))
@@ -596,6 +597,50 @@ func (s *Server) handleGetSpace(w http.ResponseWriter, r *http.Request) {
 		"bytes":    bytes,
 		"files":    files,
 	})
+}
+
+// handlePutSpaceQuotas sets the limits for one space.
+//
+// Server-wide limits are the right default and the wrong only option: one
+// server can hold a canonical space that should stay small and a scratch space
+// that should not. A field set to zero goes back to inheriting the server
+// value, so clearing an override needs no special verb.
+func (s *Server) handlePutSpaceQuotas(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("space")
+	if !s.requireCap(w, r, "spaces/"+name, authz.CapUpdate) {
+		return
+	}
+	var body struct {
+		MaxFileSize  int64 `json:"max_file_size"`
+		MaxSpaceSize int64 `json:"max_space_size"`
+		MaxFiles     int   `json:"max_files"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, r, http.StatusBadRequest, "invalid_request", "invalid json", nil)
+		return
+	}
+	if body.MaxFileSize < 0 || body.MaxSpaceSize < 0 || body.MaxFiles < 0 {
+		writeErr(w, r, http.StatusBadRequest, "invalid_request", "limits cannot be negative", nil)
+		return
+	}
+	meta, err := s.Spaces.LoadMeta(name)
+	if err != nil {
+		writeErr(w, r, http.StatusNotFound, "not_found", "space not found", nil)
+		return
+	}
+	meta.Quotas = quotas.Config{
+		MaxFileSize:  body.MaxFileSize,
+		MaxSpaceSize: body.MaxSpaceSize,
+		MaxFiles:     body.MaxFiles,
+	}
+	if err := s.Spaces.SaveMeta(meta); err != nil {
+		writeErr(w, r, http.StatusInternalServerError, "internal", err.Error(), nil)
+		return
+	}
+	s.auditEmit(r, "space.quotas", name, "", nil)
+	// Echo what now applies, not what was sent: a caller that set one field
+	// needs to see the inherited values it did not set.
+	writeJSON(w, http.StatusOK, map[string]any{"space": name, "effective": s.Spaces.QuotasFor(name)})
 }
 
 func (s *Server) handleDeleteSpace(w http.ResponseWriter, r *http.Request) {

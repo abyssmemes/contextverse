@@ -26,6 +26,41 @@ type Meta struct {
 	CreatedAt time.Time  `yaml:"created_at" json:"created_at"`
 	Template  string     `yaml:"template,omitempty" json:"template,omitempty"`
 	Sync      SyncConfig `yaml:"sync" json:"sync"`
+	// Quotas overrides the server's limits for this space alone. Any field left
+	// at zero inherits the server value, so a space can raise one limit without
+	// restating the others.
+	//
+	// Server-wide limits are the right default and the wrong only option: one
+	// server can hold a canonical space that should stay small and a scratch
+	// space that should not, and a hosted fleet cannot give two customers on
+	// one instance different plans without this.
+	Quotas quotas.Config `yaml:"quotas,omitempty" json:"quotas,omitempty"`
+}
+
+// QuotasFor resolves the limits that apply to one space: the server's, with any
+// per-space override laid over the top.
+//
+// A space with no meta.yaml, or an unreadable one, falls back to the server
+// limits rather than to no limits. Failing open on a quota check is how a
+// misconfigured space becomes an unbounded one.
+func (s *Service) QuotasFor(name string) quotas.Config {
+	meta, err := s.LoadMeta(name)
+	if err != nil {
+		return s.Quotas.WithDefaults()
+	}
+	out := s.Quotas
+	if meta.Quotas.MaxFileSize > 0 {
+		out.MaxFileSize = meta.Quotas.MaxFileSize
+	}
+	if meta.Quotas.MaxSpaceSize > 0 {
+		out.MaxSpaceSize = meta.Quotas.MaxSpaceSize
+	}
+	if meta.Quotas.MaxFiles > 0 {
+		out.MaxFiles = meta.Quotas.MaxFiles
+	}
+	// Resolved, not raw: a zero here means "inherit the default", and returning
+	// it unresolved tells a caller their limit is none.
+	return out.WithDefaults()
 }
 
 // SyncConfig holds selective sync rules.
@@ -294,7 +329,7 @@ func (s *Service) PutFile(ctx context.Context, name, path string, data []byte, e
 	if err := s.Hooks.CheckPut(path, data); err != nil {
 		return "", err
 	}
-	if err := s.Quotas.CheckFileSize(int64(len(data))); err != nil {
+	if err := s.QuotasFor(name).CheckFileSize(int64(len(data))); err != nil {
 		return "", err
 	}
 	if err := s.checkSpaceQuota(ctx, name, int64(len(data)), path); err != nil {
@@ -341,7 +376,7 @@ func (s *Service) checkSpaceQuota(ctx context.Context, name string, newBytes int
 		deltaFiles = 1
 	}
 	deltaBytes := newBytes - oldSize
-	return s.Quotas.CheckSpace(total, len(entries), deltaBytes, deltaFiles)
+	return s.QuotasFor(name).CheckSpace(total, len(entries), deltaBytes, deltaFiles)
 }
 
 // SpaceUsage returns approximate on-disk bytes and file count for quota warnings.
@@ -473,6 +508,10 @@ func (s *Service) Push(ctx context.Context, name string, req PushRequest) (*Push
 	}
 
 	fl := &storage.FileLog{Backend: b}
+	// Resolved once: a push carries many operations, and re-reading meta.yaml
+	// per file would turn one batch into N extra reads for an answer that
+	// cannot change inside the batch.
+	q := s.QuotasFor(name)
 	applied := 0
 	for _, op := range req.Ops {
 		switch op.Op {
@@ -484,7 +523,7 @@ func (s *Service) Push(ctx context.Context, name string, req PushRequest) (*Push
 			if err := s.Hooks.CheckPut(op.Path, data); err != nil {
 				return nil, err
 			}
-			if err := s.Quotas.CheckFileSize(int64(len(data))); err != nil {
+			if err := q.CheckFileSize(int64(len(data))); err != nil {
 				return nil, err
 			}
 			if err := s.checkSpaceQuota(ctx, name, int64(len(data)), op.Path); err != nil {
