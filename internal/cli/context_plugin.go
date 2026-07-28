@@ -3,8 +3,10 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
@@ -141,6 +143,17 @@ func newPluginRefreshCmd() *cobra.Command {
 	}
 }
 
+// PluginEntry is one client integration, as `plugin list` reports it. Detected
+// is the field worth scripting over: it answers "is this machine set up for
+// Cursor" without parsing a marker out of a table.
+type PluginEntry struct {
+	ID        string `json:"id" yaml:"id"`
+	Mechanism string `json:"mechanism" yaml:"mechanism"`
+	Display   string `json:"display" yaml:"display"`
+	Detected  bool   `json:"detected" yaml:"detected"`
+	How       string `json:"how,omitempty" yaml:"how,omitempty"`
+}
+
 func newPluginListCmd() *cobra.Command {
 	var refresh, offline bool
 	cmd := &cobra.Command{
@@ -159,14 +172,28 @@ func newPluginListCmd() *cobra.Command {
 			for _, d := range plugins.Detect(cat, vars) {
 				detected[d.Integration.ID] = d.How
 			}
+			out := make([]PluginEntry, 0, len(cat))
 			for _, in := range cat {
-				mark := ""
-				if how, ok := detected[in.ID]; ok {
-					mark = "\tdetected(" + how + ")"
-				}
-				fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s%s\n", in.ID, in.Mechanism, in.Display, mark)
+				how, ok := detected[in.ID]
+				out = append(out, PluginEntry{
+					ID:        in.ID,
+					Mechanism: in.Mechanism,
+					Display:   in.Display,
+					Detected:  ok,
+					How:       how,
+				})
 			}
-			return nil
+			return emit(cmd.OutOrStdout(), out, func(w io.Writer) error {
+				tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+				for _, e := range out {
+					mark := ""
+					if e.Detected {
+						mark = "\tdetected(" + e.How + ")"
+					}
+					fmt.Fprintf(tw, "%s\t%s\t%s%s\n", e.ID, e.Mechanism, e.Display, mark)
+				}
+				return tw.Flush()
+			})
 		},
 	}
 	cmd.Flags().BoolVar(&refresh, "refresh", false, "re-fetch community catalog before listing")

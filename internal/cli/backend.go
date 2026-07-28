@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -331,6 +332,17 @@ func newHistorySnapshotCmd() *cobra.Command {
 	return cmd
 }
 
+// SnapshotEntry is one snapshot, as `history list` reports it. The timestamp is
+// RFC 3339 in UTC rather than the local-time format the table used: a snapshot
+// listing is the input to a restore decision, and a time without a zone is a
+// time you cannot compare across machines.
+type SnapshotEntry struct {
+	ID        string `json:"id" yaml:"id"`
+	CreatedAt string `json:"created_at" yaml:"created_at"`
+	Files     int    `json:"files" yaml:"files"`
+	Message   string `json:"message,omitempty" yaml:"message,omitempty"`
+}
+
 func newHistoryListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
@@ -348,19 +360,29 @@ func newHistoryListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if len(list) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "(no snapshots)")
-				return nil
+			out := make([]SnapshotEntry, 0, len(list))
+			for _, sn := range list {
+				out = append(out, SnapshotEntry{
+					ID:        sn.ID,
+					CreatedAt: sn.CreatedAt.UTC().Format(time.RFC3339),
+					Files:     len(sn.Files),
+					Message:   sn.Message,
+				})
 			}
-			for _, s := range list {
-				msg := s.Message
-				if msg != "" {
-					msg = " — " + msg
+			return emit(cmd.OutOrStdout(), out, func(w io.Writer) error {
+				if len(out) == 0 {
+					fmt.Fprintln(w, "(no snapshots)")
+					return nil
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "%s  %s  %d files%s\n",
-					s.ID, s.CreatedAt.Format("2006-01-02 15:04:05"), len(s.Files), msg)
-			}
-			return nil
+				for _, e := range out {
+					msg := e.Message
+					if msg != "" {
+						msg = " — " + msg
+					}
+					fmt.Fprintf(w, "%s  %s  %d files%s\n", e.ID, e.CreatedAt, e.Files, msg)
+				}
+				return nil
+			})
 		},
 	}
 }

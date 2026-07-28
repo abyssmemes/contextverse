@@ -2,12 +2,28 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/abyssmemes/contextverse/internal/authz"
 )
+
+// ACLRule and ACLUser are how `acl list` reports permissions. Nested rather
+// than flattened: the grant is per user, and a flat list would make an empty
+// user — someone with an entry but no rules — indistinguishable from someone
+// with no entry at all.
+type ACLRule struct {
+	Path         string   `json:"path" yaml:"path"`
+	Capabilities []string `json:"capabilities" yaml:"capabilities"`
+}
+
+// ACLUser is one user's rules.
+type ACLUser struct {
+	User  string    `json:"user" yaml:"user"`
+	Rules []ACLRule `json:"rules" yaml:"rules"`
+}
 
 func newACLCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -42,26 +58,36 @@ func newACLListCmd() *cobra.Command {
 			if user == "" {
 				users = eng.ListACLUsers()
 			}
-			if len(users) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "(no per-user ACL rules)")
-				return nil
-			}
+			out := make([]ACLUser, 0, len(users))
 			for _, u := range users {
-				rules := eng.UserRules(u)
-				fmt.Fprintf(cmd.OutOrStdout(), "%s:\n", u)
-				if len(rules) == 0 {
-					fmt.Fprintln(cmd.OutOrStdout(), "  (none)")
-					continue
-				}
-				for _, r := range rules {
+				entry := ACLUser{User: u}
+				for _, r := range eng.UserRules(u) {
 					caps := make([]string, len(r.Capabilities))
 					for i, c := range r.Capabilities {
 						caps[i] = string(c)
 					}
-					fmt.Fprintf(cmd.OutOrStdout(), "  - path: %s\n    capabilities: [%s]\n", r.Path, strings.Join(caps, ", "))
+					entry.Rules = append(entry.Rules, ACLRule{Path: r.Path, Capabilities: caps})
 				}
+				out = append(out, entry)
 			}
-			return nil
+
+			return emit(cmd.OutOrStdout(), out, func(w io.Writer) error {
+				if len(out) == 0 {
+					fmt.Fprintln(w, "(no per-user ACL rules)")
+					return nil
+				}
+				for _, e := range out {
+					fmt.Fprintf(w, "%s:\n", e.User)
+					if len(e.Rules) == 0 {
+						fmt.Fprintln(w, "  (none)")
+						continue
+					}
+					for _, r := range e.Rules {
+						fmt.Fprintf(w, "  - path: %s\n    capabilities: [%s]\n", r.Path, strings.Join(r.Capabilities, ", "))
+					}
+				}
+				return nil
+			})
 		},
 	}
 	cmd.Flags().StringVar(&user, "user", "", "filter to one user")
