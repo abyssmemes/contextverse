@@ -32,6 +32,8 @@ Releases are cut automatically from `main` by CI; the tag and the GitHub release
 
 ### Added
 
+- **`contextd export --format single`** — the whole context pack as one Markdown document on stdout, so it composes: `contextd export --format single | pbcopy`. The existing export writes a folder of numbered files for ChatGPT's Knowledge upload; everything else — a chat box, a UI with one context field, a colleague asking what your setup is — wants a single document, and the answer used to be to concatenate five files by hand. Sources that are missing from the space are named in the output rather than skipped, because a pack quietly missing your principles is worse than one that says so.
+
 - **Issue and pull-request templates, and a security policy.** There were none. Written for this product rather than from a generic checklist: the bug report asks whether your space was created by the version you are running or carried across an upgrade, because that one question separates the state most of this project's bugs lived in from the state every test used to start from. The pull-request template asks how you know a new test would have failed before your fix. `SECURITY.md` routes reports through GitHub private advisories, and states plainly the two things that are deliberate rather than vulnerabilities: the local console is loopback-only with full access to the space it serves, and a model can ignore context it was handed.
 
 ### Added
@@ -81,6 +83,9 @@ Releases are cut automatically from `main` by CI; the tag and the GitHub release
 - A **Documentation** link now sits in both sidebars.
 
 ### Fixed
+
+- **`contextd file history` exited `0` for a path that does not exist**, so a script could not tell "not under version control yet" from "you typed it wrong". A missing path is now an error with a non-zero exit; a file that is in the space but has no versions still succeeds, says so, and reports `"tracked": false` in structured output.
+- **The community catalog and the binary disagreed about Cursor.** `merge:` was corrected to `replace-file` in the embedded copy and left as `marked-block` in `contextverse-templates`. Because a fetched catalog overrides the embedded set, the same `contextd` behaved one way offline and another way after fetching. The catalog now carries the `opencode` integration too — it was embedded but absent there, which made it the one integration nobody could fix by pull request. `contextverse-templates` gained CI that fails a pull request when a mirrored integration drifts from the binary.
 
 - **`contextd init server` ignored `--server-dir`** and wrote to the default location. Every other server command honours the flag, so the one command that *creates* a server was the one you could not point somewhere else — and it did not say so, it just used a different directory. A test that creates a throwaway server would have edited the developer's real one.
 

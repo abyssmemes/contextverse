@@ -107,6 +107,7 @@ type FileVersionEntry struct {
 // FileHistory is the structured form of `file history`.
 type FileHistory struct {
 	Path     string             `json:"path" yaml:"path"`
+	Tracked  bool               `json:"tracked" yaml:"tracked"`
 	Current  string             `json:"current" yaml:"current"`
 	Versions []FileVersionEntry `json:"versions" yaml:"versions"`
 }
@@ -125,8 +126,30 @@ func newFileHistoryCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
+			// An empty history has two very different causes, and the command
+			// used to exit 0 for both: a file that has never been written to,
+			// and a path that does not exist at all. A script checking whether
+			// something is under version control could not tell the difference
+			// between "not yet" and "you typed it wrong".
+			tracked := len(versions) > 0
+			if !tracked {
+				root, err := resolveSpaceRoot()
+				if err != nil {
+					return err
+				}
+				abs, err := storage.ResolveUnder(root, args[0])
+				if err != nil {
+					return &ExitError{Code: ExitUsage, Err: fmt.Errorf("refusing path %q: %w", args[0], err)}
+				}
+				if _, err := os.Stat(abs); err != nil {
+					return &ExitError{Code: ExitUsage, Err: fmt.Errorf("no such file in this space: %s", args[0])}
+				}
+			}
+
 			hist := FileHistory{
 				Path:     args[0],
+				Tracked:  tracked,
 				Current:  storage.DisplayVersion(storage.FormatFileVersion(meta.Current)),
 				Versions: make([]FileVersionEntry, 0, len(versions)),
 			}
@@ -143,7 +166,9 @@ func newFileHistoryCmd() *cobra.Command {
 			return emit(cmd.OutOrStdout(), hist, func(w io.Writer) error {
 				fmt.Fprintf(w, "path=%s current=%s\n", hist.Path, hist.Current)
 				if len(hist.Versions) == 0 {
-					fmt.Fprintln(w, "(no versions)")
+					// It is on disk, so this is a real answer rather than a
+					// mistake: the first write records v1.
+					fmt.Fprintln(w, "(no versions yet — this file is in the space but has no history; editing it records v1)")
 					return nil
 				}
 				for _, v := range hist.Versions {

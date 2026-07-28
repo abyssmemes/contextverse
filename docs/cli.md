@@ -66,7 +66,8 @@ contextd mcp serve                       # MCP server over stdio
 contextd plugin list|install|refresh     # client integrations
 contextd context inject                  # the payload a session-start hook emits
 contextd context inject --mode map       # send the map, let the model fetch
-contextd export --format chatgpt         # for closed web UIs
+contextd export --format chatgpt         # a folder of files, for ChatGPT Knowledge
+contextd export --format single          # one document on stdout, for a chat box
 contextd bench context --tasks FILE      # measure how context is delivered
 ```
 

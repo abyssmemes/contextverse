@@ -199,3 +199,34 @@ func TestStaleWindowIsReportedTheWayItIsWritten(t *testing.T) {
 		}
 	}
 }
+
+// `file history` exited 0 whether the path had no versions or did not exist,
+// so a script could not tell "not under version control yet" from "you typed
+// it wrong". Both still print something; only one is an error.
+func TestFileHistorySeparatesMissingFromUntracked(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "space")
+	if _, err := run(t, "--dir", dir, "init", "solo", "--name", "A", "--role", "B"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "notes.md"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// In the space, no history yet: a real answer, not a mistake.
+	out, err := run(t, "--dir", dir, "file", "history", "notes.md")
+	if err != nil {
+		t.Errorf("a file with no versions should not be an error: %v\n%s", err, out)
+	}
+
+	// Not in the space at all.
+	out, err = run(t, "--dir", dir, "file", "history", "does/not/exist.md")
+	if err == nil {
+		t.Fatalf("a path that is not in the space exited 0:\n%s", out)
+	}
+	if code := ExitCodeFor(err); code == 0 {
+		t.Error("the error carries exit code 0, so a script still cannot tell")
+	}
+	if !strings.Contains(err.Error(), "no such file") {
+		t.Errorf("the message does not say the file is missing: %v", err)
+	}
+}
