@@ -49,6 +49,7 @@ Releases are cut automatically from `main` by CI; the tag and the GitHub release
 
 - **The CLI reference had fallen behind the binary.** `search`, `graph`, `ui`, `bench`, `file diff`, `space adopt`, `space sync set`, `daemon install/uninstall/logs` and `context inject --mode map` all shipped without reaching `docs/cli.md`; the list of commands supporting `--json` named eight and is now twenty-one. Both directions are now checked against the built binary rather than by reading.
 - **The quickstart stopped at setup.** It walked you through installing and syncing and never showed you the commands you use afterwards — `search`, `graph`, `freshness check`, `tui`, `ui`.
+- **The graph reached the front page.** It shipped as the most distinguishing thing in the product and appeared in neither the README's capability list nor the documentation site's. Stated as what it is: a map derived from links you already wrote, where a connection exists because a document says so rather than because something inferred it.
 - **The server guide now documents selective sync**, which is where an operator looks when deciding what a space shares.
 - **The templates repository explains how to check a recipe against the binary** — `plugin list` to confirm detection fired and which rule matched, then `activate` against a throwaway space to read what the `merge:` strategy actually wrote. A wrong `merge:` looks identical to a right one until you look.
 

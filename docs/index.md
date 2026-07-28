@@ -23,6 +23,8 @@ You curate; the AI reads. Nothing is inferred, embedded, or stored behind your b
 contextd init                              # guided setup
 cd ~/projects/api && contextd activate     # every detected AI tool now reads the same space
 contextd file history team/principles.md   # v4 — who changed the rules, and when
+contextd search "deploy"                   # find it
+contextd graph --broken                    # links that point at nothing
 ```
 
 ## Three modes, one binary
@@ -84,6 +86,7 @@ New to it? **[Concepts](concepts.md)** is fifteen minutes and makes everything e
 - **Per-file version history** — every file has `vN` and an author. Restore any version.
 - **Audit trail** — every operation records actor, timestamp and target, hash-chained.
 - **Freshness with owners** — context declares when it expires and who owns it; staleness raises a webhook.
+- **A map derived from your own links** — `[[wikilinks]]`, Markdown links and bare paths become a graph, so backlinks, orphans and broken links fall out of what you already wrote. Nothing is inferred: if two documents are connected, it is because one of them says so. A path like `./scripts/deploy.sh` is checked against the real checkout, which is how documentation that describes deleted code becomes visible.
 - **Vendor-neutral by construction** — the same space feeds Claude, Cursor, Copilot and ChatGPT. Switching tools costs nothing.
 
 ## An honest limit, stated once

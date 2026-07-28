@@ -241,6 +241,8 @@ The **CLI is primary**. The terminal UI (`contextd tui`) and the server's web da
 ## Under the hood
 
 - **Context space model** — layered `identity / team / projects` with entry files and freshness metadata.
+- **Derived link graph** — the map comes from links your documents already contain, so backlinks, orphans and broken links are facts about what you wrote rather than inferences about it. `space-index.md` and `team/space-map.md` are generated from it, and paths pointing into a project's checkout are checked against the real files.
+- **Three surfaces over one listing** — the CLI, the TUI and the web console answer "what is in this space" from the same code. They used to have a copy each, which agreed only on spaces the current build had just created.
 - **Pluggable storage backend** — local filesystem, git, S3/MinIO, SQL. The backend is a dumb blob store with compare-and-swap; the core owns versioning, conflict and ACL semantics.
 - **Per-file versioning** — Vault KV v2-style: integer versions shown as `vN` in CLI, TUI and web UI, with soft-delete, undelete and destroy.
 - **Pull-based sync** — clients pull on activate; pushes are batched against the space head with CAS.
