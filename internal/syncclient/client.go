@@ -296,43 +296,7 @@ type PushResult struct {
 // Push uploads local files that differ from last known remote inventory.
 // MVP: walk local tree and push all always/init-only paths as put ops.
 func (c *Client) Push(ctx context.Context, spaceRoot string, expectedHead string, sync spacesvc.SyncConfig, checkOnly bool) (*PushResult, error) {
-	var ops []spacesvc.PushOp
-	err := filepath.WalkDir(spaceRoot, func(p string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(spaceRoot, p)
-		if err != nil {
-			return err
-		}
-		rel = filepath.ToSlash(rel)
-		if rel == "." || d.IsDir() {
-			if d.IsDir() && (rel == ".contextverse" || rel == ".git" || rel == ".sync" || strings.HasPrefix(rel, ".")) {
-				if rel == "." {
-					return nil
-				}
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if rel == "config.yaml" || rel == "meta.yaml" || rel == ".token" {
-			return nil
-		}
-		mode := ResolveMode(sync, rel)
-		if mode == "never" {
-			return nil
-		}
-		data, err := os.ReadFile(p)
-		if err != nil {
-			return err
-		}
-		ops = append(ops, spacesvc.PushOp{
-			Op:         "put",
-			Path:       rel,
-			ContentB64: base64.StdEncoding.EncodeToString(data),
-		})
-		return nil
-	})
+	ops, err := collectPushOps(spaceRoot, sync)
 	if err != nil {
 		return nil, err
 	}
@@ -510,4 +474,56 @@ func apiErr(res *http.Response) error {
 		return &APIError{Status: res.StatusCode, Code: env.Error.Code, Message: env.Error.Message}
 	}
 	return &APIError{Status: res.StatusCode, Message: string(raw)}
+}
+
+// collectPushOps gathers what this client should send upward.
+//
+// Split out of Push so the filter can be tested without a server: what does and
+// does not leave the machine is a question worth being able to ask directly.
+func collectPushOps(spaceRoot string, sync spacesvc.SyncConfig) ([]spacesvc.PushOp, error) {
+	var ops []spacesvc.PushOp
+	err := filepath.WalkDir(spaceRoot, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(spaceRoot, p)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if rel == "." || d.IsDir() {
+			if d.IsDir() && (rel == ".contextverse" || rel == ".git" || rel == ".sync" || strings.HasPrefix(rel, ".")) {
+				if rel == "." {
+					return nil
+				}
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if rel == "config.yaml" || rel == "meta.yaml" || rel == ".token" {
+			return nil
+		}
+		switch ResolveMode(sync, rel) {
+		case "never":
+			return nil
+		case "init-only":
+			// Seeded once from the server, then the local copy is the person's
+			// own. Pull already refuses to overwrite it; pushing it anyway sent
+			// a real name, role and preferences into the space the whole team
+			// pulls from, and the asymmetry is what kept it invisible — nothing
+			// on your own machine ever changed.
+			return nil
+		}
+		data, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		ops = append(ops, spacesvc.PushOp{
+			Op:         "put",
+			Path:       rel,
+			ContentB64: base64.StdEncoding.EncodeToString(data),
+		})
+		return nil
+	})
+	return ops, err
 }

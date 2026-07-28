@@ -49,6 +49,8 @@ Releases are cut automatically from `main` by CI; the tag and the GitHub release
 
 ### Fixed
 
+- **A client pushed `identity/me.md` into the shared space.** `identity/` is declared `init-only` — seeded from the server once, then yours — and pull honoured that, refusing to overwrite a copy it had already seeded. Push skipped only `never`, so a real person's name, role, tools and preferences travelled up into the space the whole team pulls from. The asymmetry is what kept it invisible: nothing on your own machine ever changed, and the file still left. `init-only` now means the same thing in both directions.
+
 - **`audit stats` printed a different order every run**, because it ranged a map. Two identical invocations produced different output, which makes the command impossible to diff and unnerving to read. Sorted by count, then by name so ties stay put.
 - **`plugin list` printed raw tab characters**, so the table came out ragged in most terminals. It is column-aligned now, like every other listing.
 - **`freshness check` reported stale windows as `2160h0m0s`.** Documents declare `90d`; the table printed the same fact in a form nobody writes down. Both the table and the structured output now use the units the document used.
