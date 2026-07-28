@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"text/tabwriter"
@@ -27,12 +28,55 @@ func newFreshnessCmd() *cobra.Command {
 	return cmd
 }
 
+// FreshnessEntry is one document's freshness, as `freshness check --json`
+// reports it.
+type FreshnessEntry struct {
+	Path          string `json:"path" yaml:"path"`
+	Stale         bool   `json:"stale" yaml:"stale"`
+	LastValidated string `json:"last_validated" yaml:"last_validated"`
+	StaleAfter    string `json:"stale_after,omitempty" yaml:"stale_after,omitempty"`
+	Owner         string `json:"owner,omitempty" yaml:"owner,omitempty"`
+}
+
+// FreshnessReport is the whole scan. The counts are in the payload rather than
+// left for the caller to derive, because "how many are stale" is the question
+// almost every caller actually has.
+type FreshnessReport struct {
+	Space string           `json:"space" yaml:"space"`
+	Total int              `json:"total" yaml:"total"`
+	Stale int              `json:"stale" yaml:"stale"`
+	Files []FreshnessEntry `json:"files" yaml:"files"`
+}
+
+// staleAfter renders a window the way documents declare it. The frontmatter
+// says "90d"; time.Duration.String() says "2160h0m0s", which is the same fact
+// in a form nobody writes down.
+func staleAfter(d time.Duration) string {
+	if d <= 0 {
+		return ""
+	}
+	if d%(24*time.Hour) == 0 {
+		return fmt.Sprintf("%dd", int64(d/(24*time.Hour)))
+	}
+	return d.String()
+}
+
 func newFreshnessCheckCmd() *cobra.Command {
 	var serverSide bool
 	var spaceName string
+	var failOnStale bool
 	cmd := &cobra.Command{
 		Use:   "check",
 		Short: "List files with freshness metadata (stale highlighted)",
+		Long: `Scan the space for documents whose stale-after window has passed.
+
+With --fail-on-stale the command exits non-zero when anything is stale, so it
+can gate a build:
+
+    contextd freshness check --fail-on-stale
+
+Without it the command reports and exits 0, which is what you want when a human
+is reading the table.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			root, space, err := freshnessRoot(serverSide, spaceName)
 			if err != nil {
@@ -42,26 +86,51 @@ func newFreshnessCheckCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 4, 2, ' ', 0)
-			fmt.Fprintln(tw, "STALE\tPATH\tLAST-VALIDATED\tSTALE-AFTER\tOWNER")
+
+			report := FreshnessReport{Space: space, Total: len(all)}
 			for _, m := range all {
-				mark := ""
 				if m.Stale {
-					mark = "yes"
+					report.Stale++
 				}
-				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
-					mark, m.Path, m.LastValidated.Format("2006-01-02"), m.StaleAfter, m.Owner)
+				report.Files = append(report.Files, FreshnessEntry{
+					Path:          m.Path,
+					Stale:         m.Stale,
+					LastValidated: m.LastValidated.Format("2006-01-02"),
+					StaleAfter:    staleAfter(m.StaleAfter),
+					Owner:         m.Owner,
+				})
 			}
-			_ = tw.Flush()
-			stale := freshness.StaleOnly(all)
-			if len(stale) > 0 {
-				fmt.Fprintf(cmd.ErrOrStderr(), "\n%d stale file(s) in %s\n", len(stale), space)
+
+			if err := emit(cmd.OutOrStdout(), report, func(w io.Writer) error {
+				tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+				fmt.Fprintln(tw, "STALE\tPATH\tLAST-VALIDATED\tSTALE-AFTER\tOWNER")
+				for _, f := range report.Files {
+					mark := ""
+					if f.Stale {
+						mark = "yes"
+					}
+					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
+						mark, f.Path, f.LastValidated, f.StaleAfter, f.Owner)
+				}
+				return tw.Flush()
+			}); err != nil {
+				return err
+			}
+
+			if report.Stale > 0 {
+				// The count goes to stderr so it never lands in a piped table,
+				// and is in the structured payload for anyone parsing.
+				fmt.Fprintf(cmd.ErrOrStderr(), "\n%d stale file(s) in %s\n", report.Stale, space)
+				if failOnStale {
+					return &ExitError{Code: ExitUsage, Err: fmt.Errorf("%d stale file(s) in %s", report.Stale, space)}
+				}
 			}
 			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&serverSide, "server", false, "scan a server space under --server-dir")
 	cmd.Flags().StringVar(&spaceName, "space", "", "space name (with --server; default from config)")
+	cmd.Flags().BoolVar(&failOnStale, "fail-on-stale", false, "exit non-zero if any file is stale (for CI)")
 	return cmd
 }
 

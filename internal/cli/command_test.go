@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/abyssmemes/contextverse/internal/testspace"
 )
@@ -148,5 +149,53 @@ func TestSearchAndFileListAgreeOnAnUpgradedSpace(t *testing.T) {
 	}
 	if !strings.Contains(listed, "team/principles.md") {
 		t.Errorf("search finds team/principles.md but file list does not:\n%s", listed)
+	}
+}
+
+// A gate flag is only worth having if it actually stops the build. This writes
+// a document that is genuinely past its window and checks the command says so
+// and exits non-zero — the failing path, which is the one nobody runs by hand
+// and therefore the one that quietly rots.
+func TestFailOnStaleActuallyFails(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "space")
+	if _, err := run(t, "--dir", dir, "init", "solo", "--name", "A", "--role", "B"); err != nil {
+		t.Fatal(err)
+	}
+
+	stale := "---\nlast-validated: 2020-01-01\nstale-after: 7d\n---\n\n# Old\n"
+	if err := os.WriteFile(filepath.Join(dir, "team", "principles.md"), []byte(stale), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Without the flag the command reports and succeeds: a person reading the
+	// table has not asked for a verdict.
+	if _, err := run(t, "--dir", dir, "freshness", "check"); err != nil {
+		t.Errorf("plain check should report and exit 0, got %v", err)
+	}
+
+	out, err := run(t, "--dir", dir, "freshness", "check", "--fail-on-stale")
+	if err == nil {
+		t.Fatalf("--fail-on-stale passed with a document four years past its window:\n%s", out)
+	}
+	if code := ExitCodeFor(err); code == 0 {
+		t.Errorf("the error carries exit code 0, so CI would treat this as a pass")
+	}
+}
+
+// The window is declared in days and has to be reported in days. "2160h0m0s"
+// is the same fact in a form nobody writes down.
+func TestStaleWindowIsReportedTheWayItIsWritten(t *testing.T) {
+	for _, tc := range []struct {
+		in   time.Duration
+		want string
+	}{
+		{90 * 24 * time.Hour, "90d"},
+		{24 * time.Hour, "1d"},
+		{0, ""},
+		{90 * time.Minute, "1h30m0s"}, // not a whole day; say so rather than round
+	} {
+		if got := staleAfter(tc.in); got != tc.want {
+			t.Errorf("staleAfter(%v) = %q, want %q", tc.in, got, tc.want)
+		}
 	}
 }
