@@ -162,7 +162,21 @@ Then:
 contextd pull          # get the latest
 contextd activate      # wire her AI tools
 contextd push          # publish her changes
-contextd daemon start  # optional: poll and pull in the background
+contextd daemon start    # optional: poll and pull in the background
+contextd daemon install  # or have it start at login
+```
+
+## Looking around your own space
+
+Once there is context in it, these are the everyday commands:
+
+```bash
+contextd search "deploy"     # find text — paths and contents
+contextd graph               # the map your documents already describe
+contextd graph --broken      # links that point at nothing
+contextd freshness check     # what has gone stale, and who owns it
+contextd tui                 # the same, in a terminal UI
+contextd ui                  # or in a browser, on demand — Ctrl-C to stop
 ```
 
 ## Where to go next

@@ -30,9 +30,17 @@ contextd file history <path>             # who changed it, and when
 contextd file revert <path> -v N         # bring an old version back as current
 contextd file undelete <path>            # restore a soft-deleted file
 contextd file destroy <path> -v N        # permanently remove one version
+contextd file diff <path>                # what changed between two versions
+
+contextd search <query>                  # find text in your own space
+contextd graph                           # the map your documents already describe
+contextd graph <path>                    # what one document connects to
+contextd graph --orphans|--broken        # the two ways a map comes apart
 
 contextd space seed --template <name>    # re-seed your own space
+contextd space adopt                     # record existing files as v1
 contextd space list|show|create|delete   # a server's spaces (see Server)
+contextd space sync set <space> <path> <mode>   # what travels (see Server)
 
 contextd index update                    # regenerate space-index.md
 contextd template list                   # browse the template catalog
@@ -45,6 +53,8 @@ contextd freshness check|nag|validate    # stale context and its owners
 contextd pull [--check]          # fetch changes from the server
 contextd push [--check]          # publish yours
 contextd daemon start|stop|status
+contextd daemon install|uninstall        # start at login (launchd / systemd --user)
+contextd daemon logs [-n]
 contextd backend show|list|set|test|migrate
 contextd history snapshot|list|show|restore
 ```
@@ -55,7 +65,9 @@ contextd history snapshot|list|show|restore
 contextd mcp serve                       # MCP server over stdio
 contextd plugin list|install|refresh     # client integrations
 contextd context inject                  # the payload a session-start hook emits
+contextd context inject --mode map       # send the map, let the model fetch
 contextd export --format chatgpt         # for closed web UIs
+contextd bench context --tasks FILE      # measure how context is delivered
 ```
 
 ### Administer a server
@@ -79,6 +91,8 @@ contextd webhooks add|list|test|delete|dead-letter
 
 ```bash
 contextd tui [--server]
+contextd ui                      # local web console, on demand — prints a URL, Ctrl-C to stop
+contextd ui install|uninstall    # keep it running, after confirming the trade
 contextd completion bash|zsh|fish|powershell
 ```
 
@@ -93,11 +107,15 @@ contextd completion bash|zsh|fish|powershell
 
 ## Output for scripts
 
-`--json` and `--yaml` are supported by `status`, `file list`, `file history`, `user list`, `space list`, `space show`, `pull` and `push`. Passing both is an error.
+`--json` and `--yaml` are supported by `status`, `search`, `graph`, `file list`, `file history`, `file diff`, `freshness check`, `plugin list`, `history list`, `acl list`, `audit list`, `audit stats`, `audit verify`, `backend list`, `user list`, `space list`, `space show`, `space sync set`, `bench context`, `pull` and `push`. Passing both is an error.
+
+Commands that return a confirmation rather than data — `file edit`, `file put`, `daemon start` — do not take the flag. A `--json` that only ever says `{"ok": true}` is decoration.
 
 ```bash
 contextd status --json | jq -r .mode
 contextd file list --json | jq -r '.[] | select(.version == "v1") | .path'
+contextd plugin list --json | jq -r '.[] | select(.detected) | .id'
+contextd freshness check --fail-on-stale     # exits non-zero if anything is stale
 contextd space list --yaml
 ```
 

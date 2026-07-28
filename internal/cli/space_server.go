@@ -289,3 +289,91 @@ func adoptUntrackedFiles(cmd *cobra.Command, root string) {
 		fmt.Fprintf(cmd.ErrOrStderr(), "recorded %d existing file(s) as v1 so they are visible to file list and the TUI\n", n)
 	}
 }
+
+// SyncRuleChange is what `space sync set` reports.
+type SyncRuleChange struct {
+	Space string `json:"space" yaml:"space"`
+	Path  string `json:"path" yaml:"path"`
+	From  string `json:"from,omitempty" yaml:"from,omitempty"`
+	To    string `json:"to" yaml:"to"`
+}
+
+func newSpaceSyncCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "sync",
+		Short: "Change which paths travel between server and clients",
+		Long: `Set a path's sync mode on a server space.
+
+  always     synced in both directions
+  init-only  seeded once when a client joins, then local — never pushed back
+  never      stays where it is
+
+The defaults suit a team: identity/ is init-only, so a person's own me.md is
+seeded from the template and then belongs to their machine.
+
+That is the wrong default for one person syncing their own two machines
+through their own server, where there is no team copy to protect:
+
+    contextd space sync set my-space identity/ always
+
+Editing this used to mean hand-editing meta.yaml on the server, which meant
+nobody knew it was possible.`,
+	}
+	cmd.AddCommand(newSpaceSyncSetCmd())
+	return cmd
+}
+
+func newSpaceSyncSetCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "set <space> <path> <always|init-only|never>",
+		Short: "Set the sync mode for a path in a server space",
+		Args:  cobra.ExactArgs(3),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name, path, mode := args[0], args[1], args[2]
+			switch mode {
+			case "always", "init-only", "never":
+			default:
+				return fmt.Errorf("unknown mode %q (always, init-only, never)", mode)
+			}
+			svc, _, err := openSpaceService()
+			if err != nil {
+				return err
+			}
+			meta, err := svc.LoadMeta(name)
+			if err != nil {
+				return err
+			}
+
+			change := SyncRuleChange{Space: name, Path: path, To: mode}
+			found := false
+			for i, r := range meta.Sync.Rules {
+				if r.Path == path {
+					change.From = r.Mode
+					meta.Sync.Rules[i].Mode = mode
+					found = true
+					break
+				}
+			}
+			if !found {
+				meta.Sync.Rules = append(meta.Sync.Rules, spacesvc.SyncRule{Path: path, Mode: mode})
+			}
+			if err := svc.SaveMeta(meta); err != nil {
+				return err
+			}
+
+			return emit(cmd.OutOrStdout(), change, func(w io.Writer) error {
+				if change.From == "" {
+					fmt.Fprintf(w, "%s: %s is now %s\n", name, path, mode)
+				} else {
+					fmt.Fprintf(w, "%s: %s %s → %s\n", name, path, change.From, mode)
+				}
+				if mode == "always" && strings.HasPrefix(path, "identity") {
+					fmt.Fprintln(w, "\nidentity/ will now sync in both directions. That is what you want")
+					fmt.Fprintln(w, "for your own devices, and not what you want on a shared team space,")
+					fmt.Fprintln(w, "where it would push one person's me.md to everyone.")
+				}
+				return nil
+			})
+		},
+	}
+}

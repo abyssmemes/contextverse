@@ -126,6 +126,11 @@ func (s *Service) LoadMeta(name string) (*Meta, error) {
 	return &m, nil
 }
 
+// SaveMeta writes a space's metadata back. Exported so the CLI can change sync
+// rules: which paths travel is a policy decision an operator makes, and it was
+// previously only editable by hand-editing meta.yaml on the server.
+func (s *Service) SaveMeta(m *Meta) error { return s.saveMeta(m) }
+
 func (s *Service) saveMeta(m *Meta) error {
 	root, err := s.SpaceRootFor(m.Name)
 	if err != nil {

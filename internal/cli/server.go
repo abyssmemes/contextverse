@@ -66,8 +66,12 @@ By default this starts the setup web UI (and opens the browser).
 For scripts/CI or headless installs, pass --noui (and typically --non-interactive).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if dataDir == "" {
+				// --server-dir steers every other server command; ignoring it
+				// here meant the one command that creates a server was the one
+				// command you could not point somewhere else, and it silently
+				// wrote to the default instead of the directory you named.
 				var err error
-				dataDir, err = config.DefaultServerDataDir()
+				dataDir, err = resolveServerDir()
 				if err != nil {
 					return err
 				}
@@ -179,7 +183,7 @@ For scripts/CI or headless installs, pass --noui (and typically --non-interactiv
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&dataDir, "data-dir", "", "server data directory (default: ~/.contextverse-server)")
+	cmd.Flags().StringVar(&dataDir, "data-dir", "", "server data directory (default: --server-dir, $CONTEXTVERSE_SERVER_DIR, or ~/.contextverse-server)")
 	cmd.Flags().StringVar(&address, "address", config.DefaultListenAddr, "listen address")
 	cmd.Flags().IntVar(&port, "port", config.DefaultListenPort, "listen port")
 	cmd.Flags().StringVar(&spaceName, "space", "team", "default space name (with --noui)")

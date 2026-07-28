@@ -12,6 +12,9 @@ Releases are cut automatically from `main` by CI; the tag and the GitHub release
 
 ### Added
 
+- **`contextd space sync set <space> <path> <mode>`** — change which paths travel between a server and its clients. The rules were visible in `space show` and editable only by hand-editing `meta.yaml` on the server, so a capability the product already had was effectively undiscoverable. `identity/ init-only` is the right default for a **team**, where one person's `me.md` must not land on everyone; it is the wrong default for one person syncing their own two machines, and that is now one command rather than a text editor and an SSH session.
+- **The documentation says how to get the same space onto a second machine** — rebuild it, keep it in git, or run your own server — instead of implying there is one way. Which is right depends on whether the second machine is yours or someone else's, which the tool cannot know and should not decide.
+
 - **`contextd bench context` — the eager-vs-lazy measurement.** The product sends an AI its whole entry set at every session start, and whether that beats letting the client fetch what it needs had never been measured; that is why no token-efficiency claim appears anywhere in the documentation. Three arms — nothing, the entry set, a token-budgeted graph map plus the retrieval tools — over a task set of questions with known answering documents. Deterministic and free: it measures whether an arm can reach the answer and what reaching it costs, not whether a model then answers better.
 
   **First result, and it is not the flattering one.** On the default space the map arm reached 5/5 answers for 318 tokens against the entry set's 3/5 for 699 — until the questions were rephrased to share no vocabulary with their documents, at which point the map arm reached **0/5**. The retrieval policy is keyword search, so the first run was measuring how the questions were written by someone who already knew the answers. **The eager-vs-lazy question is therefore still open**, and both task sets are committed so the limitation stays visible rather than becoming folklore.
@@ -44,10 +47,17 @@ Releases are cut automatically from `main` by CI; the tag and the GitHub release
 
 ### Changed
 
+- **The CLI reference had fallen behind the binary.** `search`, `graph`, `ui`, `bench`, `file diff`, `space adopt`, `space sync set`, `daemon install/uninstall/logs` and `context inject --mode map` all shipped without reaching `docs/cli.md`; the list of commands supporting `--json` named eight and is now twenty-one. Both directions are now checked against the built binary rather than by reading.
+- **The quickstart stopped at setup.** It walked you through installing and syncing and never showed you the commands you use afterwards — `search`, `graph`, `freshness check`, `tui`, `ui`.
+- **The server guide now documents selective sync**, which is where an operator looks when deciding what a space shares.
+- **The templates repository explains how to check a recipe against the binary** — `plugin list` to confirm detection fired and which rule matched, then `activate` against a throwaway space to read what the `merge:` strategy actually wrote. A wrong `merge:` looks identical to a right one until you look.
+
 - **The console is minimal brutalism now.** It led with a pink-to-violet gradient sidebar, a serif display face, soft shadows and 16px radii — decoration carrying no information, on a tool for people who live in a terminal. One monospace family (every value on screen is a path, a version or a command, read character by character), flat surfaces with hairline borders, square corners, and colour reserved for meaning: accent for the current thing, red for danger, amber for stale. Long content no longer pushes the page sideways. Web fonts dropped, so a machine that is offline or behind a proxy renders what everyone else sees — and a tool that edits your files does not announce every page load to a font CDN.
 - A **Documentation** link now sits in both sidebars.
 
 ### Fixed
+
+- **`contextd init server` ignored `--server-dir`** and wrote to the default location. Every other server command honours the flag, so the one command that *creates* a server was the one you could not point somewhere else — and it did not say so, it just used a different directory. A test that creates a throwaway server would have edited the developer's real one.
 
 - **A client pushed `identity/me.md` into the shared space.** `identity/` is declared `init-only` — seeded from the server once, then yours — and pull honoured that, refusing to overwrite a copy it had already seeded. Push skipped only `never`, so a real person's name, role, tools and preferences travelled up into the space the whole team pulls from. The asymmetry is what kept it invisible: nothing on your own machine ever changed, and the file still left. `init-only` now means the same thing in both directions.
 

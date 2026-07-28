@@ -75,7 +75,13 @@ Pushes are compare-and-swap against the space head: if someone else pushed since
 | Mode | Meaning |
 |---|---|
 | `always` | Synced in both directions |
-| `init-only` | Copied once when you join, then yours alone — this is how `identity/` stays personal |
+| `init-only` | Copied once when you join, then yours alone — in both directions, so it is never pushed back up either. This is how `identity/` stays personal |
+
+The modes are per space, not baked in. `identity/ init-only` is the right default for a team; on a server syncing your own two machines it is the wrong one, and you change it:
+
+```bash
+contextd space sync set my-space identity/ always
+```
 | `never` | Local only |
 
 ## Access control

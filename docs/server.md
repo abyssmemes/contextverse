@@ -29,6 +29,7 @@ Everything below assumes `--server-dir` (or `CONTEXTVERSE_SERVER_DIR`) points at
 contextd space list                              # what this server hosts
 contextd space create design --template solo-default
 contextd space show design                       # template, head, size, sync rules
+contextd space sync set design identity/ always  # change what travels
 contextd space delete design --yes               # irreversible — takes history with it
 
 contextd user add alice
@@ -41,6 +42,24 @@ contextd user disable alice                      # suspend and revoke tokens at 
 Give Alice the server URL and her token; she runs `contextd init` and picks **client**.
 
 Fine-grained access is in [Auth & ACL](auth-acl.md).
+
+## Selective sync
+
+Each space carries rules for which paths travel:
+
+| Mode | Meaning |
+|---|---|
+| `always` | Synced in both directions |
+| `init-only` | Seeded once when a client joins, then local — and never pushed back up either |
+| `never` | Stays where it is |
+
+The defaults suit a **team**: `identity/` is `init-only`, so a person's own `me.md` is seeded from the template and then belongs to their machine. It never reaches the shared space, which is what stops one person's identity landing on everyone.
+
+That is the wrong default for a server syncing **one person's own two machines**, where there is no team copy to protect:
+
+```bash
+contextd space sync set my-space identity/ always
+```
 
 ## Lifecycle
 

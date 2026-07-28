@@ -100,6 +100,18 @@ contextd init client --url https://context.my-team.com --token cv-alice-xxxx
 
 The space is cloned, the developer's identity is set, and their AI tools are wired.
 
+### The same context on a second machine
+
+`identity/` ships as `init-only`: seeded once from the template, then it belongs to that machine and is never pushed back. That default protects a **team** space, where one person's `me.md` must not land on everyone. For your own two machines there is no team copy to protect, so pick whichever of these fits:
+
+| | How | When it fits |
+|---|---|---|
+| **Rebuild** | `contextd init solo` again, answer the questions | Two machines, different roles — a work laptop and a personal one |
+| **Git** | `contextd backend set git --url …` | You already live in git and want the history to be the same history |
+| **Your own server** | `contextd init server`, then point both machines at it | You want it automatic. Set `contextd space sync set <space> identity/ always` — on a personal server that is correct, on a shared one it is not |
+
+The tool does not decide this for you, because the right answer depends on whether the second machine is *yours* or *someone else's*, and only you know that.
+
 ---
 
 ## What makes it different

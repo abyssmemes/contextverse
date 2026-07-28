@@ -557,6 +557,7 @@ func newSpaceCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newSpaceListCmd())
 	cmd.AddCommand(newSpaceShowCmd())
+	cmd.AddCommand(newSpaceSyncCmd())
 	cmd.AddCommand(newSpaceCreateCmd())
 	cmd.AddCommand(newSpaceDeleteCmd())
 	cmd.AddCommand(newSpaceAdoptCmd())
