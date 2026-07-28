@@ -1,0 +1,12 @@
+space: solo-default
+tasks:
+  - question: What are the principles we work by?
+    answers: [team/principles.md]
+  - question: Who am I and what is my role?
+    answers: [identity/me.md]
+  - question: What decisions have been made and why?
+    answers: [decisions.md]
+  - question: What does the example project runbook say about deployment?
+    answers: [projects/example-project/project.md]
+  - question: What capabilities and skills exist on the team?
+    answers: [team/skill-map.md]

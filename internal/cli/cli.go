@@ -82,7 +82,7 @@ func newRoot() *cobra.Command {
 	addGrouped(root, groupSync,
 		newPullCmd(), newPushCmd(), newDaemonCmd(), newBackendCmd())
 	addGrouped(root, groupAI,
-		newMCPCmd(), newPluginCmd(), newContextCmd(), newExportCmd())
+		newMCPCmd(), newPluginCmd(), newContextCmd(), newExportCmd(), newBenchCmd())
 	addGrouped(root, groupServer,
 		newServerCmd(), newUserCmd(), newAuthCmd(), newPolicyCmd(), newACLCmd(), newAuditCmd(), newWebhooksCmd())
 	addGrouped(root, groupInterface,

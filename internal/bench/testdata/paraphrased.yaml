@@ -1,0 +1,12 @@
+space: solo-default
+tasks:
+  - question: How does this team decide what matters when there is a conflict?
+    answers: [team/principles.md]
+  - question: What is my job title?
+    answers: [identity/me.md]
+  - question: Why did we pick the current approach over the alternatives?
+    answers: [decisions.md]
+  - question: Where is the deployment procedure written down?
+    answers: [projects/example-project/project.md]
+  - question: Who knows Kubernetes around here?
+    answers: [team/skill-map.md]
