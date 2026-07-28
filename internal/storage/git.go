@@ -12,7 +12,7 @@ import (
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/object"
 
-	"github.com/abyssmemes/contextverse/internal/logx"
+	"github.com/orkcom-tech/contextverse/internal/logx"
 )
 
 const (

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/abyssmemes/contextverse/internal/testspace"
+	"github.com/orkcom-tech/contextverse/internal/testspace"
 )
 
 func armOf(t *testing.T, rep *Report, arm Arm) ArmResult {

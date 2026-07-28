@@ -1,7 +1,7 @@
 # Deploy (Docker & Helm)
 
 !!! warning "In development"
-    Docker and Helm assets under [`deploy/`](https://github.com/abyssmemes/contextverse/tree/main/deploy) are **starter templates only**. There is **no** CI image build, registry publish, Helm OCI chart, or cluster auto-deploy yet. Build and install locally if you try them.
+    Docker and Helm assets under [`deploy/`](https://github.com/orkcom-tech/contextverse/tree/main/deploy) are **starter templates only**. There is **no** CI image build, registry publish, Helm OCI chart, or cluster auto-deploy yet. Build and install locally if you try them.
 
 ## Docker
 
@@ -19,7 +19,7 @@ curl -sf http://127.0.0.1:8743/health
 
 First-boot admin token appears once in container logs.
 
-Details: [`deploy/docker/README.md`](https://github.com/abyssmemes/contextverse/blob/main/deploy/docker/README.md).
+Details: [`deploy/docker/README.md`](https://github.com/orkcom-tech/contextverse/blob/main/deploy/docker/README.md).
 
 ## Helm (Kubernetes)
 
@@ -39,7 +39,7 @@ helm upgrade --install contextd ./deploy/helm/contextd \
 
 For **HA** (N× stateless `contextd` + shared S3/SQL/git), see [High availability](#high-availability-shared-backend) below — Compose lab under `deploy/compose/ha-minio/` and Helm `values-ha-s3.yaml`.
 
-Details: [`deploy/helm/contextd/README.md`](https://github.com/abyssmemes/contextverse/blob/main/deploy/helm/contextd/README.md).
+Details: [`deploy/helm/contextd/README.md`](https://github.com/orkcom-tech/contextverse/blob/main/deploy/helm/contextd/README.md).
 
 ## High availability (shared backend)
 
@@ -53,7 +53,7 @@ cd deploy/compose/ha-minio && docker compose up -d
 curl -sf http://127.0.0.1:8743/health
 ```
 
-Details: [`deploy/compose/ha-minio/README.md`](https://github.com/abyssmemes/contextverse/blob/main/deploy/compose/ha-minio/README.md).
+Details: [`deploy/compose/ha-minio/README.md`](https://github.com/orkcom-tech/contextverse/blob/main/deploy/compose/ha-minio/README.md).
 
 ### Helm (multi-replica example)
 

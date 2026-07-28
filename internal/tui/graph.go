@@ -6,8 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/abyssmemes/contextverse/internal/config"
-	"github.com/abyssmemes/contextverse/internal/graph"
+	"github.com/orkcom-tech/contextverse/internal/config"
+	"github.com/orkcom-tech/contextverse/internal/graph"
 )
 
 // The Graph tab turns the space from a list of files into something you move

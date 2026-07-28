@@ -16,7 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 
-	"github.com/abyssmemes/contextverse/internal/logx"
+	"github.com/orkcom-tech/contextverse/internal/logx"
 )
 
 // S3Config configures an S3 / MinIO backend.

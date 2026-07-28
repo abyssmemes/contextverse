@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/abyssmemes/contextverse/internal/space"
+	"github.com/orkcom-tech/contextverse/internal/space"
 )
 
 func TestCreateAndInspect(t *testing.T) {

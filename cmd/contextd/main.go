@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/abyssmemes/contextverse/internal/cli"
-	"github.com/abyssmemes/contextverse/internal/logx"
+	"github.com/orkcom-tech/contextverse/internal/cli"
+	"github.com/orkcom-tech/contextverse/internal/logx"
 )
 
 func main() {

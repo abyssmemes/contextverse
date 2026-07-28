@@ -7,9 +7,9 @@ import (
 	"net"
 	"os"
 
-	"github.com/abyssmemes/contextverse/internal/cliout"
-	"github.com/abyssmemes/contextverse/internal/storage"
-	"github.com/abyssmemes/contextverse/internal/syncclient"
+	"github.com/orkcom-tech/contextverse/internal/cliout"
+	"github.com/orkcom-tech/contextverse/internal/storage"
+	"github.com/orkcom-tech/contextverse/internal/syncclient"
 )
 
 // Exit codes. Documented in contextverse-cli.md; a script needs to tell "your

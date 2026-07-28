@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/abyssmemes/contextverse/internal/authz"
-	"github.com/abyssmemes/contextverse/internal/freshness"
-	"github.com/abyssmemes/contextverse/internal/webhooks"
+	"github.com/orkcom-tech/contextverse/internal/authz"
+	"github.com/orkcom-tech/contextverse/internal/freshness"
+	"github.com/orkcom-tech/contextverse/internal/webhooks"
 )
 
 func (s *Server) handleFreshness(w http.ResponseWriter, r *http.Request) {

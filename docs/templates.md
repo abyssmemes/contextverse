@@ -1,6 +1,6 @@
 # Templates
 
-A template decides what your context space looks like on day one, and how a new AI client gets wired. Both kinds live in one place: [`contextverse-templates`](https://github.com/abyssmemes/contextverse-templates) (Apache-2.0).
+A template decides what your context space looks like on day one, and how a new AI client gets wired. Both kinds live in one place: [`contextverse-templates`](https://github.com/orkcom-tech/contextverse-templates) (Apache-2.0).
 
 ## Context-space templates
 
@@ -69,4 +69,4 @@ Re-running `activate` replaces that block rather than appending another copy. If
 
 Both kinds are directories of files with one YAML manifest, and both require a human-readable rationale file — `TEMPLATE.md` or `INTEGRATION.md`. A pull request without one is rejected, because six months later nobody can tell why the template is shaped the way it is.
 
-The full schema, the mechanism and merge-strategy tables, and the honesty rule for stating a client's real ceiling are in the [templates repository README](https://github.com/abyssmemes/contextverse-templates#readme).
+The full schema, the mechanism and merge-strategy tables, and the honesty rule for stating a client's real ceiling are in the [templates repository README](https://github.com/orkcom-tech/contextverse-templates#readme).

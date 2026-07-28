@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/abyssmemes/contextverse/internal/audit"
+	"github.com/orkcom-tech/contextverse/internal/audit"
 )
 
 func newAuditCmd() *cobra.Command {

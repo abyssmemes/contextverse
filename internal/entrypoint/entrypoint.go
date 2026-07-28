@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/abyssmemes/contextverse/internal/logx"
+	"github.com/orkcom-tech/contextverse/internal/logx"
 )
 
 // Options control entry-point generation into a project working directory.

@@ -3,10 +3,10 @@ package server
 import (
 	"net/http"
 
-	"github.com/abyssmemes/contextverse/internal/audit"
-	"github.com/abyssmemes/contextverse/internal/auth"
-	"github.com/abyssmemes/contextverse/internal/logx"
-	"github.com/abyssmemes/contextverse/internal/webhooks"
+	"github.com/orkcom-tech/contextverse/internal/audit"
+	"github.com/orkcom-tech/contextverse/internal/auth"
+	"github.com/orkcom-tech/contextverse/internal/logx"
+	"github.com/orkcom-tech/contextverse/internal/webhooks"
 )
 
 // auditEmit appends a successful mutation (best-effort; never fails the request).

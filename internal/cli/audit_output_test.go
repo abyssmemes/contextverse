@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/abyssmemes/contextverse/internal/audit"
+	"github.com/orkcom-tech/contextverse/internal/audit"
 )
 
 // seedAudit writes a log with a deliberately tied count, so any ordering that

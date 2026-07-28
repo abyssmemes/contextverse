@@ -40,13 +40,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/abyssmemes/contextverse/internal/config"
-	"github.com/abyssmemes/contextverse/internal/graph"
-	"github.com/abyssmemes/contextverse/internal/logx"
-	"github.com/abyssmemes/contextverse/internal/server/ui"
-	"github.com/abyssmemes/contextverse/internal/spacefiles"
-	"github.com/abyssmemes/contextverse/internal/storage"
-	"github.com/abyssmemes/contextverse/internal/version"
+	"github.com/orkcom-tech/contextverse/internal/config"
+	"github.com/orkcom-tech/contextverse/internal/graph"
+	"github.com/orkcom-tech/contextverse/internal/logx"
+	"github.com/orkcom-tech/contextverse/internal/server/ui"
+	"github.com/orkcom-tech/contextverse/internal/spacefiles"
+	"github.com/orkcom-tech/contextverse/internal/storage"
+	"github.com/orkcom-tech/contextverse/internal/version"
 )
 
 const (

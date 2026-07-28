@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/abyssmemes/contextverse/internal/storage"
-	"github.com/abyssmemes/contextverse/internal/testspace"
+	"github.com/orkcom-tech/contextverse/internal/storage"
+	"github.com/orkcom-tech/contextverse/internal/testspace"
 )
 
 // The console shares its templates with the server's, which is what keeps the

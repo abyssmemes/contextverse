@@ -22,7 +22,7 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X github.com/abyssmemes/contextverse/internal/version.Version={{.Version}}
+      - -X github.com/orkcom-tech/contextverse/internal/version.Version={{.Version}}
 
 archives:
   - id: default
@@ -54,8 +54,8 @@ nfpms:
   - id: linux-packages
     package_name: contextd
     file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Arch }}"
-    homepage: https://github.com/abyssmemes/contextverse
-    maintainer: abyssmemes
+    homepage: https://github.com/orkcom-tech/contextverse
+    maintainer: orkcom-tech
     description: Portable, vendor-neutral context for AI
     license: BUSL-1.1
     formats:

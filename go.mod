@@ -1,4 +1,4 @@
-module github.com/abyssmemes/contextverse
+module github.com/orkcom-tech/contextverse
 
 go 1.25.0
 

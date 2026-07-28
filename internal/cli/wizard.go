@@ -13,15 +13,15 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/abyssmemes/contextverse/internal/config"
-	"github.com/abyssmemes/contextverse/internal/editor"
-	"github.com/abyssmemes/contextverse/internal/logx"
-	"github.com/abyssmemes/contextverse/internal/plugins"
-	"github.com/abyssmemes/contextverse/internal/prompt"
-	"github.com/abyssmemes/contextverse/internal/space"
-	"github.com/abyssmemes/contextverse/internal/storage"
-	"github.com/abyssmemes/contextverse/internal/syncclient"
-	templatepkg "github.com/abyssmemes/contextverse/internal/template"
+	"github.com/orkcom-tech/contextverse/internal/config"
+	"github.com/orkcom-tech/contextverse/internal/editor"
+	"github.com/orkcom-tech/contextverse/internal/logx"
+	"github.com/orkcom-tech/contextverse/internal/plugins"
+	"github.com/orkcom-tech/contextverse/internal/prompt"
+	"github.com/orkcom-tech/contextverse/internal/space"
+	"github.com/orkcom-tech/contextverse/internal/storage"
+	"github.com/orkcom-tech/contextverse/internal/syncclient"
+	templatepkg "github.com/orkcom-tech/contextverse/internal/template"
 )
 
 // runInitWizard is what `contextd init` does with no subcommand. It used to

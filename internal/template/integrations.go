@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/abyssmemes/contextverse/internal/logx"
+	"github.com/orkcom-tech/contextverse/internal/logx"
 )
 
 const (

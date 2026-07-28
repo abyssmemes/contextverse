@@ -3,7 +3,7 @@ package events
 import (
 	"testing"
 
-	"github.com/abyssmemes/contextverse/internal/webhooks"
+	"github.com/orkcom-tech/contextverse/internal/webhooks"
 )
 
 func TestMatchScopes(t *testing.T) {

@@ -11,4 +11,4 @@
 | [`contextd.plist`](./contextd.plist) | launchd sample |
 | [`contextd.winservice.md`](./contextd.winservice.md) | Windows SCM (`contextd server service …`) |
 
-User docs: [Deploy (Docker & Helm)](https://abyssmemes.github.io/contextverse/deploy/) (once published).
+User docs: [Deploy (Docker & Helm)](https://orkcom-tech.github.io/contextverse/deploy/) (once published).

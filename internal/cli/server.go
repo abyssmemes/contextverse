@@ -20,13 +20,13 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/abyssmemes/contextverse/internal/auth"
-	"github.com/abyssmemes/contextverse/internal/config"
-	"github.com/abyssmemes/contextverse/internal/logx"
-	"github.com/abyssmemes/contextverse/internal/server"
-	"github.com/abyssmemes/contextverse/internal/spacesvc"
-	"github.com/abyssmemes/contextverse/internal/tui"
-	"github.com/abyssmemes/contextverse/internal/winsvc"
+	"github.com/orkcom-tech/contextverse/internal/auth"
+	"github.com/orkcom-tech/contextverse/internal/config"
+	"github.com/orkcom-tech/contextverse/internal/logx"
+	"github.com/orkcom-tech/contextverse/internal/server"
+	"github.com/orkcom-tech/contextverse/internal/spacesvc"
+	"github.com/orkcom-tech/contextverse/internal/tui"
+	"github.com/orkcom-tech/contextverse/internal/winsvc"
 )
 
 var flagServerDir string
@@ -612,7 +612,7 @@ Never use kill -9 for upgrades.`,
 func renderSystemdUnit(bin, dataDir, user string) string {
 	return fmt.Sprintf(`[Unit]
 Description=ContextVerse server (contextd)
-Documentation=https://github.com/abyssmemes/contextverse
+Documentation=https://github.com/orkcom-tech/contextverse
 After=network-online.target
 Wants=network-online.target
 

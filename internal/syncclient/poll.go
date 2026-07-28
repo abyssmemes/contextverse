@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/abyssmemes/contextverse/internal/config"
-	"github.com/abyssmemes/contextverse/internal/logx"
+	"github.com/orkcom-tech/contextverse/internal/config"
+	"github.com/orkcom-tech/contextverse/internal/logx"
 )
 
 // PollOnce checks server head and pulls if it changed. Used by contextd daemon

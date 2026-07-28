@@ -14,8 +14,8 @@ GoReleaser produces:
 
 | Manager | Repo | Update path |
 |---|---|---|
-| Homebrew | [`abyssmemes/homebrew-tap`](https://github.com/abyssmemes/homebrew-tap) | CI runs `bump-formula.sh` |
-| Scoop | [`abyssmemes/scoop-bucket`](https://github.com/abyssmemes/scoop-bucket) | CI runs `bump-manifest.sh` |
+| Homebrew | [`orkcom-tech/homebrew-tap`](https://github.com/orkcom-tech/homebrew-tap) | CI runs `bump-formula.sh` |
+| Scoop | [`orkcom-tech/scoop-bucket`](https://github.com/orkcom-tech/scoop-bucket) | CI runs `bump-manifest.sh` |
 | Winget | templates in `packaging/winget/` | manual PR for now |
 
 ## Branch / CI policy

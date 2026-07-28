@@ -12,9 +12,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/abyssmemes/contextverse/internal/config"
-	"github.com/abyssmemes/contextverse/internal/logx"
-	"github.com/abyssmemes/contextverse/internal/prompt"
+	"github.com/orkcom-tech/contextverse/internal/config"
+	"github.com/orkcom-tech/contextverse/internal/logx"
+	"github.com/orkcom-tech/contextverse/internal/prompt"
 )
 
 // Autostart for the client sync daemon.
@@ -259,7 +259,7 @@ func launchdPlist(bin, spaceRoot string) string {
 func systemdUserUnit(bin, spaceRoot string, interval int) string {
 	return fmt.Sprintf(`[Unit]
 Description=ContextVerse client sync daemon
-Documentation=https://abyssmemes.github.io/contextverse/
+Documentation=https://orkcom-tech.github.io/contextverse/
 After=network-online.target
 
 [Service]
@@ -442,7 +442,7 @@ func launchdAgent(label, bin string, args []string, logPath string) string {
 func systemdUserService(desc, bin string, args []string) string {
 	return fmt.Sprintf(`[Unit]
 Description=%s
-Documentation=https://abyssmemes.github.io/contextverse/
+Documentation=https://orkcom-tech.github.io/contextverse/
 After=network-online.target
 
 [Service]

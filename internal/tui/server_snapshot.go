@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/abyssmemes/contextverse/internal/auth"
-	"github.com/abyssmemes/contextverse/internal/authz"
-	"github.com/abyssmemes/contextverse/internal/config"
-	"github.com/abyssmemes/contextverse/internal/version"
+	"github.com/orkcom-tech/contextverse/internal/auth"
+	"github.com/orkcom-tech/contextverse/internal/authz"
+	"github.com/orkcom-tech/contextverse/internal/config"
+	"github.com/orkcom-tech/contextverse/internal/version"
 )
 
 // ServerSnapshot is read-only admin state for the server TUI.

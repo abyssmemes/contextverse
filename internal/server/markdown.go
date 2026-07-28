@@ -3,7 +3,7 @@ package server
 import (
 	"html/template"
 
-	"github.com/abyssmemes/contextverse/internal/server/ui"
+	"github.com/orkcom-tech/contextverse/internal/server/ui"
 )
 
 // The implementation moved to internal/server/ui so `contextd ui` renders space

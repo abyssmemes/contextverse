@@ -1,0 +1,32 @@
+name: Feature request
+description: Propose something the tool should do
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Describe the situation, not the solution. The best proposals here have changed shape once someone explained the underlying problem.
+    validations:
+      required: true
+
+  - type: textarea
+    id: today
+    attributes:
+      label: How do you handle it today?
+      description: Including "I don't, I gave up" — that is useful information.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you have in mind
+      description: Optional. A rough command line is often clearer than a paragraph.
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: I have checked this is not already possible — `contextd --help` groups commands by job, and the docs have a full CLI reference

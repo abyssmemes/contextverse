@@ -14,22 +14,22 @@ CI release helpers live under [`ci/`](./ci/) (`next-version.sh`, `publish-packag
 **macOS (Homebrew — recommended)**
 
 ```bash
-brew tap abyssmemes/tap
-brew install abyssmemes/tap/contextd
+brew tap orkcom-tech/tap
+brew install orkcom-tech/tap/contextd
 ```
 
-Own tap: [`homebrew-tap`](https://github.com/abyssmemes/homebrew-tap) (not `homebrew-core`).
+Own tap: [`homebrew-tap`](https://github.com/orkcom-tech/homebrew-tap) (not `homebrew-core`).
 
 **macOS / Linux (script)**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/abyssmemes/contextverse/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/orkcom-tech/contextverse/main/scripts/install.sh | bash
 ```
 
 **Windows (PowerShell)**
 
 ```powershell
-irm https://raw.githubusercontent.com/abyssmemes/contextverse/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/orkcom-tech/contextverse/main/scripts/install.ps1 | iex
 ```
 
 Pin a version:

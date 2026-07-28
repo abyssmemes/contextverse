@@ -10,10 +10,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/abyssmemes/contextverse/internal/graph"
-	"github.com/abyssmemes/contextverse/internal/logx"
-	"github.com/abyssmemes/contextverse/internal/plugins"
-	templatepkg "github.com/abyssmemes/contextverse/internal/template"
+	"github.com/orkcom-tech/contextverse/internal/graph"
+	"github.com/orkcom-tech/contextverse/internal/logx"
+	"github.com/orkcom-tech/contextverse/internal/plugins"
+	templatepkg "github.com/orkcom-tech/contextverse/internal/template"
 )
 
 func newContextCmd() *cobra.Command {

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/abyssmemes/contextverse/internal/testspace"
+	"github.com/orkcom-tech/contextverse/internal/testspace"
 )
 
 // Structured output exists so a script sees what a person sees. The failure

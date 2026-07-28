@@ -17,7 +17,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-const tracerName = "github.com/abyssmemes/contextverse/server"
+const tracerName = "github.com/orkcom-tech/contextverse/server"
 
 // Provider holds an optional OTLP tracer. Empty endpoint → no-op (off).
 type Provider struct {

@@ -10,6 +10,30 @@ Releases are cut automatically from `main` by CI; the tag and the GitHub release
 
 ## [Unreleased]
 
+### Changed
+
+- **The project moved to the ORKCOM organisation.** Everything now lives under [`orkcom-tech`](https://github.com/orkcom-tech): the repository, the templates, the Homebrew tap, the Scoop bucket and the documentation site (now <https://orkcom-tech.github.io/contextverse/>).
+
+  **The Go module path changed to `github.com/orkcom-tech/contextverse`.** GitHub redirects the old path, so `go get` on it keeps working — but the redirect lasts only until someone registers a repository with the old name, so anything importing this module should update. Pre-1.0, and cheaper now than later.
+
+  Reinstall paths changed with it:
+
+  ```bash
+  brew untap abyssmemes/tap && brew tap orkcom-tech/tap
+  brew install orkcom-tech/tap/contextd
+
+  scoop bucket rm contextverse
+  scoop bucket add contextverse https://github.com/orkcom-tech/scoop-bucket
+  ```
+
+  The winget package is now `OrkcomTech.Contextd`. An existing install under the old identifier keeps working and will not upgrade across the rename; reinstall from the new one.
+
+- **The licence names ORKCOM as the project's home, not as the rights holder.** `Licensor` and the copyright line stay with Eduard Lugovtsov, with `(ORKCOM)` in the position `(ContextVerse)` used to hold. The company is not registered yet, and an unregistered entity cannot hold copyright or grant a licence — putting one in the Parameters block would look tidier and mean less.
+
+### Added
+
+- **Issue and pull-request templates, and a security policy.** There were none. Written for this product rather than from a generic checklist: the bug report asks whether your space was created by the version you are running or carried across an upgrade, because that one question separates the state most of this project's bugs lived in from the state every test used to start from. The pull-request template asks how you know a new test would have failed before your fix. `SECURITY.md` routes reports through GitHub private advisories, and states plainly the two things that are deliberate rather than vulnerabilities: the local console is loopback-only with full access to the space it serves, and a model can ignore context it was handed.
+
 ### Added
 
 - **`contextd space sync set <space> <path> <mode>`** — change which paths travel between a server and its clients. The rules were visible in `space show` and editable only by hand-editing `meta.yaml` on the server, so a capability the product already had was effectively undiscoverable. `identity/ init-only` is the right default for a **team**, where one person's `me.md` must not land on everyone; it is the wrong default for one person syncing their own two machines, and that is now one command rather than a text editor and an SSH session.
@@ -183,12 +207,12 @@ The first substantial release: server, storage, governance and the AI-delivery s
 - Core solo workflow — `init solo`, the space model, `activate`, `status`.
 - Install scripts and the GoReleaser pipeline.
 
-[Unreleased]: https://github.com/abyssmemes/contextverse/compare/v0.7.0...HEAD
-[0.7.0]: https://github.com/abyssmemes/contextverse/compare/v0.6.0...v0.7.0
-[0.6.0]: https://github.com/abyssmemes/contextverse/compare/v0.5.0...v0.6.0
-[0.5.0]: https://github.com/abyssmemes/contextverse/compare/v0.4.0...v0.5.0
-[0.4.0]: https://github.com/abyssmemes/contextverse/compare/v0.3.0...v0.4.0
-[0.3.0]: https://github.com/abyssmemes/contextverse/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/abyssmemes/contextverse/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/abyssmemes/contextverse/compare/v0.0.1...v0.1.0
-[0.0.1]: https://github.com/abyssmemes/contextverse/releases/tag/v0.0.1
+[Unreleased]: https://github.com/orkcom-tech/contextverse/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/orkcom-tech/contextverse/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/orkcom-tech/contextverse/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/orkcom-tech/contextverse/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/orkcom-tech/contextverse/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/orkcom-tech/contextverse/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/orkcom-tech/contextverse/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/orkcom-tech/contextverse/compare/v0.0.1...v0.1.0
+[0.0.1]: https://github.com/orkcom-tech/contextverse/releases/tag/v0.0.1

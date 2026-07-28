@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/abyssmemes/contextverse/internal/server/ui"
+	"github.com/orkcom-tech/contextverse/internal/server/ui"
 )
 
 // maxJSONBody caps request bodies for everything except file uploads and

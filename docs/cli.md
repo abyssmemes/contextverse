@@ -176,4 +176,4 @@ contextd completion fish > ~/.config/fish/completions/contextd.fish
 
 - [Quickstart](quickstart.md) · [Install](install.md)
 - [Server](server.md) · [Auth & ACL](auth-acl.md)
-- Source: [github.com/abyssmemes/contextverse](https://github.com/abyssmemes/contextverse)
+- Source: [github.com/orkcom-tech/contextverse](https://github.com/orkcom-tech/contextverse)

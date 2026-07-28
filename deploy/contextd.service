@@ -1,6 +1,6 @@
 [Unit]
 Description=ContextVerse server (contextd)
-Documentation=https://github.com/abyssmemes/contextverse
+Documentation=https://github.com/orkcom-tech/contextverse
 After=network-online.target
 Wants=network-online.target
 

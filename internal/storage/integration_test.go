@@ -39,7 +39,7 @@ func TestSQLIntegrationCAS(t *testing.T) {
 
 func TestGitPrivateRemoteAuthConfig(t *testing.T) {
 	a := GitAuth{Username: "git", Token: "ghp_test"}
-	m, err := a.AuthMethod("https://github.com/abyssmemes/contextverse-backup.git")
+	m, err := a.AuthMethod("https://github.com/orkcom-tech/contextverse-backup.git")
 	if err != nil || m == nil {
 		t.Fatalf("auth: %v %v", m, err)
 	}

@@ -15,7 +15,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/abyssmemes/contextverse/internal/authz"
+	"github.com/orkcom-tech/contextverse/internal/authz"
 )
 
 // Role is a coarse Phase-2a role.

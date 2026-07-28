@@ -16,7 +16,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/abyssmemes/contextverse/internal/config"
+	"github.com/orkcom-tech/contextverse/internal/config"
 )
 
 func newServerTLSCmd() *cobra.Command {

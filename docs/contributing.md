@@ -4,7 +4,7 @@ Early-stage project. Issues and design discussion are welcome.
 
 ## Docs (this site)
 
-User documentation is the **source of truth** in this repository under [`docs/`](https://github.com/abyssmemes/contextverse/tree/main/docs).
+User documentation is the **source of truth** in this repository under [`docs/`](https://github.com/orkcom-tech/contextverse/tree/main/docs).
 
 ```bash
 python3 -m venv .venv-docs
@@ -33,7 +33,7 @@ make build
 
 ### Changelog
 
-Anything a user would notice goes in [`CHANGELOG.md`](https://github.com/abyssmemes/contextverse/blob/main/CHANGELOG.md) under `## [Unreleased]`, in the same pull request as the change.
+Anything a user would notice goes in [`CHANGELOG.md`](https://github.com/orkcom-tech/contextverse/blob/main/CHANGELOG.md) under `## [Unreleased]`, in the same pull request as the change.
 
 Because `main` releases itself the moment CI is green, there is no later moment to write it down — an entry that isn't in the PR simply never gets written. Use the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) sections (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`), and describe the effect on the user rather than the diff:
 
@@ -47,4 +47,4 @@ Pure refactors, test-only changes and internal cleanups don't need an entry. Whe
 
 ## License / DCO
 
-Code is [BUSL-1.1](https://github.com/abyssmemes/contextverse/blob/main/LICENSE). A CLA/DCO for external PRs will land when the project formally accepts outside contributions.
+Code is [BUSL-1.1](https://github.com/orkcom-tech/contextverse/blob/main/LICENSE). A CLA/DCO for external PRs will land when the project formally accepts outside contributions.

@@ -11,10 +11,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/abyssmemes/contextverse/internal/config"
-	"github.com/abyssmemes/contextverse/internal/graph"
-	"github.com/abyssmemes/contextverse/internal/storage"
-	"github.com/abyssmemes/contextverse/internal/version"
+	"github.com/orkcom-tech/contextverse/internal/config"
+	"github.com/orkcom-tech/contextverse/internal/graph"
+	"github.com/orkcom-tech/contextverse/internal/storage"
+	"github.com/orkcom-tech/contextverse/internal/version"
 )
 
 type clientTab int

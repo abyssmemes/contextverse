@@ -6,8 +6,8 @@ import (
 	"net"
 	"testing"
 
-	"github.com/abyssmemes/contextverse/internal/storage"
-	"github.com/abyssmemes/contextverse/internal/syncclient"
+	"github.com/orkcom-tech/contextverse/internal/storage"
+	"github.com/orkcom-tech/contextverse/internal/syncclient"
 )
 
 func TestExitCodeClassification(t *testing.T) {

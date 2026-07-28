@@ -9,8 +9,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/abyssmemes/contextverse/internal/logx"
-	templatepkg "github.com/abyssmemes/contextverse/internal/template"
+	"github.com/orkcom-tech/contextverse/internal/logx"
+	templatepkg "github.com/orkcom-tech/contextverse/internal/template"
 )
 
 //go:embed embed/*

@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/abyssmemes/contextverse/internal/config"
-	"github.com/abyssmemes/contextverse/internal/plugins"
-	"github.com/abyssmemes/contextverse/internal/version"
+	"github.com/orkcom-tech/contextverse/internal/config"
+	"github.com/orkcom-tech/contextverse/internal/plugins"
+	"github.com/orkcom-tech/contextverse/internal/version"
 )
 
 // Snapshot is read-only state for the client/solo TUI (refreshed from disk/CLI).

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/abyssmemes/contextverse/internal/entrypoint"
-	"github.com/abyssmemes/contextverse/internal/space"
+	"github.com/orkcom-tech/contextverse/internal/entrypoint"
+	"github.com/orkcom-tech/contextverse/internal/space"
 )
 
 func TestGenerate(t *testing.T) {

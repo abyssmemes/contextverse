@@ -9,7 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/abyssmemes/contextverse/internal/graph"
+	"github.com/orkcom-tech/contextverse/internal/graph"
 )
 
 func stubEditor(t *testing.T, name string) {

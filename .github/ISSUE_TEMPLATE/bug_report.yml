@@ -1,0 +1,66 @@
+name: Bug report
+description: Something behaves differently from what it says it does
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Two things make a report actionable here, and they are the two most
+        often missing: the exact command you typed, and whether your space was
+        created by this version or carried across an upgrade. Most of the bugs
+        found so far were invisible on a freshly created space.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: The command you ran and what came back. Paste it rather than describing it.
+      render: shell
+      placeholder: |
+        $ contextd file list
+        (no files)
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: dropdown
+    id: space-age
+    attributes:
+      label: Where did this space come from?
+      description: This matters more than it sounds. A space carried across an upgrade is in a state a fresh one never reaches.
+      options:
+        - Created by the version I am running now
+        - Created by an earlier version and carried across an upgrade
+        - Cloned from a server with init client
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      options: [solo, client, server]
+    validations:
+      required: true
+
+  - type: textarea
+    id: version
+    attributes:
+      label: Version and platform
+      description: "Output of `contextd version`, plus your OS. If you installed more than once, `which -a contextd` too — a stale binary earlier in PATH has caused this before."
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: "`contextd status` output is usually the fastest way to answer the next three questions. Remove anything private first — it can name paths and identities."

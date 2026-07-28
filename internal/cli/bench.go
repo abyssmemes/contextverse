@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/abyssmemes/contextverse/internal/bench"
+	"github.com/orkcom-tech/contextverse/internal/bench"
 )
 
 func newBenchCmd() *cobra.Command {

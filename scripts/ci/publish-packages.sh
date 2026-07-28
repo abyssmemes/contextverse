@@ -6,18 +6,18 @@
 #
 # Env:
 #   PACKAGING_TOKEN  (required) — PAT with contents:write on homebrew-tap + scoop-bucket
-#   HOMEBREW_TAP_REPO — default abyssmemes/homebrew-tap
-#   SCOOP_BUCKET_REPO — default abyssmemes/scoop-bucket
-#   CONTEXTVERSE_REPO — passed through to bump scripts (default abyssmemes/contextverse)
+#   HOMEBREW_TAP_REPO — default orkcom-tech/homebrew-tap
+#   SCOOP_BUCKET_REPO — default orkcom-tech/scoop-bucket
+#   CONTEXTVERSE_REPO — passed through to bump scripts (default orkcom-tech/contextverse)
 set -euo pipefail
 
 TAG="${1:-}"
 [[ -n "$TAG" ]] || { echo "usage: $0 <tag>  (e.g. v0.2.0)" >&2; exit 2; }
 [[ -n "${PACKAGING_TOKEN:-}" ]] || { echo "PACKAGING_TOKEN is required" >&2; exit 1; }
 
-HOMEBREW_TAP_REPO="${HOMEBREW_TAP_REPO:-abyssmemes/homebrew-tap}"
-SCOOP_BUCKET_REPO="${SCOOP_BUCKET_REPO:-abyssmemes/scoop-bucket}"
-CONTEXTVERSE_REPO="${CONTEXTVERSE_REPO:-abyssmemes/contextverse}"
+HOMEBREW_TAP_REPO="${HOMEBREW_TAP_REPO:-orkcom-tech/homebrew-tap}"
+SCOOP_BUCKET_REPO="${SCOOP_BUCKET_REPO:-orkcom-tech/scoop-bucket}"
+CONTEXTVERSE_REPO="${CONTEXTVERSE_REPO:-orkcom-tech/contextverse}"
 export CONTEXTVERSE_REPO
 
 TMP="$(mktemp -d)"

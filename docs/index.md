@@ -5,7 +5,7 @@
 One context for every AI tool — Claude, ChatGPT, Cursor, Copilot. Self-hosted, vendor-neutral, open source.
 
 !!! warning "Early development"
-    Commands, the HTTP API and the on-disk layout are not yet stable. Pin a release if you depend on them — see [GitHub Releases](https://github.com/abyssmemes/contextverse/releases).
+    Commands, the HTTP API and the on-disk layout are not yet stable. Pin a release if you depend on them — see [GitHub Releases](https://github.com/orkcom-tech/contextverse/releases).
 
 ## The problem
 
@@ -93,6 +93,11 @@ New to it? **[Concepts](concepts.md)** is fifteen minutes and makes everything e
 
 `contextd` guarantees **delivery**: your context reaches every wired tool at session start. It cannot guarantee **obedience** — a language model can still ignore an instruction it was handed. Anything claiming otherwise is selling you something.
 
+
+## Who builds this
+
+ContextVerse is developed by **ORKCOM**. Copyright is held by Eduard Lugovtsov; ORKCOM is the project's home rather than a separate rights holder, and the licence names the person accordingly.
+
 ## License
 
-[BUSL-1.1](https://github.com/abyssmemes/contextverse/blob/main/LICENSE), source-available: self-host, modify and run it in production; don't offer a competing hosted service. Each version converts to Apache-2.0 four years after release. Templates are Apache-2.0.
+[BUSL-1.1](https://github.com/orkcom-tech/contextverse/blob/main/LICENSE), source-available: self-host, modify and run it in production; don't offer a competing hosted service. Each version converts to Apache-2.0 four years after release. Templates are Apache-2.0.

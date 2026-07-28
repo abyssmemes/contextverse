@@ -7,7 +7,7 @@ import (
 func TestGitAuthHTTPSToken(t *testing.T) {
 	t.Parallel()
 	a := GitAuth{Username: "git", Token: "secret-pat"}
-	m, err := a.AuthMethod("https://github.com/abyssmemes/private-repo.git")
+	m, err := a.AuthMethod("https://github.com/example/private-repo.git")
 	if err != nil {
 		t.Fatal(err)
 	}

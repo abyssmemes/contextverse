@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://orkcom-tech.github.io/contextverse/
+    about: CLI reference, server setup, auth and ACL, deployment
+  - name: Adding support for another AI client
+    url: https://github.com/orkcom-tech/contextverse-templates
+    about: Client integrations are templates, not binary changes — they live in their own repository and are added by pull request
+  - name: Security vulnerability
+    url: https://github.com/orkcom-tech/contextverse/security/advisories/new
+    about: Report privately. Do not open a public issue for a vulnerability.

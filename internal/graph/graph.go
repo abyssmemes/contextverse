@@ -29,7 +29,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/abyssmemes/contextverse/internal/freshness"
+	"github.com/orkcom-tech/contextverse/internal/freshness"
 )
 
 // EdgeKind records which syntax produced a reference.

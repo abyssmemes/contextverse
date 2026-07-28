@@ -1,13 +1,13 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
-PackageIdentifier: Abyssmemes.Contextd
+PackageIdentifier: OrkcomTech.Contextd
 PackageVersion: 0.0.1
 PackageLocale: en-US
-Publisher: abyssmemes
-PublisherUrl: https://github.com/abyssmemes
+Publisher: ORKCOM
+PublisherUrl: https://github.com/orkcom-tech
 PackageName: contextd
-PackageUrl: https://github.com/abyssmemes/contextverse
+PackageUrl: https://github.com/orkcom-tech/contextverse
 License: BUSL-1.1
-LicenseUrl: https://github.com/abyssmemes/contextverse/blob/main/LICENSE
+LicenseUrl: https://github.com/orkcom-tech/contextverse/blob/main/LICENSE
 ShortDescription: Portable, vendor-neutral context for AI
 Description: contextd manages a ContextVerse space and delivers curated context to Claude, Cursor, Copilot, and other AI tools.
 Tags:

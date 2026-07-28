@@ -2,7 +2,7 @@
 # ContextVerse installer — installs the contextd CLI.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/abyssmemes/contextverse/main/scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/orkcom-tech/contextverse/main/scripts/install.sh | bash
 #   CONTEXTD_VERSION=v0.1.0 bash scripts/install.sh
 #   bash scripts/install.sh --version v0.1.0 --dir ~/.local/bin
 #
@@ -10,12 +10,12 @@
 #   CONTEXTD_VERSION   tag or "latest" (default: latest)
 #   CONTEXTD_INSTALL_DIR  install directory override
 #   GITHUB_TOKEN / GH_TOKEN  required while the repo is private (release download + API)
-#   CONTEXTD_REPO      owner/name (default: abyssmemes/contextverse)
+#   CONTEXTD_REPO      owner/name (default: orkcom-tech/contextverse)
 #   CONTEXTD_NO_MODIFY_PATH  if set, skip PATH hints
 
 set -euo pipefail
 
-REPO="${CONTEXTD_REPO:-abyssmemes/contextverse}"
+REPO="${CONTEXTD_REPO:-orkcom-tech/contextverse}"
 BINARY="contextd"
 VERSION="${CONTEXTD_VERSION:-latest}"
 INSTALL_DIR="${CONTEXTD_INSTALL_DIR:-}"
@@ -210,7 +210,7 @@ install_via_go() {
   local dest_dir="$1"
   need_cmd go
   info "No usable release binary — building with go install"
-  export GOPRIVATE="${GOPRIVATE:-github.com/abyssmemes/*}"
+  export GOPRIVATE="${GOPRIVATE:-github.com/orkcom-tech/*}"
   local ver_spec="@latest"
   if [[ "$VERSION" != "latest" ]]; then
     ver_spec="@${VERSION}"
@@ -283,7 +283,7 @@ main() {
   if [[ "$os" == "darwin" ]] && command -v brew >/dev/null 2>&1; then
     log ""
     log "  Tip: on macOS you can also use Homebrew:"
-    log "    brew tap abyssmemes/tap && brew install abyssmemes/tap/contextd"
+    log "    brew tap orkcom-tech/tap && brew install orkcom-tech/tap/contextd"
   fi
   log ""
 

@@ -5,7 +5,7 @@ package winsvc_test
 import (
 	"testing"
 
-	"github.com/abyssmemes/contextverse/internal/winsvc"
+	"github.com/orkcom-tech/contextverse/internal/winsvc"
 )
 
 func TestStubOpsError(t *testing.T) {

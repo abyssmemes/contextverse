@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/abyssmemes/contextverse/internal/storage"
-	"github.com/abyssmemes/contextverse/internal/testspace"
+	"github.com/orkcom-tech/contextverse/internal/storage"
+	"github.com/orkcom-tech/contextverse/internal/testspace"
 )
 
 // These run against a space carried across an upgrade rather than one this

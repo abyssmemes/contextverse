@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/abyssmemes/contextverse/internal/authz"
+	"github.com/orkcom-tech/contextverse/internal/authz"
 )
 
 // ACLRule and ACLUser are how `acl list` reports permissions. Nested rather

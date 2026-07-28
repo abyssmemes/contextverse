@@ -13,9 +13,9 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	"github.com/abyssmemes/contextverse/internal/auth"
-	"github.com/abyssmemes/contextverse/internal/authz"
-	"github.com/abyssmemes/contextverse/internal/config"
+	"github.com/orkcom-tech/contextverse/internal/auth"
+	"github.com/orkcom-tech/contextverse/internal/authz"
+	"github.com/orkcom-tech/contextverse/internal/config"
 )
 
 func newPolicyCmd() *cobra.Command {

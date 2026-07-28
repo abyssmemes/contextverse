@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/abyssmemes/contextverse/internal/logx"
+	"github.com/orkcom-tech/contextverse/internal/logx"
 )
 
 // ApplyResult describes one integration apply.
@@ -243,7 +243,7 @@ func ManualInstructionsCatalog(catalog []*Integration, vars Vars) string {
 		b.WriteString("  \"hooks\": { \"SessionStart\": [ { \"hooks\": [\n")
 		b.WriteString("    { \"type\": \"command\", \"command\": \"contextd context inject --format claude-hook\" }\n")
 		b.WriteString("  ] } ] }\n\n")
-		b.WriteString("Templates: https://github.com/abyssmemes/contextverse-templates\n")
+		b.WriteString("Templates: https://github.com/orkcom-tech/contextverse-templates\n")
 		return b.String()
 	}
 	for _, in := range catalog {
@@ -252,6 +252,6 @@ func ManualInstructionsCatalog(catalog []*Integration, vars Vars) string {
 		b.WriteString("\n")
 	}
 	b.WriteString("Contribute a client-integration template:\n")
-	b.WriteString("  https://github.com/abyssmemes/contextverse-templates\n")
+	b.WriteString("  https://github.com/orkcom-tech/contextverse-templates\n")
 	return b.String()
 }

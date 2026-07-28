@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/abyssmemes/contextverse/internal/testspace"
+	"github.com/orkcom-tech/contextverse/internal/testspace"
 )
 
 // Golden snapshots of what the TUI actually draws.

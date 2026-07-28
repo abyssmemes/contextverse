@@ -9,11 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/abyssmemes/contextverse/internal/auth"
-	"github.com/abyssmemes/contextverse/internal/authz"
-	"github.com/abyssmemes/contextverse/internal/config"
-	"github.com/abyssmemes/contextverse/internal/server"
-	"github.com/abyssmemes/contextverse/internal/spacesvc"
+	"github.com/orkcom-tech/contextverse/internal/auth"
+	"github.com/orkcom-tech/contextverse/internal/authz"
+	"github.com/orkcom-tech/contextverse/internal/config"
+	"github.com/orkcom-tech/contextverse/internal/server"
+	"github.com/orkcom-tech/contextverse/internal/spacesvc"
 )
 
 // scopedFixture builds a server with two spaces where "scout" may only read alpha.

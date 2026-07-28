@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/abyssmemes/contextverse/internal/authz"
-	"github.com/abyssmemes/contextverse/internal/events"
-	"github.com/abyssmemes/contextverse/internal/logx"
-	"github.com/abyssmemes/contextverse/internal/webhooks"
+	"github.com/orkcom-tech/contextverse/internal/authz"
+	"github.com/orkcom-tech/contextverse/internal/events"
+	"github.com/orkcom-tech/contextverse/internal/logx"
+	"github.com/orkcom-tech/contextverse/internal/webhooks"
 )
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {

@@ -12,12 +12,12 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/abyssmemes/contextverse/internal/config"
-	"github.com/abyssmemes/contextverse/internal/hooks"
-	"github.com/abyssmemes/contextverse/internal/logx"
-	"github.com/abyssmemes/contextverse/internal/quotas"
-	"github.com/abyssmemes/contextverse/internal/space"
-	"github.com/abyssmemes/contextverse/internal/storage"
+	"github.com/orkcom-tech/contextverse/internal/config"
+	"github.com/orkcom-tech/contextverse/internal/hooks"
+	"github.com/orkcom-tech/contextverse/internal/logx"
+	"github.com/orkcom-tech/contextverse/internal/quotas"
+	"github.com/orkcom-tech/contextverse/internal/space"
+	"github.com/orkcom-tech/contextverse/internal/storage"
 )
 
 // Meta is per-space metadata on the server.

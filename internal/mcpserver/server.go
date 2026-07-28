@@ -9,12 +9,12 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/abyssmemes/contextverse/internal/config"
-	"github.com/abyssmemes/contextverse/internal/graph"
-	"github.com/abyssmemes/contextverse/internal/logx"
-	"github.com/abyssmemes/contextverse/internal/search"
-	"github.com/abyssmemes/contextverse/internal/space"
-	"github.com/abyssmemes/contextverse/internal/version"
+	"github.com/orkcom-tech/contextverse/internal/config"
+	"github.com/orkcom-tech/contextverse/internal/graph"
+	"github.com/orkcom-tech/contextverse/internal/logx"
+	"github.com/orkcom-tech/contextverse/internal/search"
+	"github.com/orkcom-tech/contextverse/internal/space"
+	"github.com/orkcom-tech/contextverse/internal/version"
 )
 
 // Options configure the local-space MCP server.

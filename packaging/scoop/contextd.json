@@ -1,17 +1,17 @@
 {
   "version": "0.0.1",
   "description": "Portable, vendor-neutral context for AI (contextd)",
-  "homepage": "https://github.com/abyssmemes/contextverse",
+  "homepage": "https://github.com/orkcom-tech/contextverse",
   "license": "BUSL-1.1",
-  "_comment": "Canonical manifest lives in https://github.com/abyssmemes/scoop-bucket — this copy is for reference only.",
+  "_comment": "Canonical manifest lives in https://github.com/orkcom-tech/scoop-bucket — this copy is for reference only.",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/abyssmemes/contextverse/releases/download/v0.0.1/contextd_0.0.1_windows_amd64.zip",
+      "url": "https://github.com/orkcom-tech/contextverse/releases/download/v0.0.1/contextd_0.0.1_windows_amd64.zip",
       "hash": "dc9f63127e5a49c76f54900750527aab4cdaab02bdc20458770accf6a9049add",
       "bin": "contextd.exe"
     },
     "arm64": {
-      "url": "https://github.com/abyssmemes/contextverse/releases/download/v0.0.1/contextd_0.0.1_windows_arm64.zip",
+      "url": "https://github.com/orkcom-tech/contextverse/releases/download/v0.0.1/contextd_0.0.1_windows_arm64.zip",
       "hash": "d3d0335ccff9716e96b5fd9f6d86310cf152c724f8ae1b270acec4869f1eb1b2",
       "bin": "contextd.exe"
     }

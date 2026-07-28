@@ -12,14 +12,14 @@ with a single source of truth.
 
 **Self-hosted · Vendor-neutral · Open source**
 
-[![ci](https://github.com/abyssmemes/contextverse/actions/workflows/ci.yml/badge.svg)](https://github.com/abyssmemes/contextverse/actions/workflows/ci.yml)
-[![docs](https://github.com/abyssmemes/contextverse/actions/workflows/docs.yml/badge.svg)](https://abyssmemes.github.io/contextverse/)
+[![ci](https://github.com/orkcom-tech/contextverse/actions/workflows/ci.yml/badge.svg)](https://github.com/orkcom-tech/contextverse/actions/workflows/ci.yml)
+[![docs](https://github.com/orkcom-tech/contextverse/actions/workflows/docs.yml/badge.svg)](https://orkcom-tech.github.io/contextverse/)
 [![license](https://img.shields.io/badge/license-BUSL--1.1-blue)](./LICENSE)
 
-[Documentation](https://abyssmemes.github.io/contextverse/) ·
+[Documentation](https://orkcom-tech.github.io/contextverse/) ·
 [Install](#install) ·
 [Quickstart](#quickstart) ·
-[Templates](https://github.com/abyssmemes/contextverse-templates)
+[Templates](https://github.com/orkcom-tech/contextverse-templates)
 
 </div>
 
@@ -136,14 +136,14 @@ Stated as our own capabilities, not as claims about anyone else's product:
 <tr valign="top"><td>
 
 ```bash
-brew tap abyssmemes/tap
-brew install abyssmemes/tap/contextd
+brew tap orkcom-tech/tap
+brew install orkcom-tech/tap/contextd
 ```
 
 </td><td>
 
 ```powershell
-scoop bucket add contextverse https://github.com/abyssmemes/scoop-bucket
+scoop bucket add contextverse https://github.com/orkcom-tech/scoop-bucket
 scoop install contextd
 ```
 
@@ -153,22 +153,22 @@ scoop install contextd
 **macOS / Linux — install script**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/abyssmemes/contextverse/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/orkcom-tech/contextverse/main/scripts/install.sh | bash
 ```
 
 **Windows — install script**
 
 ```powershell
-irm https://raw.githubusercontent.com/abyssmemes/contextverse/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/orkcom-tech/contextverse/main/scripts/install.ps1 | iex
 ```
 
 **Go**
 
 ```bash
-go install github.com/abyssmemes/contextverse/cmd/contextd@latest
+go install github.com/orkcom-tech/contextverse/cmd/contextd@latest
 ```
 
-Also published as `.deb` / `.rpm` on [Releases](https://github.com/abyssmemes/contextverse/releases). The tap and bucket are ours — not submitted to homebrew-core or Scoop extras. Details in [`scripts/README.md`](./scripts/README.md).
+Also published as `.deb` / `.rpm` on [Releases](https://github.com/orkcom-tech/contextverse/releases). The tap and bucket are ours — not submitted to homebrew-core or Scoop extras. Details in [`scripts/README.md`](./scripts/README.md).
 
 ## Quickstart
 
@@ -211,7 +211,7 @@ Change your mind later with `contextd init --reconfigure`.
 | **MCP clients** | `contextd mcp serve` | Live tools over stdio |
 | **ChatGPT / web UIs** | — none — | `contextd export --format chatgpt`, manual upload |
 
-Adding a new AI client is a PR to [`contextverse-templates`](https://github.com/abyssmemes/contextverse-templates), not a binary release.
+Adding a new AI client is a PR to [`contextverse-templates`](https://github.com/orkcom-tech/contextverse-templates), not a binary release.
 
 ## Built for scripting
 
@@ -262,9 +262,9 @@ scripts/          install.sh · install.ps1 · ci/
 
 | Related repo | Role |
 |---|---|
-| [`contextverse-templates`](https://github.com/abyssmemes/contextverse-templates) | Context-space and client-integration templates (Apache-2.0) |
-| [`homebrew-tap`](https://github.com/abyssmemes/homebrew-tap) | Homebrew tap |
-| [`scoop-bucket`](https://github.com/abyssmemes/scoop-bucket) | Scoop bucket |
+| [`contextverse-templates`](https://github.com/orkcom-tech/contextverse-templates) | Context-space and client-integration templates (Apache-2.0) |
+| [`homebrew-tap`](https://github.com/orkcom-tech/homebrew-tap) | Homebrew tap |
+| [`scoop-bucket`](https://github.com/orkcom-tech/scoop-bucket) | Scoop bucket |
 
 ## Building from source
 
@@ -278,7 +278,7 @@ Needs a recent Go toolchain. No cgo, no external services for the default build.
 
 ## Documentation
 
-Full user documentation: **<https://abyssmemes.github.io/contextverse/>**
+Full user documentation: **<https://orkcom-tech.github.io/contextverse/>**
 
 The source of truth is [`docs/`](./docs/) in this repository — edit it there.
 
@@ -291,7 +291,12 @@ mkdocs serve
 
 Issues and design discussion are welcome. See [`docs/contributing.md`](./docs/contributing.md). The project is early; a CLA/DCO lands when it formally accepts external code.
 
-New AI client support does **not** need a code change — send a client-integration template to [`contextverse-templates`](https://github.com/abyssmemes/contextverse-templates).
+New AI client support does **not** need a code change — send a client-integration template to [`contextverse-templates`](https://github.com/orkcom-tech/contextverse-templates).
+
+
+## Who builds this
+
+ContextVerse is developed by **ORKCOM**. Copyright is held by Eduard Lugovtsov; ORKCOM is the project's home rather than a separate rights holder, and the licence names the person accordingly.
 
 ## License
 

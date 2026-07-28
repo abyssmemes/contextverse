@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/abyssmemes/contextverse/internal/winsvc"
+	"github.com/orkcom-tech/contextverse/internal/winsvc"
 )
 
 func newServerServiceCmd() *cobra.Command {

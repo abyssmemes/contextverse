@@ -11,13 +11,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/abyssmemes/contextverse/internal/logx"
-	"github.com/abyssmemes/contextverse/internal/storage"
+	"github.com/orkcom-tech/contextverse/internal/logx"
+	"github.com/orkcom-tech/contextverse/internal/storage"
 )
 
 const (
 	// DefaultRepo is the public templates catalog.
-	DefaultRepo = "abyssmemes/contextverse-templates"
+	DefaultRepo = "orkcom-tech/contextverse-templates"
 	// DefaultRef is the git ref to fetch from.
 	DefaultRef = "main"
 	// CacheDirName under the user cache directory.

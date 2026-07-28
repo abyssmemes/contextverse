@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/abyssmemes/contextverse/internal/logx"
+	"github.com/orkcom-tech/contextverse/internal/logx"
 )
 
 // ApplyOpts controls detect → ask → apply behavior.

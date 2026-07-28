@@ -2,7 +2,7 @@
 # Installs the contextd CLI into a user-writable directory on PATH.
 #
 # Usage:
-#   irm https://raw.githubusercontent.com/abyssmemes/contextverse/main/scripts/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/orkcom-tech/contextverse/main/scripts/install.ps1 | iex
 #   $env:CONTEXTD_VERSION='v0.0.1'; .\scripts\install.ps1
 #   .\scripts\install.ps1 -Version v0.0.1 -Dir "$env:LOCALAPPDATA\contextverse\bin"
 #
@@ -14,7 +14,7 @@
 param(
     [string]$Version = $(if ($env:CONTEXTD_VERSION) { $env:CONTEXTD_VERSION } else { "latest" }),
     [string]$Dir = $(if ($env:CONTEXTD_INSTALL_DIR) { $env:CONTEXTD_INSTALL_DIR } else { "" }),
-    [string]$Repo = $(if ($env:CONTEXTD_REPO) { $env:CONTEXTD_REPO } else { "abyssmemes/contextverse" })
+    [string]$Repo = $(if ($env:CONTEXTD_REPO) { $env:CONTEXTD_REPO } else { "orkcom-tech/contextverse" })
 )
 
 $ErrorActionPreference = "Stop"
@@ -34,7 +34,7 @@ function Get-GitHubToken {
 
 function Get-Headers {
     $token = Get-GitHubToken
-    $headers = @{ "User-Agent" = "contextverse-installer" }
+    $headers = @{ "User-Agent" = "contextd-installer" }
     if ($token) {
         $headers["Authorization"] = "Bearer $token"
     }
@@ -107,7 +107,7 @@ function Install-FromGo([string]$DestDir) {
         throw "go not found; cannot fall back to go install"
     }
     Write-Info "No usable release binary — building with go install"
-    $env:GOPRIVATE = if ($env:GOPRIVATE) { $env:GOPRIVATE } else { "github.com/abyssmemes/*" }
+    $env:GOPRIVATE = if ($env:GOPRIVATE) { $env:GOPRIVATE } else { "github.com/orkcom-tech/*" }
     $spec = if ($Version -eq "latest") { "@latest" } else { "@$Version" }
     & go install "github.com/$Repo/cmd/contextd$spec"
     if ($LASTEXITCODE -ne 0) { throw "go install failed" }

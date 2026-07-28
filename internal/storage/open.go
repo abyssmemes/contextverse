@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/abyssmemes/contextverse/internal/config"
+	"github.com/orkcom-tech/contextverse/internal/config"
 )
 
 // Driver names.

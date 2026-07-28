@@ -10,10 +10,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/abyssmemes/contextverse/internal/auth"
-	"github.com/abyssmemes/contextverse/internal/config"
-	"github.com/abyssmemes/contextverse/internal/server"
-	"github.com/abyssmemes/contextverse/internal/spacesvc"
+	"github.com/orkcom-tech/contextverse/internal/auth"
+	"github.com/orkcom-tech/contextverse/internal/config"
+	"github.com/orkcom-tech/contextverse/internal/server"
+	"github.com/orkcom-tech/contextverse/internal/spacesvc"
 )
 
 // consoleFixture spins up a server with a real admin session so the console

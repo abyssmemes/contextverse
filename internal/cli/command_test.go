@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/abyssmemes/contextverse/internal/testspace"
+	"github.com/orkcom-tech/contextverse/internal/testspace"
 )
 
 // Tests that drive whole commands rather than the functions inside them.

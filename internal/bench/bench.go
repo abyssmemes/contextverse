@@ -38,8 +38,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/abyssmemes/contextverse/internal/graph"
-	"github.com/abyssmemes/contextverse/internal/search"
+	"github.com/orkcom-tech/contextverse/internal/graph"
+	"github.com/orkcom-tech/contextverse/internal/search"
 )
 
 // Task is one question with the documents that actually answer it.

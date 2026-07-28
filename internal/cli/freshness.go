@@ -10,10 +10,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/abyssmemes/contextverse/internal/config"
-	"github.com/abyssmemes/contextverse/internal/freshness"
-	"github.com/abyssmemes/contextverse/internal/spacesvc"
-	"github.com/abyssmemes/contextverse/internal/webhooks"
+	"github.com/orkcom-tech/contextverse/internal/config"
+	"github.com/orkcom-tech/contextverse/internal/freshness"
+	"github.com/orkcom-tech/contextverse/internal/spacesvc"
+	"github.com/orkcom-tech/contextverse/internal/webhooks"
 )
 
 func newFreshnessCmd() *cobra.Command {

@@ -1,10 +1,10 @@
 site_name: ContextVerse
 site_description: Context as a Service — one context for every AI tool. Self-hosted, vendor-neutral, open source.
-site_url: https://abyssmemes.github.io/contextverse/
-repo_url: https://github.com/abyssmemes/contextverse
-repo_name: abyssmemes/contextverse
+site_url: https://orkcom-tech.github.io/contextverse/
+repo_url: https://github.com/orkcom-tech/contextverse
+repo_name: orkcom-tech/contextverse
 edit_uri: edit/main/docs/
-copyright: BUSL-1.1 — source-available. Each version converts to Apache-2.0 four years after release.
+copyright: Developed by ORKCOM · BUSL-1.1 — source-available. Each version converts to Apache-2.0 four years after release.
 
 theme:
   name: material
@@ -114,5 +114,5 @@ nav:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/abyssmemes/contextverse
+      link: https://github.com/orkcom-tech/contextverse
       name: ContextVerse on GitHub

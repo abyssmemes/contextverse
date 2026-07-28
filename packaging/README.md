@@ -11,8 +11,8 @@
 
 | Manager | Repo | Install |
 |---|---|---|
-| Homebrew | [`abyssmemes/homebrew-tap`](https://github.com/abyssmemes/homebrew-tap) | `brew tap abyssmemes/tap && brew install abyssmemes/tap/contextd` |
-| Scoop | [`abyssmemes/scoop-bucket`](https://github.com/abyssmemes/scoop-bucket) | `scoop bucket add contextverse https://github.com/abyssmemes/scoop-bucket` then `scoop install contextd` |
+| Homebrew | [`orkcom-tech/homebrew-tap`](https://github.com/orkcom-tech/homebrew-tap) | `brew tap orkcom-tech/tap && brew install orkcom-tech/tap/contextd` |
+| Scoop | [`orkcom-tech/scoop-bucket`](https://github.com/orkcom-tech/scoop-bucket) | `scoop bucket add contextverse https://github.com/orkcom-tech/scoop-bucket` then `scoop install contextd` |
 | Winget | [`packaging/winget/`](./winget/) templates | PR to `microsoft/winget-pkgs` on release cut (manual) |
 
 ## CI publish path

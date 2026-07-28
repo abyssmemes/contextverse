@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/abyssmemes/contextverse/internal/webhooks"
+	"github.com/orkcom-tech/contextverse/internal/webhooks"
 )
 
 const ringSize = 256

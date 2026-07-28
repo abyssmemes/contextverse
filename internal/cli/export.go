@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/abyssmemes/contextverse/internal/export"
-	"github.com/abyssmemes/contextverse/internal/plugins"
+	"github.com/orkcom-tech/contextverse/internal/export"
+	"github.com/orkcom-tech/contextverse/internal/plugins"
 )
 
 func newExportCmd() *cobra.Command {

@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/abyssmemes/contextverse/internal/auth"
-	"github.com/abyssmemes/contextverse/internal/authz"
+	"github.com/orkcom-tech/contextverse/internal/auth"
+	"github.com/orkcom-tech/contextverse/internal/authz"
 )
 
 func (s *Server) authzVars() authz.Vars {

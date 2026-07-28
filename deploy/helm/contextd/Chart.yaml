@@ -8,12 +8,12 @@ keywords:
   - contextverse
   - contextd
   - ai-context
-home: https://github.com/abyssmemes/contextverse
+home: https://github.com/orkcom-tech/contextverse
 sources:
-  - https://github.com/abyssmemes/contextverse
+  - https://github.com/orkcom-tech/contextverse
 maintainers:
-  - name: abyssmemes
-    url: https://github.com/abyssmemes
+  - name: orkcom-tech
+    url: https://github.com/orkcom-tech
 annotations:
   # Chart is a starter template; no OCI chart publish / CD yet.
   contextverse.dev/status: "in-development"

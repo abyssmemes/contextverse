@@ -14,4 +14,4 @@ curl -sf http://127.0.0.1:8743/health
 
 Admin token is printed once during `contextd-init` logs.
 
-See public docs [Deploy → HA](https://abyssmemes.github.io/contextverse/deploy/#high-availability-shared-backend).
+See public docs [Deploy → HA](https://orkcom-tech.github.io/contextverse/deploy/#high-availability-shared-backend).

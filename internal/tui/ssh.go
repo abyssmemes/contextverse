@@ -14,7 +14,7 @@ import (
 	"github.com/charmbracelet/wish/activeterm"
 	bm "github.com/charmbracelet/wish/bubbletea"
 
-	"github.com/abyssmemes/contextverse/internal/config"
+	"github.com/orkcom-tech/contextverse/internal/config"
 )
 
 // SSHOptions configures the Model B Wish listener.

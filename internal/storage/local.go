@@ -14,7 +14,7 @@ import (
 
 	"github.com/gofrs/flock"
 
-	"github.com/abyssmemes/contextverse/internal/logx"
+	"github.com/orkcom-tech/contextverse/internal/logx"
 )
 
 const (

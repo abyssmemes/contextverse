@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/abyssmemes/contextverse/internal/spacesvc"
+	"github.com/orkcom-tech/contextverse/internal/spacesvc"
 )
 
 // The default policy: identity/ is seeded once and then left alone.

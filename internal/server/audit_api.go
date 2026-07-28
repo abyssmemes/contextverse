@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/abyssmemes/contextverse/internal/audit"
-	"github.com/abyssmemes/contextverse/internal/authz"
+	"github.com/orkcom-tech/contextverse/internal/audit"
+	"github.com/orkcom-tech/contextverse/internal/authz"
 )
 
 func (s *Server) handleAuditList(w http.ResponseWriter, r *http.Request) {

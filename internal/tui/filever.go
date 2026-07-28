@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/abyssmemes/contextverse/internal/config"
-	"github.com/abyssmemes/contextverse/internal/spacefiles"
-	"github.com/abyssmemes/contextverse/internal/storage"
+	"github.com/orkcom-tech/contextverse/internal/config"
+	"github.com/orkcom-tech/contextverse/internal/spacefiles"
+	"github.com/orkcom-tech/contextverse/internal/storage"
 )
 
 // TrackedFile is one live path with its FileLog version (UI/CLI/TUI parity).
