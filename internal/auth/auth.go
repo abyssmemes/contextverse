@@ -565,3 +565,42 @@ func randomHex(n int) (string, error) {
 	}
 	return hex.EncodeToString(b), nil
 }
+
+// RevokeUserTokens drops every token a user holds and reports how many went.
+//
+// The count matters to the caller: "revoked 3" and "revoked 0" are different
+// answers when you are cutting off a credential you believe was leaked, and a
+// silent success would let an operator believe they had closed a door that was
+// never open.
+func (s *Store) RevokeUserTokens(name string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Counted here rather than by calling ListTokens, which takes the read
+	// lock we are already holding for writing.
+	n := 0
+	entries, err := os.ReadDir(s.tokensDir())
+	if err != nil {
+		return 0, err
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(s.tokensDir(), e.Name()))
+		if err != nil {
+			continue
+		}
+		var rec TokenRecord
+		if err := json.Unmarshal(raw, &rec); err != nil {
+			continue
+		}
+		if rec.User == name {
+			n++
+		}
+	}
+	if err := s.revokeUserTokensLocked(name); err != nil {
+		return 0, err
+	}
+	return n, nil
+}

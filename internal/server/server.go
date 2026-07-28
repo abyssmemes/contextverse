@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
@@ -578,12 +579,22 @@ func (s *Server) handleGetSpace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	head, _ := s.Spaces.Head(r.Context(), name)
+	// Size has been computed for local quota warnings all along and never
+	// reported over the API, so anyone running a server had to shell into the
+	// box to answer "how big is this space". A walk failure costs the caller
+	// these two numbers, not the whole response.
+	bytes, files, err := s.Spaces.SpaceUsage(r.Context(), name)
+	if err != nil {
+		slog.Warn("space usage", "space", name, "err", err)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"name":     meta.Name,
 		"template": meta.Template,
 		"created":  meta.CreatedAt,
 		"head":     string(head),
 		"sync":     meta.Sync,
+		"bytes":    bytes,
+		"files":    files,
 	})
 }
 

@@ -13,6 +13,9 @@ func (s *Server) registerUsersAPI(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/users", s.auth(s.handleListUsers))
 	mux.Handle("POST /api/v1/users", s.auth(s.handleCreateUser))
 	mux.Handle("POST /api/v1/users/{name}/tokens", s.auth(s.handleCreateUserToken))
+	mux.Handle("DELETE /api/v1/users/{name}/tokens", s.auth(s.handleRevokeUserTokens))
+	mux.Handle("POST /api/v1/users/{name}/disable", s.auth(s.handleDisableUser))
+	mux.Handle("POST /api/v1/users/{name}/enable", s.auth(s.handleEnableUser))
 	mux.Handle("PUT /api/v1/policies/{name}", s.auth(s.handlePutPolicy))
 }
 
@@ -109,14 +112,63 @@ func (s *Server) handleCreateUserToken(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleRevokeUserTokens invalidates every token a user holds, without
+// removing the user.
+//
+// The API could mint tokens and never take them back: revocation existed as
+// `contextd user disable` on the machine and as a button in the web console,
+// and an operator working over the API had no way to cut off a leaked
+// credential. Anything managing a fleet of servers hit the same wall.
+func (s *Server) handleRevokeUserTokens(w http.ResponseWriter, r *http.Request) {
+	if !s.requireCap(w, r, "sys/auth/users", authz.CapUpdate) {
+		return
+	}
+	name := r.PathValue("name")
+	n, err := s.Auth.RevokeUserTokens(name)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, "invalid_request", err.Error(), nil)
+		return
+	}
+	s.auditEmit(r, "token.revoke_all", "", name, nil)
+	writeJSON(w, http.StatusOK, map[string]any{"user": name, "revoked": n})
+}
+
+// handleDisableUser refuses the user and drops their tokens in one step, which
+// is what "cut this account off" has to mean: leaving live tokens behind would
+// disable the login and not the access.
+func (s *Server) handleDisableUser(w http.ResponseWriter, r *http.Request) {
+	s.setUserDisabled(w, r, true)
+}
+
+func (s *Server) handleEnableUser(w http.ResponseWriter, r *http.Request) {
+	s.setUserDisabled(w, r, false)
+}
+
+func (s *Server) setUserDisabled(w http.ResponseWriter, r *http.Request, disabled bool) {
+	if !s.requireCap(w, r, "sys/auth/users", authz.CapUpdate) {
+		return
+	}
+	name := r.PathValue("name")
+	if err := s.Auth.SetDisabled(name, disabled); err != nil {
+		writeErr(w, r, http.StatusBadRequest, "invalid_request", err.Error(), nil)
+		return
+	}
+	action := "user.enable"
+	if disabled {
+		action = "user.disable"
+	}
+	s.auditEmit(r, action, "", name, nil)
+	writeJSON(w, http.StatusOK, map[string]any{"user": name, "disabled": disabled})
+}
+
 func (s *Server) handlePutPolicy(w http.ResponseWriter, r *http.Request) {
 	if !s.requireCap(w, r, "sys/auth/policies", authz.CapUpdate) {
 		return
 	}
 	name := r.PathValue("name")
 	var body struct {
-		Description string         `json:"description"`
-		Rules       []authz.Rule   `json:"rules"`
+		Description string       `json:"description"`
+		Rules       []authz.Rule `json:"rules"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, r, http.StatusBadRequest, "invalid_request", "invalid json", nil)
