@@ -236,7 +236,13 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	eng, _ := authz.Open(store.PoliciesDir())
+	// The engine, not "an engine if it happens to open": a nil one used to mean
+	// the freshly installed server authorized everything.
+	eng, err := authz.Open(store.PoliciesDir())
+	if err != nil {
+		s.setupErr(w, r, "could not open the policy engine: "+err.Error(), 4)
+		return
+	}
 	s.mu.Lock()
 	s.Cfg = cfg
 	s.Auth = store

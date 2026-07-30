@@ -9,7 +9,6 @@ import (
 
 	"github.com/orkcom-tech/contextverse/internal/auth"
 	"github.com/orkcom-tech/contextverse/internal/config"
-	"github.com/orkcom-tech/contextverse/internal/server"
 	"github.com/orkcom-tech/contextverse/internal/spacesvc"
 )
 
@@ -45,7 +44,7 @@ func adminFixture(t *testing.T) (*httptest.Server, string) {
 	if _, err := svc.Create(t.Context(), "team", "solo-default", true); err != nil {
 		t.Fatal(err)
 	}
-	ts := httptest.NewServer(server.New(cfg, store).Handler())
+	ts := httptest.NewServer(mustNewServer(t, cfg, store).Handler())
 	t.Cleanup(ts.Close)
 	return ts, adminTok
 }

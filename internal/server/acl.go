@@ -27,10 +27,6 @@ func (s *Server) requireCap(w http.ResponseWriter, r *http.Request, path string,
 		s.deny(w, r, "unauthenticated")
 		return false
 	}
-	if s.Authz == nil {
-		// Fallback during incomplete init: legacy role checks
-		return s.requireLegacy(w, r, p, path, cap)
-	}
 	if !s.allow(p, path, cap) {
 		s.auditDenied(r, "authz.deny", "", path, fmt.Sprintf("missing %s on %s", cap, path))
 		s.deny(w, r, fmt.Sprintf("missing %s on %s", cap, path))
@@ -57,19 +53,15 @@ func (s *Server) requireCapUI(w http.ResponseWriter, r *http.Request, path strin
 
 // allow answers the policy question without writing a response, so listings can
 // filter instead of failing.
+//
+// No engine means no. This used to fall back to coarse role checks whose default
+// arm returned true, so a server whose policies failed to load granted every
+// read and every list to anyone holding a token — the failure mode that looks
+// exactly like everything working. New refuses to build such a server now; this
+// is the second lock on the same door, for a Server assembled by hand.
 func (s *Server) allow(p *auth.Principal, path string, cap authz.Capability) bool {
-	if p == nil {
+	if p == nil || s.Authz == nil {
 		return false
-	}
-	if s.Authz == nil {
-		switch {
-		case strings.HasPrefix(path, "sys/") && cap != authz.CapRead:
-			return auth.CanAdmin(p.Role)
-		case cap == authz.CapUpdate || cap == authz.CapCreate || cap == authz.CapDelete:
-			return auth.CanWrite(p.Role)
-		default:
-			return true
-		}
 	}
 	pols := p.Policies
 	if len(pols) == 0 && p.Role != "" {
@@ -135,22 +127,6 @@ func (s *Server) eventScopesFor(p *auth.Principal, requested []string) []string 
 	return out
 }
 
-func (s *Server) requireLegacy(w http.ResponseWriter, r *http.Request, p *auth.Principal, path string, cap authz.Capability) bool {
-	switch {
-	case strings.HasPrefix(path, "sys/") && cap != authz.CapRead:
-		if !auth.CanAdmin(p.Role) {
-			s.deny(w, r, "admin role required")
-			return false
-		}
-	case cap == authz.CapUpdate || cap == authz.CapCreate || cap == authz.CapDelete:
-		if !auth.CanWrite(p.Role) {
-			s.deny(w, r, "write role required")
-			return false
-		}
-	}
-	return true
-}
-
 func (s *Server) requireFileWrite(w http.ResponseWriter, r *http.Request, space, filePath string) bool {
 	if s.canFileWrite(principalFrom(r.Context()), space, filePath) {
 		return true
@@ -160,13 +136,10 @@ func (s *Server) requireFileWrite(w http.ResponseWriter, r *http.Request, space,
 }
 
 func (s *Server) canFileWrite(p *auth.Principal, space, filePath string) bool {
-	if p == nil {
+	if p == nil || s.Authz == nil {
 		return false
 	}
 	acl := fmt.Sprintf("spaces/%s/files/%s", space, strings.TrimPrefix(filePath, "/"))
-	if s.Authz == nil {
-		return auth.CanWrite(p.Role)
-	}
 	pols := p.Policies
 	if len(pols) == 0 && p.Role != "" {
 		pols = []string{string(p.Role)}

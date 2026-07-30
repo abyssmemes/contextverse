@@ -66,10 +66,18 @@ type Server struct {
 }
 
 // New constructs a Server from an opened data dir.
-func New(cfg *config.ServerConfig, authStore *auth.Store) *Server {
+//
+// It refuses to build a server whose policy engine did not open. That used to
+// be a logged error the process carried on past, and the consequence was not a
+// server without authorization — it was a server that authorized everything:
+// with a nil engine, allow() answered true for every read and every list, so
+// path ACLs stopped applying to anyone and nothing in the response said so. A
+// server that cannot read its policies has no business serving the data those
+// policies protect.
+func New(cfg *config.ServerConfig, authStore *auth.Store) (*Server, error) {
 	eng, err := authz.Open(authStore.PoliciesDir())
 	if err != nil {
-		logx.L().Error("open authz engine", "err", err)
+		return nil, fmt.Errorf("open authz engine at %s: %w", authStore.PoliciesDir(), err)
 	}
 	al, err := audit.Open(cfg.DataDir)
 	if err != nil {
@@ -156,7 +164,7 @@ func New(cfg *config.ServerConfig, authStore *auth.Store) *Server {
 		Methods:  auth.DefaultRegistry(),
 		Tracing:  tp,
 		proxies:  proxies,
-	}
+	}, nil
 }
 
 // NewSetup creates a first-run install wizard server (no config yet).

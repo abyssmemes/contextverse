@@ -538,12 +538,12 @@ func (s *Store) revokeUserTokensLocked(user string) error {
 	return nil
 }
 
-// CanWrite reports whether role may mutate space content (legacy helper).
-func CanWrite(role Role) bool {
-	return role == RoleAdmin || role == RoleSpaceLead || role == RoleContributor
-}
-
 // CanAdmin reports whether role may manage users/spaces (legacy helper).
+//
+// The companion CanWrite is gone: its last caller was the coarse role fallback
+// the server used when its policy engine failed to load, and that fallback was
+// the fail-open path. Write decisions go through the policy engine now, with no
+// second answer to disagree with it.
 func CanAdmin(role Role) bool {
 	return role == RoleAdmin
 }

@@ -267,7 +267,10 @@ func newServerStartCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				srv = server.New(cfg, store)
+				srv, err = server.New(cfg, store)
+				if err != nil {
+					return err
+				}
 			}
 			if daemon {
 				return fmt.Errorf("daemon mode not yet implemented — run in foreground (or use systemd/launchd)")

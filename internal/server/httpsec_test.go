@@ -12,7 +12,6 @@ import (
 
 	"github.com/orkcom-tech/contextverse/internal/auth"
 	"github.com/orkcom-tech/contextverse/internal/config"
-	"github.com/orkcom-tech/contextverse/internal/server"
 	"github.com/orkcom-tech/contextverse/internal/spacesvc"
 )
 
@@ -53,7 +52,7 @@ func newConsole(t *testing.T) *consoleFixture {
 		t.Fatal(err)
 	}
 
-	ts := httptest.NewServer(server.New(cfg, store).Handler())
+	ts := httptest.NewServer(mustNewServer(t, cfg, store).Handler())
 	t.Cleanup(ts.Close)
 
 	jar, _ := cookiejar.New(nil)
