@@ -334,6 +334,14 @@ func (s *Server) Shutdown(ctx context.Context) error {
 			err = terr
 		}
 	}
+	// Storage last: handlers still in flight during http.Shutdown are holding
+	// backends, and closing a Postgres pool underneath them would turn a clean
+	// drain into a wave of errors on requests that were about to succeed.
+	if s.Spaces != nil {
+		if serr := s.Spaces.Close(); serr != nil && err == nil {
+			err = serr
+		}
+	}
 	return err
 }
 

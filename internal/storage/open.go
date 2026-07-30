@@ -114,11 +114,7 @@ func Open(opts OpenOptions) (Backend, error) {
 		})
 
 	case DriverSQL:
-		dsn := opts.Backend.SQLDSN
-		if dsn == "" {
-			dsn = os.Getenv("CONTEXTVERSE_SQL_DSN")
-		}
-		store, err := OpenSQL(ctx, SQLConfig{DSN: dsn})
+		store, err := OpenSQL(ctx, SQLConfig{DSN: resolveSQLDSN(opts)})
 		if err != nil {
 			return nil, err
 		}
@@ -130,6 +126,17 @@ func Open(opts OpenOptions) (Backend, error) {
 	default:
 		return nil, fmt.Errorf("%w: unknown driver %q", ErrInvalidArgument, driver)
 	}
+}
+
+// resolveSQLDSN answers where the Postgres backend connects, config first and
+// environment second. Split out so Pool can key its shared connections on the
+// same answer Open would have used — two callers deriving the DSN differently
+// is how one of them ends up with a pool of its own.
+func resolveSQLDSN(opts OpenOptions) string {
+	if dsn := opts.Backend.SQLDSN; dsn != "" {
+		return dsn
+	}
+	return os.Getenv("CONTEXTVERSE_SQL_DSN")
 }
 
 // OpenFromConfig is a convenience wrapper.

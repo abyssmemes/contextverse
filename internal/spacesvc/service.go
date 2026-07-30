@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -81,6 +82,26 @@ type Service struct {
 	Backend config.Backend
 	Hooks   hooks.Config
 	Quotas  quotas.Config
+
+	// pool keeps opened backends alive across requests. Created on first use so
+	// the zero Service still works for the short-lived CLI commands that build
+	// one, do a thing and exit.
+	poolOnce sync.Once
+	pool     *storage.Pool
+}
+
+func (s *Service) backends() *storage.Pool {
+	s.poolOnce.Do(func() { s.pool = storage.NewPool() })
+	return s.pool
+}
+
+// Close releases the storage connections the service holds. A long-lived
+// process (the server) must call it; a one-shot command need not.
+func (s *Service) Close() error {
+	if s == nil || s.pool == nil {
+		return nil
+	}
+	return s.pool.Close()
 }
 
 func (s *Service) spacesRoot() string {
@@ -114,9 +135,14 @@ func (s *Service) treePath(name, rel string) (string, error) {
 	return storage.ResolveUnder(root, rel)
 }
 
-// OpenBackend opens the configured storage backend for a space.
+// OpenBackend returns the storage backend for a space.
+//
+// Pooled, not opened: this is called several times to serve one write — the
+// put, the head bump, the quota walk — and opening a Postgres pool or an S3
+// client each time is how a server runs out of database connections while
+// looking idle.
 func (s *Service) OpenBackend(name string) (storage.Backend, error) {
-	return storage.Open(storage.OpenOptions{
+	return s.backends().Open(storage.OpenOptions{
 		SpaceRoot: s.SpaceRoot(name),
 		SpaceName: name,
 		Backend:   s.Backend,
@@ -247,6 +273,9 @@ func (s *Service) Delete(name string) error {
 	if _, err := os.Stat(root); err != nil {
 		return fmt.Errorf("space %q not found", name)
 	}
+	// Drop the pooled handle first: a space recreated under the same name must
+	// not inherit a connection to the one that was just removed.
+	s.backends().Evict(name)
 	return os.RemoveAll(root)
 }
 
