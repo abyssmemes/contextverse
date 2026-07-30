@@ -88,6 +88,34 @@ type Service struct {
 	// one, do a thing and exit.
 	poolOnce sync.Once
 	pool     *storage.Pool
+
+	// locks serializes the mutating operations of one space against each other.
+	// The head's compare-and-swap protects the marker, not the writes behind it:
+	// two pushes could both read the same head, both write their files, and only
+	// then have one told it lost. One writer at a time per space is what makes a
+	// batch mean anything.
+	locksMu sync.Mutex
+	locks   map[string]*sync.Mutex
+}
+
+// lockSpace takes the space's write lock and returns its release.
+//
+// Only the mutating entry points take it. Nothing they call may take it again:
+// the quota inventory reads through Tree, which stays lock-free on purpose.
+func (s *Service) lockSpace(name string) func() {
+	s.locksMu.Lock()
+	if s.locks == nil {
+		s.locks = map[string]*sync.Mutex{}
+	}
+	mu, ok := s.locks[name]
+	if !ok {
+		mu = &sync.Mutex{}
+		s.locks[name] = mu
+	}
+	s.locksMu.Unlock()
+
+	mu.Lock()
+	return mu.Unlock
 }
 
 func (s *Service) backends() *storage.Pool {
@@ -355,6 +383,8 @@ func (s *Service) ListFileVersions(ctx context.Context, name, path string) (*sto
 
 // PutFile writes with CAS (integer version) and mirrors to the working tree.
 func (s *Service) PutFile(ctx context.Context, name, path string, data []byte, expected storage.Version) (storage.Version, error) {
+	unlock := s.lockSpace(name)
+	defer unlock()
 	if err := s.Hooks.CheckPut(path, data); err != nil {
 		return "", err
 	}
@@ -378,34 +408,23 @@ func (s *Service) PutFile(ctx context.Context, name, path string, data []byte, e
 	return ver, nil
 }
 
+// checkSpaceQuota decides whether one write fits, using the same inventory the
+// batch path uses.
+//
+// It fails closed. The previous version returned nil whenever the listing
+// failed — "don't block on list failure" — which turned an unreadable space
+// into an unlimited one, the very thing QuotasFor's comment says not to do.
 func (s *Service) checkSpaceQuota(ctx context.Context, name string, newBytes int64, path string) error {
-	entries, err := s.Tree(ctx, name)
+	sizes, total, err := s.inventory(ctx, name)
 	if err != nil {
-		return nil // don't block on list failure
+		return err
 	}
-	var total, oldSize int64
-	exists := false
-	for _, e := range entries {
-		p, err := s.treePath(name, e.Path)
-		if err != nil {
-			continue
-		}
-		st, err := os.Stat(p)
-		if err != nil {
-			continue
-		}
-		total += st.Size()
-		if e.Path == path {
-			exists = true
-			oldSize = st.Size()
-		}
-	}
+	old, exists := sizes[path]
 	deltaFiles := 0
 	if !exists {
 		deltaFiles = 1
 	}
-	deltaBytes := newBytes - oldSize
-	return s.QuotasFor(name).CheckSpace(total, len(entries), deltaBytes, deltaFiles)
+	return s.QuotasFor(name).CheckSpace(total, len(sizes), newBytes-old, deltaFiles)
 }
 
 // SpaceUsage returns approximate on-disk bytes and file count for quota warnings.
@@ -428,6 +447,8 @@ func (s *Service) SpaceUsage(ctx context.Context, name string) (bytes int64, fil
 
 // DeleteFile soft-deletes with CAS (history retained) and removes from tree.
 func (s *Service) DeleteFile(ctx context.Context, name, path string, expected storage.Version) error {
+	unlock := s.lockSpace(name)
+	defer unlock()
 	fl, err := s.fileLog(name)
 	if err != nil {
 		return err
@@ -441,6 +462,8 @@ func (s *Service) DeleteFile(ctx context.Context, name, path string, expected st
 
 // UndeleteFile restores the latest non-destroyed version to live.
 func (s *Service) UndeleteFile(ctx context.Context, name, path string) (storage.Version, error) {
+	unlock := s.lockSpace(name)
+	defer unlock()
 	fl, err := s.fileLog(name)
 	if err != nil {
 		return "", err
@@ -461,6 +484,8 @@ func (s *Service) UndeleteFile(ctx context.Context, name, path string) (storage.
 
 // DestroyFileVersion permanently removes one historical version.
 func (s *Service) DestroyFileVersion(ctx context.Context, name, path string, n int) error {
+	unlock := s.lockSpace(name)
+	defer unlock()
 	fl, err := s.fileLog(name)
 	if err != nil {
 		return err
@@ -513,92 +538,6 @@ type PushRequest struct {
 type PushResult struct {
 	Head    string `json:"head"`
 	Applied int    `json:"applied"`
-}
-
-// Push applies ops transactionally against expected space head.
-func (s *Service) Push(ctx context.Context, name string, req PushRequest) (*PushResult, error) {
-	b, err := s.OpenBackend(name)
-	if err != nil {
-		return nil, err
-	}
-	cur, err := b.Head(ctx, storage.SpaceScope)
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return nil, err
-	}
-	if err == storage.ErrNotFound || errors.Is(err, storage.ErrNotFound) {
-		cur = ""
-	}
-	if string(cur) != req.ExpectedHead {
-		return nil, &storage.ConflictError{
-			Path:     "head:" + storage.SpaceScope,
-			Expected: storage.Version(req.ExpectedHead),
-			Actual:   cur,
-		}
-	}
-
-	fl := &storage.FileLog{Backend: b}
-	// Resolved once: a push carries many operations, and re-reading meta.yaml
-	// per file would turn one batch into N extra reads for an answer that
-	// cannot change inside the batch.
-	q := s.QuotasFor(name)
-	applied := 0
-	for _, op := range req.Ops {
-		switch op.Op {
-		case "put":
-			data, err := decodeB64(op.ContentB64)
-			if err != nil {
-				return nil, fmt.Errorf("op put %s: %w", op.Path, err)
-			}
-			if err := s.Hooks.CheckPut(op.Path, data); err != nil {
-				return nil, err
-			}
-			if err := q.CheckFileSize(int64(len(data))); err != nil {
-				return nil, err
-			}
-			if err := s.checkSpaceQuota(ctx, name, int64(len(data)), op.Path); err != nil {
-				return nil, err
-			}
-			expected := storage.Version(op.Expected)
-			if op.Expected == "" {
-				// infer: create if absent, else require current
-				if _, ver, gerr := fl.Get(ctx, op.Path); gerr == nil {
-					expected = ver
-				} else if !errors.Is(gerr, storage.ErrNotFound) {
-					return nil, gerr
-				}
-			}
-			if _, err := fl.Put(ctx, op.Path, data, expected); err != nil {
-				return nil, err
-			}
-			if err := s.writeTreeFile(name, op.Path, data); err != nil {
-				return nil, err
-			}
-			applied++
-		case "delete":
-			expected := storage.Version(op.Expected)
-			if expected == "" {
-				_, ver, gerr := fl.Get(ctx, op.Path)
-				if gerr != nil {
-					return nil, gerr
-				}
-				expected = ver
-			}
-			if err := fl.SoftDelete(ctx, op.Path, expected); err != nil {
-				return nil, err
-			}
-			s.removeTreeFile(name, op.Path)
-			applied++
-		default:
-			return nil, fmt.Errorf("unknown op %q", op.Op)
-		}
-	}
-
-	// Advance head to a new snapshot id-like token.
-	next := newHeadID()
-	if err := b.SetHead(ctx, storage.SpaceScope, cur, storage.Version(next)); err != nil {
-		return nil, err
-	}
-	return &PushResult{Head: next, Applied: applied}, nil
 }
 
 // writeTreeFile mirrors a blob into the space's working tree. The path is
