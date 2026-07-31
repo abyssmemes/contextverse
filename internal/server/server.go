@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -415,16 +417,59 @@ func (s *Server) auth(next http.HandlerFunc) http.Handler {
 	})
 }
 
+// maxRequestIDLen bounds a caller-supplied correlation id.
+const maxRequestIDLen = 64
+
+// withRequestID gives every request an id for logs and error bodies.
+//
+// A caller may bring its own so a trace can be followed across services, but
+// what it brings is checked. The value went into structured logs and into the
+// error envelope verbatim: newlines forge log lines, control bytes confuse
+// whatever reads them, and an unbounded string is an unbounded log record.
+//
+// The generated id is random rather than the clock. UnixNano is guessable — it
+// let a caller predict and then claim somebody else's id — and on a platform
+// with a coarse clock two requests in the same tick shared one, which is
+// precisely when correlating them matters.
 func (s *Server) withRequestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := r.Header.Get("X-Request-Id")
+		id := sanitizeRequestID(r.Header.Get("X-Request-Id"))
 		if id == "" {
-			id = fmt.Sprintf("%d", time.Now().UnixNano())
+			id = randomRequestID()
 		}
 		w.Header().Set("X-Request-Id", id)
 		ctx := context.WithValue(r.Context(), requestIDKey, id)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// sanitizeRequestID keeps a caller's id only if it is plainly printable and
+// short. Anything else is discarded rather than escaped: a correlation id has no
+// business carrying punctuation we would have to reason about.
+func sanitizeRequestID(id string) string {
+	if id == "" || len(id) > maxRequestIDLen {
+		return ""
+	}
+	for i := 0; i < len(id); i++ {
+		c := id[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		case c == '-', c == '_', c == '.', c == ':':
+		default:
+			return ""
+		}
+	}
+	return id
+}
+
+func randomRequestID() string {
+	var b [12]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// Only reachable if the system entropy source is broken, at which point
+		// a unique-ish id is the least of anyone's problems.
+		return fmt.Sprintf("t%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b[:])
 }
 
 func (s *Server) withAccessLog(next http.Handler) http.Handler {

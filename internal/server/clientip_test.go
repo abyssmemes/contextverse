@@ -2,6 +2,7 @@ package server
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -39,15 +40,24 @@ func TestForwardedForHonouredFromTrustedProxy(t *testing.T) {
 	}
 }
 
+// A token caller is counted per token rather than per address. The key is
+// derived from the token, not equal to it — this used to assert the literal
+// "bearer:<the token>", which pinned a live credential into the limiter's map
+// as the intended behaviour. See TestTheRateLimitKeyDoesNotCarryTheToken.
 func TestRateLimitKeyPrefersToken(t *testing.T) {
 	s := &Server{}
 	r := req("203.0.113.7:1", "")
 	r.Header.Set("Authorization", "Bearer cv-kim-secret")
-	if got := s.rateLimitKey(r); got != "bearer:cv-kim-secret" {
-		t.Fatalf("token callers must be limited per token, got %q", got)
+
+	tokenKey := s.rateLimitKey(r)
+	if !strings.HasPrefix(tokenKey, "bearer:") {
+		t.Fatalf("token callers must be limited per token, got %q", tokenKey)
 	}
-	if got := s.rateLimitKey(req("203.0.113.7:1", "1.2.3.4")); got != "ip:203.0.113.7" {
-		t.Fatalf("anonymous callers must be limited per real peer, got %q", got)
+	if ipKey := s.rateLimitKey(req("203.0.113.7:1", "1.2.3.4")); ipKey != "ip:203.0.113.7" {
+		t.Fatalf("anonymous callers must be limited per real peer, got %q", ipKey)
+	}
+	if tokenKey == "ip:203.0.113.7" {
+		t.Fatal("a token caller fell back to their address")
 	}
 }
 
