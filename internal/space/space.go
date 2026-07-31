@@ -29,11 +29,11 @@ type IdentityFields struct {
 
 // CreateOptions controls space creation.
 type CreateOptions struct {
-	SpaceRoot    string
-	TemplateName string // catalog name (default solo-default)
-	TemplatePath string // if set, copy from this directory instead of catalog/embed
-	Identity     IdentityFields
-	Force        bool
+	SpaceRoot       string
+	TemplateName    string // catalog name (default solo-default)
+	TemplatePath    string // if set, copy from this directory instead of catalog/embed
+	Identity        IdentityFields
+	Force           bool
 	RefreshTemplate bool // re-fetch remote template, ignore cache
 	SkipIdentity    bool // used by space seed — don't rewrite identity/me.md
 }

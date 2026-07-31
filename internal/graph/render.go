@@ -302,7 +302,7 @@ func Mermaid(g *Graph, limit int) string {
 			label = p
 		}
 		label = strings.ReplaceAll(label, `"`, "'")
-		b.WriteString(fmt.Sprintf("  %s[\"%s\"]\n", keep[p], label))
+		fmt.Fprintf(&b, "  %s[\"%s\"]\n", keep[p], label)
 	}
 	for _, e := range g.Edges {
 		if e.Broken || e.Code {
@@ -313,7 +313,7 @@ func Mermaid(g *Graph, limit int) string {
 		if !okF || !okT || from == to {
 			continue
 		}
-		b.WriteString(fmt.Sprintf("  %s --> %s\n", from, to))
+		fmt.Fprintf(&b, "  %s --> %s\n", from, to)
 	}
 	return b.String()
 }

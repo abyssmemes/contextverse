@@ -169,10 +169,14 @@ jobs:
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           "$(go env GOPATH)/bin/govulncheck" ./...
+      # v2, not v1.62: that binary is built with Go 1.23 and refuses to load a
+      # module targeting 1.25 — "the Go language version used to build
+      # golangci-lint is lower than the targeted Go version". It failed on its
+      # first CI run for that reason and nothing to do with the code.
       - name: Lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
-          version: v1.62
+          version: v2.12
           args: --timeout=5m
 
   integration:

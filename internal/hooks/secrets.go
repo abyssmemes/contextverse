@@ -41,7 +41,7 @@ type Config struct {
 
 // SecretScanConfig is the block-secrets guardrail.
 type SecretScanConfig struct {
-	Enabled     bool `yaml:"enabled"`
+	Enabled     bool   `yaml:"enabled"`
 	OnViolation string `yaml:"on_violation"` // block (default) | warn
 }
 

@@ -178,7 +178,7 @@ func tuiLoginBlock(mode string) string {
 	b.WriteString("# Skip once: CONTEXTVERSE_TUI_SKIP=1 ssh …\n")
 	b.WriteString("if [ -n \"${SSH_CONNECTION:-}\" ] && [ -t 0 ] && [ -z \"${CONTEXTVERSE_TUI_SKIP:-}\" ]; then\n")
 	b.WriteString("  export CONTEXTVERSE_MODEL_A=1\n")
-	b.WriteString(fmt.Sprintf("  \"%s\" %s || true\n", bin, args))
+	fmt.Fprintf(&b, "  \"%s\" %s || true\n", bin, args)
 	b.WriteString("fi\n")
 	b.WriteString(tuiLoginEnd + "\n")
 	return b.String()

@@ -212,16 +212,16 @@ func ManualInstructions(in *Integration, vars Vars) string {
 	if in == nil {
 		return ManualInstructionsCatalog(nil, vars)
 	}
-	b.WriteString(fmt.Sprintf("Manual setup for %s (%s):\n", in.Display, in.ID))
-	b.WriteString(fmt.Sprintf("  mechanism: %s\n", in.Mechanism))
+	fmt.Fprintf(&b, "Manual setup for %s (%s):\n", in.Display, in.ID)
+	fmt.Fprintf(&b, "  mechanism: %s\n", in.Mechanism)
 	if in.Mechanism == MechanismCommandHook {
-		b.WriteString(fmt.Sprintf("  target:    %s\n", Expand(in.Target, vars)))
-		b.WriteString(fmt.Sprintf("  command:   %s\n", in.Command))
+		fmt.Fprintf(&b, "  target:    %s\n", Expand(in.Target, vars))
+		fmt.Fprintf(&b, "  command:   %s\n", in.Command)
 	} else if in.Target != "" {
-		b.WriteString(fmt.Sprintf("  write:     %s\n", Expand(in.Target, vars)))
+		fmt.Fprintf(&b, "  write:     %s\n", Expand(in.Target, vars))
 	}
 	if in.Notes != "" {
-		b.WriteString(fmt.Sprintf("  notes:     %s\n", in.Notes))
+		fmt.Fprintf(&b, "  notes:     %s\n", in.Notes)
 	}
 	if strings.TrimSpace(in.Manual) != "" {
 		b.WriteString("\n")

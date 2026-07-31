@@ -27,8 +27,8 @@ func Inject(format, spaceRoot, cwd, project string) (string, error) {
 	case "claude-hook", "claude":
 		payload := map[string]any{
 			"hookSpecificOutput": map[string]any{
-				"hookEventName":      "SessionStart",
-				"additionalContext":  body,
+				"hookEventName":     "SessionStart",
+				"additionalContext": body,
 			},
 		}
 		raw, err := json.Marshal(payload)
@@ -59,14 +59,14 @@ func entrySet(spaceRoot, project string) (string, error) {
 	}
 	var b strings.Builder
 	b.WriteString("# ContextVerse session context\n\n")
-	b.WriteString(fmt.Sprintf("Space root: %s\n\n", spaceRoot))
+	fmt.Fprintf(&b, "Space root: %s\n\n", spaceRoot)
 	const maxTotal = 100_000
 	n := 0
 	for _, rel := range files {
 		path := filepath.Join(spaceRoot, rel)
 		raw, err := os.ReadFile(path)
 		if err != nil {
-			b.WriteString(fmt.Sprintf("## %s\n\n_(missing)_\n\n", rel))
+			fmt.Fprintf(&b, "## %s\n\n_(missing)_\n\n", rel)
 			continue
 		}
 		chunk := string(raw)
@@ -77,7 +77,7 @@ func entrySet(spaceRoot, project string) (string, error) {
 			}
 			chunk = chunk[:remain] + "\n…(truncated)\n"
 		}
-		b.WriteString(fmt.Sprintf("## %s\n\n", rel))
+		fmt.Fprintf(&b, "## %s\n\n", rel)
 		b.WriteString(chunk)
 		if !strings.HasSuffix(chunk, "\n") {
 			b.WriteByte('\n')

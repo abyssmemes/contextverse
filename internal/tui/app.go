@@ -842,7 +842,7 @@ func (m model) spaceDetail() string {
 		var b strings.Builder
 		b.WriteString(stylePaneTitle.Render("No context space here yet"))
 		b.WriteString("\n\n")
-		b.WriteString(fmt.Sprintf("Looked in %s\n\n", m.spaceRoot))
+		fmt.Fprintf(&b, "Looked in %s\n\n", m.spaceRoot)
 		b.WriteString("Create one — the setup asks a few questions and explains each:\n\n")
 		b.WriteString("  contextd init\n\n")
 		b.WriteString(styleMuted.Render("Already have a space somewhere else?\nPoint at it with: contextd --dir <path> tui"))
@@ -852,23 +852,23 @@ func (m model) spaceDetail() string {
 	}
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Space     %s\n", m.spaceRoot))
-	b.WriteString(fmt.Sprintf("Mode      %s\n", m.snap.Mode))
+	fmt.Fprintf(&b, "Space     %s\n", m.spaceRoot)
+	fmt.Fprintf(&b, "Mode      %s\n", m.snap.Mode)
 	if m.snap.IdentityName != "" {
-		b.WriteString(fmt.Sprintf("Identity  %s", m.snap.IdentityName))
+		fmt.Fprintf(&b, "Identity  %s", m.snap.IdentityName)
 		if m.snap.IdentityRole != "" {
-			b.WriteString(fmt.Sprintf(" (%s)", m.snap.IdentityRole))
+			fmt.Fprintf(&b, " (%s)", m.snap.IdentityRole)
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString(fmt.Sprintf("Projects  %d\n", len(m.snap.Projects)))
+	fmt.Fprintf(&b, "Projects  %d\n", len(m.snap.Projects))
 	detected := 0
 	for _, p := range m.snap.Plugins {
 		if p.Detected {
 			detected++
 		}
 	}
-	b.WriteString(fmt.Sprintf("Plugins   %d detected / %d known\n", detected, len(m.snap.Plugins)))
+	fmt.Fprintf(&b, "Plugins   %d detected / %d known\n", detected, len(m.snap.Plugins))
 	b.WriteString("\n")
 	b.WriteString(styleMuted.Render("cwd  " + m.cwd))
 	b.WriteString("\n\n")
@@ -879,7 +879,7 @@ func (m model) spaceDetail() string {
 		l := m.snap.Layers[m.cursor]
 		b.WriteString("\n")
 		b.WriteString(stylePaneTitle.Render(l.Name))
-		b.WriteString(fmt.Sprintf("\n%d files under %s/%s\n", l.Files, m.spaceRoot, l.Name))
+		fmt.Fprintf(&b, "\n%d files under %s/%s\n", l.Files, m.spaceRoot, l.Name)
 	}
 	return b.String()
 }
@@ -893,9 +893,9 @@ func (m model) pluginDetail() string {
 	}
 	p := m.snap.Plugins[m.cursor]
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("ID         %s\n", p.ID))
-	b.WriteString(fmt.Sprintf("Display    %s\n", p.Display))
-	b.WriteString(fmt.Sprintf("Mechanism  %s\n", p.Mechanism))
+	fmt.Fprintf(&b, "ID         %s\n", p.ID)
+	fmt.Fprintf(&b, "Display    %s\n", p.Display)
+	fmt.Fprintf(&b, "Mechanism  %s\n", p.Mechanism)
 	if p.Detected {
 		b.WriteString(styleOk.Render("Detected  ✓  " + p.How))
 		b.WriteString("\n\nPress i to install / refresh hooks for detected clients.")

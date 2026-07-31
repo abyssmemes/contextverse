@@ -3,20 +3,27 @@
 #
 # The full set was run first, and it reports 489 findings — 409 of them errcheck
 # on deliberate discards like `defer f.Close()`, 43 noctx, 15 errorlint. Turning
-# all of that on at once produces a gate that is red from the first commit, and a
+# all of that on at once produces a gate that is red from its first commit, and a
 # gate nobody can get green is a gate somebody deletes. Those three are tracked
 # as their own piece of work, with the numbers, rather than being enabled and
 # then permanently ignored.
 #
 # What is here catches defects rather than taste, and passes today — so a new
 # finding is a new mistake, which is the only way a linter earns its place in CI.
+#
+# Schema v2. The v1 config went in with golangci-lint pinned to v1.62, whose
+# binary is built with Go 1.23 and refuses to load a module targeting 1.25 —
+# "the Go language version used to build golangci-lint is lower than the
+# targeted Go version". It failed on its first CI run for that reason and
+# nothing to do with the code.
+version: "2"
 
 run:
   timeout: 5m
   tests: true
 
 linters:
-  disable-all: true
+  default: none
   enable:
     - govet
     # staticcheck found the real one: an `if` with an empty body where backend
@@ -25,19 +32,17 @@ linters:
     - ineffassign
     - unused
 
-linters-settings:
-  staticcheck:
-    checks: ["all"]
+  # staticcheck's checks are left at their default. In v2 it absorbed stylecheck,
+  # so "all" would pull in naming and comment-formatting opinions — the kind of
+  # finding that turns a gate into noise and then into something disabled.
 
-issues:
-  exclude-use-default: false
-  max-issues-per-linter: 0
-  max-same-issues: 0
-  exclude-rules:
-    # SA1019 on the TUI is bubbles renaming its viewport scrolling methods. Real,
-    # but it is a rename to follow deliberately in one change, not a reason to
-    # block every unrelated commit in the meantime.
-    - path: internal/tui/
-      linters:
-        - staticcheck
-      text: "SA1019"
+  exclusions:
+    generated: lax
+    rules:
+      # SA1019 on the TUI is bubbles renaming its viewport scrolling methods.
+      # Real, but a rename to follow deliberately in one change, not a reason to
+      # block every unrelated commit in the meantime.
+      - path: internal/tui/
+        linters:
+          - staticcheck
+        text: "SA1019"
