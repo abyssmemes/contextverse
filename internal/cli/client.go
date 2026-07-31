@@ -226,7 +226,14 @@ func newPushCmd() *cobra.Command {
 			if expected == "" {
 				expected = head
 			}
-			res, err := client.Push(cmd.Context(), root, expected, syncCfg, check)
+			// The record of what this machine last sent is what makes a push
+			// carry the difference rather than the whole space, and what makes a
+			// local deletion reach the server at all.
+			st, err := syncclient.LoadState(root)
+			if err != nil {
+				return err
+			}
+			res, err := client.Push(cmd.Context(), root, expected, syncCfg, st, check)
 			if err != nil {
 				return err
 			}
@@ -240,6 +247,11 @@ func newPushCmd() *cobra.Command {
 			cfg.Sync.LastHead = res.Head
 			cfg.Sync.LastSyncAt = time.Now().UTC()
 			if err := config.Save(cfg); err != nil {
+				return err
+			}
+			// Saved after the server accepted the batch. A record written
+			// earlier would make the next push skip files that never arrived.
+			if err := syncclient.SaveState(root, st); err != nil {
 				return err
 			}
 			rep := SyncReport{Applied: res.Applied, Head: res.Head}

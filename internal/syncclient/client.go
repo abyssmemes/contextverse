@@ -3,7 +3,9 @@ package syncclient
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -128,6 +130,13 @@ type SpaceInfo struct {
 // ListSpaces returns the spaces this token can see. The server has always
 // exposed this; the client never asked, so joining a team meant typing a space
 // name you had to be told out of band.
+//
+// It then went on never asking successfully. The server answers
+// {"spaces":[...]} and this decoded into a bare []SpaceInfo, so every call
+// failed with "cannot unmarshal object into []SpaceInfo" — and the wizard's
+// fallback swallowed it and told the person "the server did not return a
+// listing for this token", blaming the server for a bug on this side. The space
+// picker has never once run.
 func (c *Client) ListSpaces(ctx context.Context) ([]SpaceInfo, error) {
 	res, err := c.do(ctx, http.MethodGet, "/api/v1/spaces", nil)
 	if err != nil {
@@ -137,11 +146,13 @@ func (c *Client) ListSpaces(ctx context.Context) ([]SpaceInfo, error) {
 	if res.StatusCode != 200 {
 		return nil, apiErr(res)
 	}
-	var out []SpaceInfo
-	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
-		return nil, err
+	var out struct {
+		Spaces []SpaceInfo `json:"spaces"`
 	}
-	return out, nil
+	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("list spaces: %w", err)
+	}
+	return out.Spaces, nil
 }
 
 // Head returns space head.
@@ -293,15 +304,30 @@ type PushResult struct {
 	Applied int
 }
 
-// Push uploads local files that differ from last known remote inventory.
-// MVP: walk local tree and push all always/init-only paths as put ops.
-func (c *Client) Push(ctx context.Context, spaceRoot string, expectedHead string, sync spacesvc.SyncConfig, checkOnly bool) (*PushResult, error) {
-	ops, err := collectPushOps(spaceRoot, sync)
+// Push sends what has changed on this machine since the last successful push.
+//
+// It used to walk the tree and put every file, every time, base64-encoded into
+// one JSON body — so a space of a thousand documents re-uploaded a thousand
+// documents to publish an edit to one. And it never sent a delete, so a file
+// removed locally came back on the next pull, which is the kind of thing that
+// makes people stop trusting a sync tool.
+//
+// state carries what this machine last sent. Passing nil falls back to sending
+// everything, which is right for a caller that has no record to compare against.
+func (c *Client) Push(ctx context.Context, spaceRoot string, expectedHead string, sync spacesvc.SyncConfig, state *LocalState, checkOnly bool) (*PushResult, error) {
+	ops, sent, err := collectPushOps(spaceRoot, sync, state)
 	if err != nil {
 		return nil, err
 	}
 	if checkOnly {
 		return &PushResult{Head: expectedHead, Applied: len(ops)}, nil
+	}
+	if len(ops) == 0 {
+		// Nothing to say. Sending an empty batch would move the head for no
+		// reason and make every other client re-check a space that did not
+		// change.
+		logx.L().Info("push: nothing changed since the last one")
+		return &PushResult{Head: expectedHead, Applied: 0}, nil
 	}
 	req := spacesvc.PushRequest{ExpectedHead: expectedHead, Ops: ops}
 	res, err := c.do(ctx, http.MethodPost, "/api/v1/spaces/"+c.Space+"/push", req)
@@ -323,14 +349,28 @@ func (c *Client) Push(ctx context.Context, spaceRoot string, expectedHead string
 	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
 		return nil, err
 	}
+	// Recorded only after the server accepted the batch. Writing it earlier
+	// would make a failed push look like a delivered one, and the next push
+	// would skip the very files that never arrived.
+	if state != nil {
+		state.Sent = sent
+	}
 	logx.L().Info("push complete", "head", out.Head, "applied", out.Applied)
 	return &out, nil
 }
 
-// LocalState tracks init-only seeding.
+// LocalState is what this machine remembers about the last sync.
 type LocalState struct {
 	Seeded   map[string]bool   `json:"seeded"`
 	Versions map[string]string `json:"versions"`
+	// Sent records the content of each path as this machine last put it on the
+	// server, so a push can carry the difference instead of the whole space.
+	//
+	// Hashes rather than the server's version markers, because the question a
+	// push asks is "did I change this", which is about local content. It is also
+	// what makes a deletion visible: a path in here with no file beside it was
+	// pushed once and has since been removed.
+	Sent map[string]string `json:"sent,omitempty"`
 }
 
 func statePath(spaceRoot string) string {
@@ -342,7 +382,11 @@ func LoadState(spaceRoot string) (*LocalState, error) {
 	raw, err := os.ReadFile(statePath(spaceRoot))
 	if err != nil {
 		if os.IsNotExist(err) {
-			return &LocalState{Seeded: map[string]bool{}, Versions: map[string]string{}}, nil
+			return &LocalState{
+				Seeded:   map[string]bool{},
+				Versions: map[string]string{},
+				Sent:     map[string]string{},
+			}, nil
 		}
 		return nil, err
 	}
@@ -355,6 +399,9 @@ func LoadState(spaceRoot string) (*LocalState, error) {
 	}
 	if st.Versions == nil {
 		st.Versions = map[string]string{}
+	}
+	if st.Sent == nil {
+		st.Sent = map[string]string{}
 	}
 	return &st, nil
 }
@@ -371,44 +418,43 @@ func SaveState(spaceRoot string, st *LocalState) error {
 	return os.WriteFile(statePath(spaceRoot), raw, 0o644)
 }
 
-// ResolveMode returns always|init-only|never for a path.
+// ResolveMode decides whether a path syncs, and it decides what leaves this
+// machine — so it is worth being able to read.
+//
+// Longest match wins, and an exact path beats a prefix of the same length. That
+// is the rule people already assume from every ignore-file they have used, and
+// it was not what the code did: there were two passes, the first with conditions
+// that contradicted each other and could not be reasoned about, the second
+// overwriting the first with a >= comparison that made the answer depend on the
+// order the rules happened to be listed in. Two configurations with the same
+// rules in a different order gave different answers about whether somebody's
+// identity file was published to their team.
+//
+// A rule ending in "/" matches a subtree. Anything else matches that exact path.
 func ResolveMode(sync spacesvc.SyncConfig, path string) string {
 	best := sync.Default
 	if best == "" {
 		best = "always"
 	}
 	bestLen := -1
+	bestExact := false
+
 	for _, r := range sync.Rules {
-		prefix := strings.TrimSuffix(r.Path, "/")
-		if r.Path == path || strings.HasPrefix(path, strings.TrimSuffix(r.Path, "*")) {
-			if strings.HasSuffix(r.Path, "/") && strings.HasPrefix(path, r.Path) {
-				if len(r.Path) > bestLen {
-					best = r.Mode
-					bestLen = len(r.Path)
-				}
-			} else if r.Path == path {
-				if len(r.Path) > bestLen {
-					best = r.Mode
-					bestLen = len(r.Path)
-				}
-			} else if strings.HasSuffix(r.Path, "/") == false && strings.HasPrefix(path, prefix+"/") {
-				if len(prefix) > bestLen {
-					best = r.Mode
-					bestLen = len(prefix)
-				}
-			}
+		if r.Path == "" || r.Mode == "" {
+			continue
 		}
-	}
-	// simpler second pass
-	for _, r := range sync.Rules {
-		if strings.HasSuffix(r.Path, "/") {
-			if strings.HasPrefix(path, r.Path) && len(r.Path) >= bestLen {
-				best = r.Mode
-				bestLen = len(r.Path)
-			}
-		} else if path == r.Path {
-			best = r.Mode
-			bestLen = len(r.Path)
+		exact := !strings.HasSuffix(r.Path, "/")
+		switch {
+		case exact && path == r.Path:
+		case !exact && strings.HasPrefix(path, r.Path):
+		default:
+			continue
+		}
+		// Ties go to the more specific rule rather than to whichever came last:
+		// "identity/me.md" beats "identity/" even though the strings are close
+		// in length, and an equal-length prefix never displaces an exact match.
+		if len(r.Path) > bestLen || (len(r.Path) == bestLen && exact && !bestExact) {
+			best, bestLen, bestExact = r.Mode, len(r.Path), exact
 		}
 	}
 	return best
@@ -476,12 +522,20 @@ func apiErr(res *http.Response) error {
 	return &APIError{Status: res.StatusCode, Message: string(raw)}
 }
 
-// collectPushOps gathers what this client should send upward.
+// collectPushOps gathers what this client should send upward, and what the
+// record of "sent" will be once the server accepts it.
 //
 // Split out of Push so the filter can be tested without a server: what does and
 // does not leave the machine is a question worth being able to ask directly.
-func collectPushOps(spaceRoot string, sync spacesvc.SyncConfig) ([]spacesvc.PushOp, error) {
+func collectPushOps(spaceRoot string, sync spacesvc.SyncConfig, state *LocalState) ([]spacesvc.PushOp, map[string]string, error) {
+	previous := map[string]string{}
+	if state != nil && state.Sent != nil {
+		previous = state.Sent
+	}
+
 	var ops []spacesvc.PushOp
+	sent := make(map[string]string, len(previous))
+
 	err := filepath.WalkDir(spaceRoot, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -518,6 +572,11 @@ func collectPushOps(spaceRoot string, sync spacesvc.SyncConfig) ([]spacesvc.Push
 		if err != nil {
 			return err
 		}
+		sum := contentHash(data)
+		sent[rel] = sum
+		if prev, ok := previous[rel]; ok && prev == sum {
+			return nil // unchanged since the last accepted push
+		}
 		ops = append(ops, spacesvc.PushOp{
 			Op:         "put",
 			Path:       rel,
@@ -525,5 +584,28 @@ func collectPushOps(spaceRoot string, sync spacesvc.SyncConfig) ([]spacesvc.Push
 		})
 		return nil
 	})
-	return ops, err
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// A path we sent before and cannot find now was deleted here. Without this
+	// the server kept its copy and the next pull put the file back, which reads
+	// as the tool undoing your work.
+	for rel := range previous {
+		if _, stillHere := sent[rel]; stillHere {
+			continue
+		}
+		if ResolveMode(sync, rel) == "never" {
+			continue
+		}
+		ops = append(ops, spacesvc.PushOp{Op: "delete", Path: rel})
+	}
+
+	return ops, sent, nil
+}
+
+// contentHash identifies a file's contents for the "did I change this" question.
+func contentHash(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }

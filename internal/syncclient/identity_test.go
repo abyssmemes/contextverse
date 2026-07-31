@@ -39,7 +39,9 @@ func TestInitOnlyPathsAreNotPushedToTheSharedSpace(t *testing.T) {
 	write("team/principles.md", "shared, and meant to be")
 	write("identity/me.md", "Eduard, DevOps engineer, personal preferences")
 
-	ops, err := collectPushOps(root, defaultSync())
+	// nil state: nothing has been sent from this machine yet, which is the
+	// first-push case and the one where everything eligible travels.
+	ops, _, err := collectPushOps(root, defaultSync(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
