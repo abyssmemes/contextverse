@@ -38,6 +38,46 @@ archives:
 checksum:
   name_template: checksums.txt
 
+# Signatures and a bill of materials, because a checksum file signs nothing.
+#
+# Whoever can replace the binary on the release page can replace checksums.txt
+# beside it, and the install script downloads both from the same place. The
+# checksum proves the download was not corrupted in transit; it says nothing
+# about who produced it. That matters more here than for most projects, because
+# the documented way to install this is `curl … | bash`.
+#
+# Keyless signing: cosign gets a short-lived certificate from Fulcio bound to
+# the GitHub Actions identity that ran the release, and the fact is recorded in
+# the Rekor transparency log. There is no private key for anybody to lose, and
+# the question a verifier asks is answerable — "was this built by the release
+# workflow of this repository", rather than "do I recognise this key".
+#
+# Verify a download with:
+#   cosign verify-blob --signature checksums.txt.sig \
+#     --certificate checksums.txt.pem \
+#     --certificate-identity-regexp 'https://github.com/orkcom-tech/contextverse/.*' \
+#     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+#     checksums.txt
+signs:
+  - cmd: cosign
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - "--output-certificate=${certificate}"
+      - "--output-signature=${signature}"
+      - "${artifact}"
+      - "--yes"
+    # The checksum file covers every artifact, so signing it signs the release.
+    artifacts: checksum
+    output: true
+
+# What is actually inside each archive, in a format a scanner can read. Without
+# one, answering "is this release affected by CVE-x" means rebuilding it and
+# hoping the dependency graph has not moved.
+sboms:
+  - id: archive
+    artifacts: archive
+
 changelog:
   sort: asc
   filters:

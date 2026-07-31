@@ -26,6 +26,40 @@ info() { log "==> $*"; }
 warn() { log "warning: $*"; }
 die()  { log "error: $*"; exit 1; }
 
+# verify_signature checks the release's cosign signature over checksums.txt.
+#
+# Keyless: the certificate is issued to the GitHub Actions identity that ran the
+# release, so what is verified is "this came out of this repository's release
+# workflow" — a question with an answer, unlike "do I recognise this key".
+#
+# Skipped with a warning when cosign is absent, because refusing to install
+# because a verification tool is missing would push people to bypass the script
+# entirely, which is worse than an unverified install they were told about.
+verify_signature() {
+  local tag="$1" sums="$2" tmp="$3"
+  if ! command -v cosign >/dev/null 2>&1; then
+    warn "cosign not found; the download is checksummed but not verified as ours."
+    warn "Install cosign (https://docs.sigstore.dev) for a signature check."
+    return 0
+  fi
+  local sig="${tmp}/checksums.txt.sig" cert="${tmp}/checksums.txt.pem"
+  local base="https://github.com/${REPO}/releases/download/${tag}"
+  if ! http_get "${base}/checksums.txt.sig" "$sig" 2>/dev/null ||
+     ! http_get "${base}/checksums.txt.pem" "$cert" 2>/dev/null; then
+    warn "no signature published for ${tag}; releases before signing was added have none"
+    return 0
+  fi
+  info "Verifying signature"
+  if ! cosign verify-blob \
+      --signature "$sig" \
+      --certificate "$cert" \
+      --certificate-identity-regexp "https://github.com/${REPO}/.*" \
+      --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+      "$sums"; then
+    die "signature verification failed for ${tag} — not installing"
+  fi
+}
+
 usage() {
   cat <<'EOF'
 ContextVerse installer — installs contextd
@@ -177,6 +211,14 @@ download_release() {
   if [[ "$VERIFY_CHECKSUM" == "1" ]]; then
     local sums="${tmp}/checksums.txt"
     if http_get "https://github.com/${REPO}/releases/download/${tag}/checksums.txt" "$sums" 2>/dev/null; then
+      # The signature first, when cosign is available.
+      #
+      # A checksum on its own answers "did this download arrive intact", not
+      # "who made it": whoever can replace the binary on the release page can
+      # replace checksums.txt beside it, and this script fetches both from the
+      # same place. The signature is what makes the checksum worth checking.
+      verify_signature "$tag" "$sums" "$tmp"
+
       info "Verifying checksum"
       (
         cd "$tmp"

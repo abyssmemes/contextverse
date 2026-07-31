@@ -44,6 +44,11 @@ concurrency:
 permissions:
   contents: write
   pull-requests: read
+  # Keyless signing: cosign exchanges this for a short-lived Fulcio certificate
+  # bound to the workflow identity, so there is no private key for anyone to
+  # lose and a verifier can ask "was this built by this repository's release
+  # workflow" rather than "do I recognise this key".
+  id-token: write
 
 jobs:
   changes:
@@ -221,6 +226,11 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.25.x"
+
+      # Signing and the bill of materials. Both are GoReleaser steps; these put
+      # the tools on the runner.
+      - uses: sigstore/cosign-installer@v3
+      - uses: anchore/sbom-action/download-syft@v0
 
       - name: Compute next minor version
         id: ver
