@@ -43,6 +43,11 @@ type Config struct {
 	Daemon    DaemonConfig `yaml:"daemon,omitempty"` // client background poller
 	Editor    string       `yaml:"editor,omitempty"` // remembered TUI editor choice (binary id)
 
+	// NoUpdateCheck silences the "a newer contextd exists" line for good.
+	// Phrased as an opt-out so the zero value keeps the check on, and so a
+	// config written before this existed behaves the way a new one does.
+	NoUpdateCheck bool `yaml:"no_update_check,omitempty"`
+
 	// Anchors record where each project's code actually lives, learned from the
 	// directory `contextd activate` was run in.
 	//
