@@ -117,7 +117,6 @@ func TestMergeCommunityExtra(t *testing.T) {
 	}
 }
 
-
 func TestAskWhich(t *testing.T) {
 	cat := []*Integration{
 		{ID: "a", Display: "A"},

@@ -311,7 +311,7 @@ func queries(question string) []string {
 	seen := map[string]bool{}
 	var words []string
 	for _, w := range strings.FieldsFunc(strings.ToLower(question), func(r rune) bool {
-		return !('a' <= r && r <= 'z') && !('0' <= r && r <= '9')
+		return ('a' > r || r > 'z') && ('0' > r || r > '9')
 	}) {
 		if len(w) < 3 || stopWords[w] || seen[w] {
 			continue

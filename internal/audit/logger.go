@@ -73,12 +73,12 @@ type Filter struct {
 
 // Stats summarizes a window.
 type Stats struct {
-	Entries      int            `json:"entries"`
-	Actors       int            `json:"actors"`
-	Failed       int            `json:"failed"`
-	ByAction     map[string]int `json:"by_action"`
-	Since        time.Time      `json:"since"`
-	Until        time.Time      `json:"until"`
+	Entries  int            `json:"entries"`
+	Actors   int            `json:"actors"`
+	Failed   int            `json:"failed"`
+	ByAction map[string]int `json:"by_action"`
+	Since    time.Time      `json:"since"`
+	Until    time.Time      `json:"until"`
 }
 
 // Logger appends JSONL under <dir>/YYYY-MM-DD.jsonl.

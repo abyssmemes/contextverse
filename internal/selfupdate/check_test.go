@@ -50,6 +50,10 @@ func TestTheFirstRunIsSilent(t *testing.T) {
 	if notice := c.Notice(context.Background()); notice != "" {
 		t.Errorf("the first run spoke: %q", notice)
 	}
+	// Notice leaves a refresh running behind it. Let it finish before the test
+	// ends, or it writes its state into a directory the framework is removing —
+	// which Windows reports as "the directory is not empty" and Unix hides.
+	waitForOneAsk(t, c)
 }
 
 func TestASecondRunReportsANewerRelease(t *testing.T) {

@@ -7,9 +7,9 @@ import (
 
 // Config is server rate-limit knobs.
 type Config struct {
-	Enabled            bool `yaml:"enabled"`
-	RequestsPerMinute  int  `yaml:"requests_per_minute"` // per-user (or IP); default 120
-	AuthPerMinute      int  `yaml:"auth_per_minute"`     // login endpoints; default 10
+	Enabled           bool `yaml:"enabled"`
+	RequestsPerMinute int  `yaml:"requests_per_minute"` // per-user (or IP); default 120
+	AuthPerMinute     int  `yaml:"auth_per_minute"`     // login endpoints; default 10
 }
 
 // Default returns enabled 120 rpm / 10 auth rpm.
@@ -30,9 +30,9 @@ type bucket struct {
 // spend our memory. Idle buckets are dropped: a bucket refills to full capacity
 // long before the idle window elapses, so forgetting it changes no decision.
 const (
-	idleAfter   = 10 * time.Minute
-	sweepEvery  = 30 * time.Second
-	sweepAbove  = 1024
+	idleAfter  = 10 * time.Minute
+	sweepEvery = 30 * time.Second
+	sweepAbove = 1024
 )
 
 // Limiter is an in-process token bucket keyed by string.

@@ -84,10 +84,10 @@ func ChatGPT(spaceRoot, outDir, project string) (*Result, error) {
 func chatgptREADME(spaceRoot, project string, missing []string) string {
 	var b strings.Builder
 	b.WriteString("# ContextVerse → ChatGPT export\n\n")
-	b.WriteString(fmt.Sprintf("Generated: %s\n\n", time.Now().UTC().Format(time.RFC3339)))
-	b.WriteString(fmt.Sprintf("Space root: `%s`\n", spaceRoot))
+	fmt.Fprintf(&b, "Generated: %s\n\n", time.Now().UTC().Format(time.RFC3339))
+	fmt.Fprintf(&b, "Space root: `%s`\n", spaceRoot)
 	if project != "" {
-		b.WriteString(fmt.Sprintf("Project: `%s`\n", project))
+		fmt.Fprintf(&b, "Project: `%s`\n", project)
 	}
 	b.WriteString("\n## Upload\n\n")
 	b.WriteString("Upload all `.md` files in this folder (except this README, unless you want it) as **Knowledge** / project files in ChatGPT.\n\n")
@@ -95,7 +95,7 @@ func chatgptREADME(spaceRoot, project string, missing []string) string {
 	if len(missing) > 0 {
 		b.WriteString("### Missing from space\n\n")
 		for _, m := range missing {
-			b.WriteString(fmt.Sprintf("- `%s`\n", m))
+			fmt.Fprintf(&b, "- `%s`\n", m)
 		}
 		b.WriteString("\n")
 	}

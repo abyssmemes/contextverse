@@ -26,19 +26,19 @@ import (
 )
 
 const (
-	ChallengeHTTP01 = "http-01"
-	ChallengeDNS01  = "dns-01"
+	ChallengeHTTP01    = "http-01"
+	ChallengeDNS01     = "dns-01"
 	ProviderCloudflare = "cloudflare"
 )
 
 // Config is Let's Encrypt (ACME) settings for the OSS server.
 type Config struct {
-	Enabled   bool     `yaml:"enabled"`
-	Email     string   `yaml:"email"`
-	Domains   []string `yaml:"domains"`
-	CacheDir  string   `yaml:"cache_dir,omitempty"`
-	HTTPAddr  string   `yaml:"http_addr,omitempty"` // default :80 for HTTP-01
-	Challenge string   `yaml:"challenge,omitempty"` // http-01 (default) | dns-01
+	Enabled   bool      `yaml:"enabled"`
+	Email     string    `yaml:"email"`
+	Domains   []string  `yaml:"domains"`
+	CacheDir  string    `yaml:"cache_dir,omitempty"`
+	HTTPAddr  string    `yaml:"http_addr,omitempty"` // default :80 for HTTP-01
+	Challenge string    `yaml:"challenge,omitempty"` // http-01 (default) | dns-01
 	DNS       DNSConfig `yaml:"dns,omitempty"`
 }
 
@@ -104,8 +104,8 @@ type Manager struct {
 	Cfg   Config
 	cache string
 
-	mu       sync.RWMutex
-	dnsCert  *tls.Certificate
+	mu        sync.RWMutex
+	dnsCert   *tls.Certificate
 	stopRenew chan struct{}
 }
 

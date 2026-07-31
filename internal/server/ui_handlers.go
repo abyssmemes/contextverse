@@ -1056,7 +1056,7 @@ func (s *Server) handleUIWebhooksTest(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	if err := s.Dispatch.Test(r.Context(), id); err != nil {
-		http.Error(w, err.Error(), 502)
+		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 	s.auditEmit(r, "webhook.test", "", id, nil)
