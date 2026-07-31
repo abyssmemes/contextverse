@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -205,12 +206,12 @@ func (s *S3) List(ctx context.Context, prefix string) ([]Entry, error) {
 	// One HeadObject each: metadata, no body. The version is a few bytes of
 	// header rather than the whole file, which is what this used to move.
 	for _, obj := range current {
-		ver, err := s.versionOf(ctx, obj.key)
+		ver, size, err := s.versionOf(ctx, obj.key)
 		if err != nil {
 			logx.L().Warn("s3 list: skipping unreadable object", "key", obj.key, "err", err)
 			continue
 		}
-		out = append(out, Entry{Path: obj.path, Version: ver})
+		out = append(out, Entry{Path: obj.path, Version: ver, Size: size})
 	}
 
 	for _, key := range legacyKeys {
@@ -223,13 +224,16 @@ func (s *S3) List(ctx context.Context, prefix string) ([]Entry, error) {
 		if prefix != "" && !strings.HasPrefix(rec.Path, prefix) {
 			continue
 		}
-		out = append(out, Entry{Path: rec.Path, Version: rec.Version})
+		out = append(out, Entry{Path: rec.Path, Version: rec.Version, Size: int64(len(rec.Data))})
 	}
 	return out, nil
 }
 
-// s3VersionMeta is the user-metadata key holding the CAS token.
-const s3VersionMeta = "cv-version"
+// User-metadata keys: the CAS token and the content's own byte length.
+const (
+	s3VersionMeta = "cv-version"
+	s3SizeMeta    = "cv-size"
+)
 
 // listedObject is one key a listing recognised as belonging to a path.
 type listedObject struct {
@@ -239,26 +243,37 @@ type listedObject struct {
 
 // versionOf reads an object's CAS token from its metadata, falling back to the
 // body for an object written before the stamp existed.
-func (s *S3) versionOf(ctx context.Context, key string) (Version, error) {
+func (s *S3) versionOf(ctx context.Context, key string) (Version, int64, error) {
 	head, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(key),
 	})
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
+	var ver Version
+	var size int64
 	for k, v := range head.Metadata {
 		// S3 lowercases metadata keys, and SDKs differ on whether they hand
 		// them back canonicalised.
-		if strings.EqualFold(k, s3VersionMeta) && v != "" {
-			return Version(v), nil
+		switch {
+		case strings.EqualFold(k, s3VersionMeta) && v != "":
+			ver = Version(v)
+		case strings.EqualFold(k, s3SizeMeta) && v != "":
+			if n, perr := strconv.ParseInt(v, 10, 64); perr == nil {
+				size = n
+			}
 		}
 	}
+	if ver != "" {
+		return ver, size, nil
+	}
+	// Written before the stamps existed: read the record itself.
 	rec, err := s.readRecordByKey(ctx, key)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
-	return rec.Version, nil
+	return rec.Version, int64(len(rec.Data)), nil
 }
 
 // readRecordByKey fetches one object by its exact key, for the legacy objects a
@@ -322,7 +337,13 @@ func (s *S3) Put(ctx context.Context, path string, data []byte, expected Version
 		// The CAS token, stamped where a HeadObject can read it. Listing needs
 		// the version as well as the path, and the alternative is downloading
 		// every file to find out what version it is.
-		Metadata: map[string]string{s3VersionMeta: string(next)},
+		Metadata: map[string]string{
+			s3VersionMeta: string(next),
+			// The content's own length, not the wrapper's. A listing needs it
+			// for quota accounting and the object's reported size is the JSON
+			// record around it, which is a third larger because of base64.
+			s3SizeMeta: strconv.FormatInt(int64(len(data)), 10),
+		},
 	}
 	if etag != "" {
 		input.IfMatch = aws.String(etag)

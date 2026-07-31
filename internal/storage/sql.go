@@ -92,7 +92,10 @@ func (s *SQL) List(ctx context.Context, prefix string) ([]Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-	q := `SELECT path, version FROM cv_objects`
+	// octet_length rather than the data itself: the size is the only thing a
+	// listing needs, and shipping every blob to count its bytes is what this
+	// replaced everywhere else.
+	q := `SELECT path, version, octet_length(data) FROM cv_objects`
 	var args []any
 	if prefix != "" {
 		// A prefix is data, not a pattern: escape LIKE wildcards so "a_b" or
@@ -110,7 +113,7 @@ func (s *SQL) List(ctx context.Context, prefix string) ([]Entry, error) {
 	for rows.Next() {
 		var e Entry
 		var ver string
-		if err := rows.Scan(&e.Path, &ver); err != nil {
+		if err := rows.Scan(&e.Path, &ver, &e.Size); err != nil {
 			return nil, err
 		}
 		e.Version = Version(ver)

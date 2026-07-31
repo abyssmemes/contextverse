@@ -185,3 +185,60 @@ func TestListFiltersByPrefix(t *testing.T) {
 		t.Fatalf("listed %d entries under team/, want 2", len(entries))
 	}
 }
+
+// Quota accounting used to list the backend and then stat the working-tree
+// mirror for sizes. That mirror is written by whichever replica handled the
+// write, so with a shared backend every other replica counted the files as
+// nothing and let the space grow past its limit. The backend has to answer.
+func TestListReportsTheSizeOfEachObject(t *testing.T) {
+	l, err := OpenLocal(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+
+	want := map[string]int64{}
+	for _, tc := range []struct {
+		path string
+		size int
+	}{{"a.md", 10}, {"b.md", 4096}, {"team/c.md", 1}} {
+		body := bytes.Repeat([]byte("x"), tc.size)
+		if _, err := l.Put(ctx, tc.path, body, ""); err != nil {
+			t.Fatal(err)
+		}
+		want[tc.path] = int64(tc.size)
+	}
+
+	entries, err := l.List(ctx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != len(want) {
+		t.Fatalf("listed %d entries, want %d", len(entries), len(want))
+	}
+	for _, e := range entries {
+		if e.Size != want[e.Path] {
+			t.Errorf("%s reported %d bytes, want %d", e.Path, e.Size, want[e.Path])
+		}
+	}
+}
+
+// An empty file is legitimately zero bytes, and must not be mistaken for a size
+// the backend failed to report.
+func TestAnEmptyFileListsAsZero(t *testing.T) {
+	l, err := OpenLocal(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if _, err := l.Put(ctx, "empty.md", nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := l.List(ctx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Size != 0 {
+		t.Errorf("got %+v, want one entry of zero bytes", entries)
+	}
+}

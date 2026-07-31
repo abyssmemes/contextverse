@@ -251,7 +251,7 @@ func (g *Git) List(ctx context.Context, prefix string) ([]Entry, error) {
 		if err != nil {
 			return err
 		}
-		out = append(out, Entry{Path: rel, Version: contentVersion(data)})
+		out = append(out, Entry{Path: rel, Version: contentVersion(data), Size: int64(len(data))})
 		return nil
 	})
 	if err != nil && !os.IsNotExist(err) {

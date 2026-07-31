@@ -60,6 +60,7 @@ func (l *Local) objectPath(path string) string {
 type objectRecord struct {
 	Path    string    `json:"path"`
 	Version Version   `json:"version"`
+	Size    int64     `json:"size"`
 	Data    []byte    `json:"data"`
 	Updated time.Time `json:"updated"`
 }
@@ -74,6 +75,7 @@ type objectRecord struct {
 type objectHeader struct {
 	Path    string  `json:"path"`
 	Version Version `json:"version"`
+	Size    int64   `json:"size"`
 }
 
 func (l *Local) withLock(ctx context.Context, fn func() error) error {
@@ -145,7 +147,16 @@ func (l *Local) List(ctx context.Context, prefix string) ([]Entry, error) {
 			if prefix != "" && !strings.HasPrefix(hdr.Path, prefix) {
 				return nil
 			}
-			out = append(out, Entry{Path: hdr.Path, Version: hdr.Version})
+			// A record written before size was stored has none; fall back to
+			// the encoded length rather than reporting a file as empty, which a
+			// quota check would read as free space.
+			size := hdr.Size
+			if size == 0 {
+				if rec, rerr := l.readRecord(hdr.Path); rerr == nil {
+					size = int64(len(rec.Data))
+				}
+			}
+			out = append(out, Entry{Path: hdr.Path, Version: hdr.Version, Size: size})
 			return nil
 		})
 	})
@@ -174,6 +185,7 @@ func (l *Local) Put(ctx context.Context, path string, data []byte, expected Vers
 		nrec := objectRecord{
 			Path:    sanitizePath(path),
 			Version: next,
+			Size:    int64(len(data)),
 			Data:    append([]byte(nil), data...),
 			Updated: time.Now().UTC(),
 		}

@@ -60,7 +60,7 @@ func (p *Prefixed) List(ctx context.Context, prefix string) ([]Entry, error) {
 	}
 	out := make([]Entry, 0, len(entries))
 	for _, e := range entries {
-		out = append(out, Entry{Path: p.strip(e.Path), Version: e.Version})
+		out = append(out, Entry{Path: p.strip(e.Path), Version: e.Version, Size: e.Size})
 	}
 	return out, nil
 }
