@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"path/filepath"
@@ -114,5 +115,73 @@ func TestSanitizePath(t *testing.T) {
 	t.Parallel()
 	if got := sanitizePath("/a/../b//c.md"); got != "b/c.md" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+// A listing wants a path and a version, and the record keeps the file's bytes
+// in the same JSON document. Decoding into the full record read and decoded
+// every byte of every file to answer a question about names — on every tree,
+// every changes and every quota check, holding the store's exclusive lock.
+func TestListDoesNotDecodeFileBodies(t *testing.T) {
+	l, err := OpenLocal(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+
+	body := bytes.Repeat([]byte("x"), 256<<10)
+	for _, p := range []string{"a.md", "b.md", "team/c.md"} {
+		if _, err := l.Put(ctx, p, body, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	entries, err := l.List(ctx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("listed %d entries, want 3", len(entries))
+	}
+	for _, e := range entries {
+		if e.Path == "" {
+			t.Error("an entry came back with no path")
+		}
+		if e.Version == "" {
+			t.Errorf("%s came back with no version; callers compare against it", e.Path)
+		}
+	}
+
+	// The version a listing reports must be the one Get reports, or the two
+	// disagree about what a caller is holding.
+	_, ver, err := l.Get(ctx, "a.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if e.Path == "a.md" && e.Version != ver {
+			t.Errorf("list says %q, get says %q", e.Version, ver)
+		}
+	}
+}
+
+func TestListFiltersByPrefix(t *testing.T) {
+	l, err := OpenLocal(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	for _, p := range []string{"team/a.md", "team/b.md", "other/c.md"} {
+		if _, err := l.Put(ctx, p, []byte("body"), ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	entries, err := l.List(ctx, "team/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("listed %d entries under team/, want 2", len(entries))
 	}
 }
