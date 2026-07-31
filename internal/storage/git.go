@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-git/go-git/v5"
@@ -41,6 +42,21 @@ type Git struct {
 	auth     GitAuth
 	autoPush bool
 	repo     *git.Repository
+
+	// mu serializes every operation that touches the repository.
+	//
+	// This backend had no locking at all while Local took a flock for each one,
+	// and the interface it implements promises compare-and-swap. Two things
+	// break without it. The compare and the swap were separate — read the file,
+	// compare its hash, write — so two writers both passed and the second
+	// silently discarded the first. And go-git's worktree is not safe for
+	// concurrent use: Add and Commit share one index file, so overlapping
+	// commits corrupt it or lose a change that was staged and never committed.
+	//
+	// One lock rather than one per path, because the index and HEAD are the
+	// repository's, not any single file's. A commit per write is already the
+	// slow part; contending on the lock does not change that.
+	mu sync.Mutex
 }
 
 // OpenGit opens or initializes a git backend at cfg.LocalPath.
@@ -182,6 +198,8 @@ func (g *Git) commit(paths []string, msg string) error {
 
 func (g *Git) Get(ctx context.Context, path string) ([]byte, Version, error) {
 	_ = ctx
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	path, err := CleanFilePath(path)
 	if err != nil {
 		return nil, "", err
@@ -202,6 +220,8 @@ func (g *Git) Get(ctx context.Context, path string) ([]byte, Version, error) {
 
 func (g *Git) List(ctx context.Context, prefix string) ([]Entry, error) {
 	_ = ctx
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	prefix, err := CleanPath(prefix)
 	if err != nil {
 		return nil, err
@@ -242,6 +262,10 @@ func (g *Git) List(ctx context.Context, prefix string) ([]Entry, error) {
 
 func (g *Git) Put(ctx context.Context, path string, data []byte, expected Version) (Version, error) {
 	_ = ctx
+	// The read, the compare and the write are one operation or they are a
+	// lost update.
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	path, err := CleanFilePath(path)
 	if err != nil {
 		return "", err
@@ -285,6 +309,8 @@ func (g *Git) Put(ctx context.Context, path string, data []byte, expected Versio
 
 func (g *Git) Delete(ctx context.Context, path string, expected Version) error {
 	_ = ctx
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	path, err := CleanFilePath(path)
 	if err != nil {
 		return err
@@ -316,6 +342,8 @@ func (g *Git) Delete(ctx context.Context, path string, expected Version) error {
 
 func (g *Git) Head(ctx context.Context, scope string) (Version, error) {
 	_ = ctx
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	scope, err := CleanPath(scope)
 	if err != nil {
 		return "", err
@@ -332,6 +360,8 @@ func (g *Git) Head(ctx context.Context, scope string) (Version, error) {
 
 func (g *Git) SetHead(ctx context.Context, scope string, expected, next Version) error {
 	_ = ctx
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	scope, err := CleanPath(scope)
 	if err != nil {
 		return err
@@ -365,6 +395,15 @@ func (g *Git) SetHead(ctx context.Context, scope string, expected, next Version)
 
 // Push pushes to the configured remote (no-op if unset).
 func (g *Git) Push(ctx context.Context) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.pushLocked(ctx)
+}
+
+// pushLocked is Push for callers already holding the lock. Separated rather than
+// made reentrant: a mutex that is sometimes held twice is a deadlock waiting for
+// the day somebody adds a call.
+func (g *Git) pushLocked(ctx context.Context) error {
 	if g.remote == "" {
 		return nil
 	}
@@ -382,15 +421,18 @@ func (g *Git) Push(ctx context.Context) error {
 	return err
 }
 
+// maybePush is only ever called from a locked method, so it must not re-lock.
 func (g *Git) maybePush(ctx context.Context) error {
 	if !g.autoPush {
 		return nil
 	}
-	return g.Push(ctx)
+	return g.pushLocked(ctx)
 }
 
 // TestConnectivity verifies the local repo opens and, if remote is set, that ls-remote works.
 func (g *Git) TestConnectivity(ctx context.Context) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	if _, err := g.repo.Head(); err != nil {
 		return fmt.Errorf("local git head: %w", err)
 	}
