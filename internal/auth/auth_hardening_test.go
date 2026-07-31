@@ -108,7 +108,9 @@ func TestLoginFailuresAreIndistinguishableAndLockOut(t *testing.T) {
 		t.Fatalf("failure reasons must not differ: %q vs %q", missing, wrong)
 	}
 
-	for i := 0; i < MaxLoginFailures; i++ {
+	// Enough failures from anywhere to reach the account's own budget, which is
+	// deliberately looser than the per-address one — see lockout.go.
+	for i := 0; i < MaxAccountFailures; i++ {
 		_, _, _ = s.LoginUserpass("kim", "wrong-password")
 	}
 	if !s.LoginLocked("kim") {

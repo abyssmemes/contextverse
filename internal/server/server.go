@@ -569,7 +569,7 @@ func (s *Server) handleUserpassLogin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, "invalid_request", "invalid json", nil)
 		return
 	}
-	tok, rec, err := s.Auth.LoginUserpass(body.Username, body.Password)
+	tok, rec, err := s.Auth.LoginUserpassFrom(body.Username, body.Password, s.clientIP(r))
 	if err != nil {
 		s.auditWrite(r, "auth.login", "", body.Username, audit.ResultDenied, err.Error(), nil)
 		if errors.Is(err, auth.ErrLockedOut) {
