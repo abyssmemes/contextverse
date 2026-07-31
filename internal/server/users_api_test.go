@@ -10,7 +10,6 @@ import (
 
 	"github.com/orkcom-tech/contextverse/internal/auth"
 	"github.com/orkcom-tech/contextverse/internal/config"
-	"github.com/orkcom-tech/contextverse/internal/server"
 )
 
 func TestUsersAndPolicyAPI(t *testing.T) {
@@ -37,7 +36,7 @@ func TestUsersAndPolicyAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	srv := server.New(cfg, store)
+	srv := mustNewServer(t, cfg, store)
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 

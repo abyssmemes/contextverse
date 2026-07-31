@@ -79,9 +79,13 @@ func startServer(t *testing.T, backend config.Backend, space string) *harness {
 	if _, err := svc.Create(context.Background(), space, "solo-default", true); err != nil {
 		t.Fatalf("create space: %v", err)
 	}
-	srv := server.New(cfg, store)
+	srv, err := server.New(cfg, store)
+	if err != nil {
+		t.Fatalf("build server: %v", err)
+	}
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
+	t.Cleanup(func() { _ = srv.Spaces.Close() })
 	return &harness{t: t, dir: dir, cfg: cfg, store: store, token: token, ts: ts, space: space}
 }
 

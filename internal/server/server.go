@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/orkcom-tech/contextverse/internal/acme"
@@ -57,13 +58,26 @@ type Server struct {
 	setupDataDir string
 	setupAddr    string
 	setupPort    int
+
+	// handler caches the built route tree. The install wizard turns one set of
+	// routes into another at runtime, which is the only reason this is not a
+	// plain field set once in New.
+	handler atomic.Pointer[http.Handler]
 }
 
 // New constructs a Server from an opened data dir.
-func New(cfg *config.ServerConfig, authStore *auth.Store) *Server {
+//
+// It refuses to build a server whose policy engine did not open. That used to
+// be a logged error the process carried on past, and the consequence was not a
+// server without authorization — it was a server that authorized everything:
+// with a nil engine, allow() answered true for every read and every list, so
+// path ACLs stopped applying to anyone and nothing in the response said so. A
+// server that cannot read its policies has no business serving the data those
+// policies protect.
+func New(cfg *config.ServerConfig, authStore *auth.Store) (*Server, error) {
 	eng, err := authz.Open(authStore.PoliciesDir())
 	if err != nil {
-		logx.L().Error("open authz engine", "err", err)
+		return nil, fmt.Errorf("open authz engine at %s: %w", authStore.PoliciesDir(), err)
 	}
 	al, err := audit.Open(cfg.DataDir)
 	if err != nil {
@@ -150,7 +164,7 @@ func New(cfg *config.ServerConfig, authStore *auth.Store) *Server {
 		Methods:  auth.DefaultRegistry(),
 		Tracing:  tp,
 		proxies:  proxies,
-	}
+	}, nil
 }
 
 // NewSetup creates a first-run install wizard server (no config yet).
@@ -176,11 +190,37 @@ func NewSetup(dataDir, address string, port int) *Server {
 	}
 }
 
-// Handler returns the root mux (rebuilt each call so setup→running works).
+// Handler returns the root mux, building it at most once.
+//
+// It used to rebuild on every call, and ListenAndServe calls it per request:
+// a fresh ServeMux, forty-odd route registrations and the whole console wired
+// up again, under a mutex every request had to queue behind. That was a lazy
+// way to let the install wizard's setup→running switch take effect. The switch
+// now says so explicitly by invalidating the cache, which costs one atomic load
+// per request instead.
 func (s *Server) Handler() http.Handler {
+	if h := s.handler.Load(); h != nil {
+		return *h
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// Re-check: another request may have built it while we waited.
+	if h := s.handler.Load(); h != nil {
+		return *h
+	}
+	built := s.buildHandler()
+	s.handler.Store(&built)
+	return built
+}
 
+// invalidateHandler drops the cached route tree so the next request rebuilds it.
+// Called when the install wizard replaces a setup server with a running one.
+func (s *Server) invalidateHandler() {
+	s.handler.Store(nil)
+}
+
+// buildHandler wires the routes. Callers hold s.mu: it reads NeedsSetup.
+func (s *Server) buildHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
@@ -332,6 +372,14 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	if s.Tracing != nil {
 		if terr := s.Tracing.Shutdown(ctx); terr != nil && err == nil {
 			err = terr
+		}
+	}
+	// Storage last: handlers still in flight during http.Shutdown are holding
+	// backends, and closing a Postgres pool underneath them would turn a clean
+	// drain into a wave of errors on requests that were about to succeed.
+	if s.Spaces != nil {
+		if serr := s.Spaces.Close(); serr != nil && err == nil {
+			err = serr
 		}
 	}
 	return err

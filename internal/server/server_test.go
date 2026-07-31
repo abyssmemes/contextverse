@@ -47,7 +47,7 @@ func TestServerPushPullFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	srv := server.New(cfg, store)
+	srv := mustNewServer(t, cfg, store)
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
@@ -211,11 +211,11 @@ func TestServerPushPullFlow(t *testing.T) {
 func TestQuotaAndRateLimit(t *testing.T) {
 	dir := t.TempDir()
 	cfg := &config.ServerConfig{
-		Mode:    config.ModeServer,
-		DataDir: dir,
-		Listen:  config.ListenConfig{Address: "127.0.0.1", Port: 0},
-		Backend: config.Backend{Driver: "local"},
-		Quotas:  config.QuotasConfig{MaxFileSize: 32, MaxSpaceSize: 1 << 20, MaxFiles: 5000},
+		Mode:      config.ModeServer,
+		DataDir:   dir,
+		Listen:    config.ListenConfig{Address: "127.0.0.1", Port: 0},
+		Backend:   config.Backend{Driver: "local"},
+		Quotas:    config.QuotasConfig{MaxFileSize: 32, MaxSpaceSize: 1 << 20, MaxFiles: 5000},
 		RateLimit: config.RateLimitConfig{Enabled: true, RequestsPerMinute: 3, AuthPerMinute: 10},
 	}
 	if err := config.SaveServer(cfg); err != nil {
@@ -237,7 +237,7 @@ func TestQuotaAndRateLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	srv := server.New(cfg, store)
+	srv := mustNewServer(t, cfg, store)
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
@@ -314,7 +314,7 @@ func TestMetricsAndSSE(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	srv := server.New(cfg, store)
+	srv := mustNewServer(t, cfg, store)
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
@@ -375,4 +375,17 @@ func TestMetricsAndSSE(t *testing.T) {
 		t.Fatal("timeout waiting for sse event")
 	}
 	cancel()
+}
+
+// mustNewServer builds a server for tests. New refuses to return one whose
+// policy engine did not open — a server that authorizes everything is worse
+// than no server — so every caller here has to say what it wants to happen on
+// failure, and in a test that is "stop".
+func mustNewServer(t *testing.T, cfg *config.ServerConfig, store *auth.Store) *server.Server {
+	t.Helper()
+	srv, err := server.New(cfg, store)
+	if err != nil {
+		t.Fatalf("build server: %v", err)
+	}
+	return srv
 }

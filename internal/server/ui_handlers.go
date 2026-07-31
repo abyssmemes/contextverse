@@ -236,7 +236,13 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	eng, _ := authz.Open(store.PoliciesDir())
+	// The engine, not "an engine if it happens to open": a nil one used to mean
+	// the freshly installed server authorized everything.
+	eng, err := authz.Open(store.PoliciesDir())
+	if err != nil {
+		s.setupErr(w, r, "could not open the policy engine: "+err.Error(), 4)
+		return
+	}
 	s.mu.Lock()
 	s.Cfg = cfg
 	s.Auth = store
@@ -245,6 +251,9 @@ func (s *Server) handleSetupPost(w http.ResponseWriter, r *http.Request) {
 	s.NeedsSetup = false
 	s.setupDataDir = dataDir
 	s.mu.Unlock()
+	// The setup routes are gone and the real ones are not wired yet: drop the
+	// cached tree so the next request builds the running server's.
+	s.invalidateHandler()
 
 	logx.L().Info("ui setup complete", "data_dir", dataDir, "space", spaceName)
 	s.setSession(w, token)

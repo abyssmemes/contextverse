@@ -3,7 +3,6 @@ package auth
 import (
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -97,6 +96,12 @@ type Store struct {
 	dataDir  string
 	tokenTTL time.Duration
 	failures loginFailures
+
+	// Read caches for the request path. Both revalidate against the filesystem
+	// on every use, so a revoked token or a demoted user still takes effect at
+	// once; see cache.go. Their own locks are always taken after s.mu.
+	tokens      tokenCache
+	usersCached usersCache
 }
 
 // SetTokenTTL sets the lifetime stamped on newly issued tokens (0 = never expire).
@@ -164,7 +169,14 @@ func (s *Store) saveUsers(f usersFile) error {
 	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	if err := os.Rename(tmp, path); err != nil {
+		return err
+	}
+	// Grants just changed. The cache would notice from the file's timestamp on
+	// its own, but a demotion must not depend on the filesystem's clock
+	// resolution being finer than the gap between two writes.
+	s.dropUsers()
+	return nil
 }
 
 // AddUser creates a user. Fails if name exists.
@@ -352,40 +364,25 @@ var ErrTokenExpired = fmt.Errorf("token expired")
 // Authenticate resolves a bearer token to a principal. Grants are re-read from
 // users.yaml on every call, so demoting or disabling a user takes effect
 // immediately instead of waiting for their tokens to be revoked.
+//
+// This is the hottest path in the server — every API request lands here — and
+// it used to open and decode every token file on disk before answering, then
+// parse users.yaml, all under the read lock. Both lookups are cached now, and
+// both revalidate against the filesystem first, so "immediately" still means
+// immediately. See cache.go.
 func (s *Store) Authenticate(token string) (*Principal, error) {
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return nil, fmt.Errorf("empty token")
 	}
-	h := []byte(hashToken(token))
+	h := hashToken(token)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	entries, err := os.ReadDir(s.tokensDir())
-	if err != nil {
-		return nil, err
-	}
-	var match *TokenRecord
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
-			continue
-		}
-		raw, err := os.ReadFile(filepath.Join(s.tokensDir(), e.Name()))
-		if err != nil {
-			continue
-		}
-		var rec TokenRecord
-		if err := json.Unmarshal(raw, &rec); err != nil {
-			continue
-		}
-		if subtle.ConstantTimeCompare([]byte(rec.Hash), h) == 1 {
-			found := rec
-			match = &found
-			break
-		}
-	}
-	if match == nil {
+	rec, ok := s.tokenByHash(h)
+	if !ok {
 		return nil, fmt.Errorf("invalid token")
 	}
+	match := &rec
 	if match.Expired(time.Now().UTC()) {
 		return nil, ErrTokenExpired
 	}
@@ -411,7 +408,10 @@ func (s *Store) Authenticate(token string) (*Principal, error) {
 }
 
 func (s *Store) findUserLocked(name string) (*User, error) {
-	f, err := s.loadUsers()
+	// The cached read: this runs on every authenticated request, and the only
+	// consumer is Authenticate, which copies what it takes (EffectivePolicies
+	// allocates) rather than writing back through the returned user.
+	f, err := s.usersNow()
 	if err != nil {
 		return nil, err
 	}
@@ -452,6 +452,9 @@ func (s *Store) PruneExpiredTokens() (int, error) {
 				n++
 			}
 		}
+	}
+	if n > 0 {
+		s.dropTokens()
 	}
 	return n, nil
 }
@@ -497,6 +500,7 @@ func (s *Store) RevokeToken(id string) error {
 		}
 		return err
 	}
+	s.dropTokens()
 	return nil
 }
 
@@ -530,15 +534,16 @@ func (s *Store) revokeUserTokensLocked(user string) error {
 			_ = os.Remove(path)
 		}
 	}
+	s.dropTokens()
 	return nil
 }
 
-// CanWrite reports whether role may mutate space content (legacy helper).
-func CanWrite(role Role) bool {
-	return role == RoleAdmin || role == RoleSpaceLead || role == RoleContributor
-}
-
 // CanAdmin reports whether role may manage users/spaces (legacy helper).
+//
+// The companion CanWrite is gone: its last caller was the coarse role fallback
+// the server used when its policy engine failed to load, and that fallback was
+// the fail-open path. Write decisions go through the policy engine now, with no
+// second answer to disagree with it.
 func CanAdmin(role Role) bool {
 	return role == RoleAdmin
 }
