@@ -1,6 +1,8 @@
 package server
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"net"
 	"net/http"
 	"strings"
@@ -82,11 +84,20 @@ func (s *Server) clientIP(r *http.Request) string {
 	return remoteIP(r.RemoteAddr)
 }
 
+// rateLimitKey identifies who to count a request against.
+//
+// The token is hashed rather than used directly. The limiter keeps its buckets
+// in a map that lives for the life of the process, and the old key put a live
+// bearer token in it — a working credential sitting in memory long after the
+// request that carried it, reachable by anything that can read the heap: a core
+// dump, a crash reporter, a debugger. The limiter needs to tell callers apart,
+// which a hash does exactly as well.
 func (s *Server) rateLimitKey(r *http.Request) string {
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
 		tok := strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
 		if tok != "" {
-			return "bearer:" + tok
+			sum := sha256.Sum256([]byte(tok))
+			return "bearer:" + hex.EncodeToString(sum[:16])
 		}
 	}
 	return "ip:" + s.clientIP(r)

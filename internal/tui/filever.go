@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/orkcom-tech/contextverse/internal/config"
 	"github.com/orkcom-tech/contextverse/internal/spacefiles"
@@ -91,13 +90,6 @@ func listSpaceFiles(fl *storage.FileLog, spaceRoot string) ([]TrackedFile, error
 		})
 	}
 	return out, nil
-}
-
-func skipStoragePath(p string) bool {
-	return strings.HasPrefix(p, storage.SnapshotPrefix) ||
-		storage.IsFileLogInternal(p) ||
-		strings.HasPrefix(p, "_health/") ||
-		strings.HasPrefix(p, "_heads/")
 }
 
 func listVersionRows(fl *storage.FileLog, path string) (current int, rows []FileVersionRow, err error) {

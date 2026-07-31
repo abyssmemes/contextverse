@@ -1,0 +1,43 @@
+# Linters that must pass, chosen so the gate means something on the day it is
+# switched on.
+#
+# The full set was run first, and it reports 489 findings — 409 of them errcheck
+# on deliberate discards like `defer f.Close()`, 43 noctx, 15 errorlint. Turning
+# all of that on at once produces a gate that is red from the first commit, and a
+# gate nobody can get green is a gate somebody deletes. Those three are tracked
+# as their own piece of work, with the numbers, rather than being enabled and
+# then permanently ignored.
+#
+# What is here catches defects rather than taste, and passes today — so a new
+# finding is a new mistake, which is the only way a linter earns its place in CI.
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  disable-all: true
+  enable:
+    - govet
+    # staticcheck found the real one: an `if` with an empty body where backend
+    # migration was supposed to verify that what arrived matched what was sent.
+    - staticcheck
+    - ineffassign
+    - unused
+
+linters-settings:
+  staticcheck:
+    checks: ["all"]
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-rules:
+    # SA1019 on the TUI is bubbles renaming its viewport scrolling methods. Real,
+    # but it is a rename to follow deliberately in one change, not a reason to
+    # block every unrelated commit in the meantime.
+    - path: internal/tui/
+      linters:
+        - staticcheck
+      text: "SA1019"

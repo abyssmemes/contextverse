@@ -70,12 +70,31 @@ var errInvalidCredentials = fmt.Errorf("invalid credentials")
 var dummyHash = []byte("$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy")
 
 // LoginUserpass verifies password and issues a new bearer token (shown once).
+//
+// Deprecated in favour of LoginUserpassFrom, which can also count failures
+// against where they came from. Kept so callers that genuinely have no address —
+// a local console, a test — do not have to invent one.
 func (s *Store) LoginUserpass(username, password string) (plaintext string, rec TokenRecord, err error) {
+	return s.LoginUserpassFrom(username, password, "")
+}
+
+// LoginUserpassFrom verifies a password and issues a bearer token, counting a
+// failure against both the account and the address it came from.
+//
+// addr may be empty when the caller has none. Failures then count only against
+// the account, which is the old behaviour and the weaker of the two.
+func (s *Store) LoginUserpassFrom(username, password, addr string) (plaintext string, rec TokenRecord, err error) {
 	if username == "" || password == "" {
 		return "", TokenRecord{}, fmt.Errorf("username and password required")
 	}
 	now := time.Now()
-	if s.failures.locked(username, now) {
+	// The address is checked first and refused hardest: it is the budget an
+	// attacker actually spends, and the one that cannot be used to lock out
+	// somebody else.
+	if addr != "" && s.failures.locked(addressKey(addr), now) {
+		return "", TokenRecord{}, ErrLockedOut
+	}
+	if s.failures.locked(accountKey(username), now) {
 		return "", TokenRecord{}, ErrLockedOut
 	}
 	s.mu.RLock()
@@ -99,10 +118,16 @@ func (s *Store) LoginUserpass(username, password string) (plaintext string, rec 
 	}
 	matched := bcrypt.CompareHashAndPassword(hash, []byte(password)) == nil
 	if !usable || !matched {
-		s.failures.fail(username, now)
+		s.failures.fail(accountKey(username), now, MaxAccountFailures)
+		if addr != "" {
+			s.failures.fail(addressKey(addr), now, MaxLoginFailures)
+		}
 		return "", TokenRecord{}, errInvalidCredentials
 	}
-	s.failures.reset(username)
+	// A success clears the account, but not the address: one correct password
+	// must not wipe the record of an attacker working through a list from the
+	// same machine.
+	s.failures.reset(accountKey(username))
 	return s.CreateToken(username, "userpass")
 }
 

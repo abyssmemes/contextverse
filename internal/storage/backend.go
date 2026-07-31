@@ -11,17 +11,28 @@ import (
 type Version string
 
 // Entry is a listed object.
+//
+// Size is what the object holds, in bytes, as the backend knows it. It exists
+// because quota accounting used to list the backend and then stat the local
+// working-tree mirror for sizes — which works on the one machine that wrote the
+// file and nowhere else. With s3 or sql the mirror is per-replica, so every
+// other replica read the space as smaller than it is and let it grow past its
+// limit; the documented stateless HA is exactly that arrangement.
+//
+// A backend that genuinely cannot answer cheaply may leave it zero, and callers
+// treat zero as "unknown" rather than "empty".
 type Entry struct {
 	Path    string
 	Version Version
+	Size    int64
 }
 
 // Common errors.
 var (
-	ErrNotFound         = errors.New("storage: not found")
-	ErrConflict         = errors.New("storage: version conflict")
-	ErrNotSupported     = errors.New("storage: not supported")
-	ErrInvalidArgument  = errors.New("storage: invalid argument")
+	ErrNotFound        = errors.New("storage: not found")
+	ErrConflict        = errors.New("storage: version conflict")
+	ErrNotSupported    = errors.New("storage: not supported")
+	ErrInvalidArgument = errors.New("storage: invalid argument")
 )
 
 // Backend is the narrow pluggable store: blobs + optimistic CAS + scope heads.

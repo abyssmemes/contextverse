@@ -59,6 +59,12 @@ func newRoot() *cobra.Command {
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			logx.SetDebug(flagDebug)
 		},
+		// Cobra skips PostRun when the command failed, which is the behaviour we
+		// want: somebody debugging a broken command does not also need to hear
+		// about a release.
+		PersistentPostRun: func(cmd *cobra.Command, args []string) {
+			maybePrintUpdateNotice(cmd)
+		},
 	}
 	root.PersistentFlags().BoolVar(&flagDebug, "debug", false, "enable debug logging")
 	root.PersistentFlags().BoolVar(&flagJSON, "json", false, "structured JSON output (where supported)")

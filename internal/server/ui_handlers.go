@@ -362,7 +362,7 @@ func (s *Server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
 		err error
 	)
 	if user != "" && pass != "" {
-		tok, _, loginErr := s.Auth.LoginUserpass(user, pass)
+		tok, _, loginErr := s.Auth.LoginUserpassFrom(user, pass, s.clientIP(r))
 		if loginErr != nil {
 			s.auditWrite(r, "auth.login", "", user, audit.ResultDenied, loginErr.Error(), nil)
 			msg := "invalid credentials"

@@ -14,6 +14,7 @@ import (
 	"github.com/orkcom-tech/contextverse/internal/logx"
 	"github.com/orkcom-tech/contextverse/internal/search"
 	"github.com/orkcom-tech/contextverse/internal/space"
+	"github.com/orkcom-tech/contextverse/internal/storage"
 	"github.com/orkcom-tech/contextverse/internal/version"
 )
 
@@ -286,6 +287,12 @@ func listFiles(root, prefix string) ([]string, error) {
 		if rel == "config.yaml" || rel == "template.yaml" {
 			return nil
 		}
+		// The listing must not advertise anything the reader will refuse. A
+		// symlink out of the space is skipped here so it never appears as a
+		// file the model can ask for.
+		if _, err := storage.ResolveUnder(root, rel); err != nil {
+			return nil
+		}
 		if prefix != "" && !strings.HasPrefix(rel, strings.TrimPrefix(prefix, "/")) {
 			return nil
 		}
@@ -298,23 +305,35 @@ func listFiles(root, prefix string) ([]string, error) {
 	return out, err
 }
 
+// maxToolFileBytes bounds one file handed to a model. Nothing in a context
+// space is legitimately this big, and the whole body goes into a tool result
+// that is about to be sent to somebody's language model.
+const maxToolFileBytes = 1 << 20
+
+// readSpaceFile reads one file from the space, refusing anything that is not
+// really inside it.
+//
+// This compared strings and stopped there, which a symlink walks straight past:
+// a link at team/notes.md pointing at ~/.ssh/id_rsa passes every check above and
+// is then read and handed to the model. That is not hypothetical for a client
+// space — its contents arrive from a server, and `contextd pull` writes what the
+// server names. storage.ResolveUnder exists for exactly this and resolves the
+// deepest existing ancestor before comparing, so the link is followed first and
+// judged afterwards.
 func readSpaceFile(root, rel string) (string, error) {
-	rel = filepath.Clean(rel)
-	if rel == "." || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
-		return "", fmt.Errorf("invalid path %q", rel)
+	full, err := storage.ResolveUnder(root, rel)
+	if err != nil {
+		return "", fmt.Errorf("refusing path %q: %w", rel, err)
 	}
-	full := filepath.Join(root, rel)
-	// ensure still under root
-	absRoot, err := filepath.Abs(root)
+	st, err := os.Stat(full)
 	if err != nil {
 		return "", err
 	}
-	absFull, err := filepath.Abs(full)
-	if err != nil {
-		return "", err
+	if st.IsDir() {
+		return "", fmt.Errorf("%s is a directory", rel)
 	}
-	if !strings.HasPrefix(absFull, absRoot+string(os.PathSeparator)) && absFull != absRoot {
-		return "", fmt.Errorf("path escapes space root")
+	if st.Size() > maxToolFileBytes {
+		return "", fmt.Errorf("%s is %d bytes; too large to read into a tool result (limit %d)", rel, st.Size(), maxToolFileBytes)
 	}
 	data, err := os.ReadFile(full)
 	if err != nil {

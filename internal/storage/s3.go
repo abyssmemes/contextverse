@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -100,11 +101,6 @@ func isBucketAlreadyOwned(err error) bool {
 
 func (s *S3) Name() string { return "s3" }
 
-func (s *S3) objectKey(path string) string {
-	sum := contentVersion([]byte(sanitizePath(path)))
-	return s.prefix + "objects/" + string(sum) + ".json"
-}
-
 func (s *S3) headKey(scope string) string {
 	sc := sanitizePath(scope)
 	if sc == "" || sc == "." {
@@ -114,31 +110,44 @@ func (s *S3) headKey(scope string) string {
 	return s.prefix + "heads/" + string(sum) + ".head"
 }
 
-func (s *S3) getRecord(ctx context.Context, path string) (s3ObjectRecord, string, error) {
+// getRecord reads a path, looking under the legacy key when the current one is
+// absent so a bucket written by an older contextd keeps working.
+//
+// Returns the key it found the object under, because a writer needs to know
+// whether it is replacing a legacy object and should clean it up.
+func (s *S3) getRecord(ctx context.Context, path string) (s3ObjectRecord, string, string, error) {
+	key := s.objectKey(path)
 	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
-		Key:    aws.String(s.objectKey(path)),
+		Key:    aws.String(key),
 	})
+	if err != nil && isNoSuchKey(err) {
+		key = s.legacyObjectKey(path)
+		out, err = s.client.GetObject(ctx, &s3.GetObjectInput{
+			Bucket: aws.String(s.bucket),
+			Key:    aws.String(key),
+		})
+	}
 	if err != nil {
 		if isNoSuchKey(err) {
-			return s3ObjectRecord{}, "", ErrNotFound
+			return s3ObjectRecord{}, "", "", ErrNotFound
 		}
-		return s3ObjectRecord{}, "", err
+		return s3ObjectRecord{}, "", "", err
 	}
 	defer out.Body.Close()
 	raw, err := io.ReadAll(out.Body)
 	if err != nil {
-		return s3ObjectRecord{}, "", err
+		return s3ObjectRecord{}, "", "", err
 	}
 	var rec s3ObjectRecord
 	if err := json.Unmarshal(raw, &rec); err != nil {
-		return s3ObjectRecord{}, "", err
+		return s3ObjectRecord{}, "", "", err
 	}
 	etag := ""
 	if out.ETag != nil {
 		etag = strings.Trim(*out.ETag, `"`)
 	}
-	return rec, etag, nil
+	return rec, etag, key, nil
 }
 
 func (s *S3) Get(ctx context.Context, path string) ([]byte, Version, error) {
@@ -146,7 +155,7 @@ func (s *S3) Get(ctx context.Context, path string) ([]byte, Version, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	rec, _, err := s.getRecord(ctx, path)
+	rec, _, _, err := s.getRecord(ctx, path)
 	if err != nil {
 		return nil, "", err
 	}
@@ -158,10 +167,20 @@ func (s *S3) List(ctx context.Context, prefix string) ([]Entry, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The listing is the answer for anything written under the current scheme:
+	// the key carries the path, so no object needs to be fetched. Only legacy
+	// keys — which say nothing about their path — still cost a GET, and each one
+	// stops costing it the next time that file is written.
+	//
+	// This used to issue a GetObject for every object in the bucket and download
+	// the whole body to read the path back out of it, on every tree, every
+	// changes and every quota check.
 	var out []Entry
+	var current []listedObject
+	var legacyKeys []string
 	paginator := s3.NewListObjectsV2Paginator(s.client, &s3.ListObjectsV2Input{
 		Bucket: aws.String(s.bucket),
-		Prefix: aws.String(s.prefix + "objects/"),
+		Prefix: aws.String(s.prefix + s3ObjectsPrefix),
 	})
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(ctx)
@@ -172,29 +191,111 @@ func (s *S3) List(ctx context.Context, prefix string) ([]Entry, error) {
 			if obj.Key == nil {
 				continue
 			}
-			got, err := s.client.GetObject(ctx, &s3.GetObjectInput{
-				Bucket: aws.String(s.bucket),
-				Key:    obj.Key,
-			})
-			if err != nil {
-				return nil, err
-			}
-			raw, err := io.ReadAll(got.Body)
-			got.Body.Close()
-			if err != nil {
-				return nil, err
-			}
-			var rec s3ObjectRecord
-			if err := json.Unmarshal(raw, &rec); err != nil {
+			path, ok := s.pathFromKey(*obj.Key)
+			if !ok {
+				legacyKeys = append(legacyKeys, *obj.Key)
 				continue
 			}
-			if prefix != "" && !strings.HasPrefix(rec.Path, prefix) {
+			if prefix != "" && !strings.HasPrefix(path, prefix) {
 				continue
 			}
-			out = append(out, Entry{Path: rec.Path, Version: rec.Version})
+			current = append(current, listedObject{path: path, key: *obj.Key})
 		}
 	}
+
+	// One HeadObject each: metadata, no body. The version is a few bytes of
+	// header rather than the whole file, which is what this used to move.
+	for _, obj := range current {
+		ver, size, err := s.versionOf(ctx, obj.key)
+		if err != nil {
+			logx.L().Warn("s3 list: skipping unreadable object", "key", obj.key, "err", err)
+			continue
+		}
+		out = append(out, Entry{Path: obj.path, Version: ver, Size: size})
+	}
+
+	for _, key := range legacyKeys {
+		rec, err := s.readRecordByKey(ctx, key)
+		if err != nil {
+			// One unreadable legacy object must not cost the whole listing.
+			logx.L().Warn("s3 list: skipping unreadable legacy object", "key", key, "err", err)
+			continue
+		}
+		if prefix != "" && !strings.HasPrefix(rec.Path, prefix) {
+			continue
+		}
+		out = append(out, Entry{Path: rec.Path, Version: rec.Version, Size: int64(len(rec.Data))})
+	}
 	return out, nil
+}
+
+// User-metadata keys: the CAS token and the content's own byte length.
+const (
+	s3VersionMeta = "cv-version"
+	s3SizeMeta    = "cv-size"
+)
+
+// listedObject is one key a listing recognised as belonging to a path.
+type listedObject struct {
+	path string
+	key  string
+}
+
+// versionOf reads an object's CAS token from its metadata, falling back to the
+// body for an object written before the stamp existed.
+func (s *S3) versionOf(ctx context.Context, key string) (Version, int64, error) {
+	head, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return "", 0, err
+	}
+	var ver Version
+	var size int64
+	for k, v := range head.Metadata {
+		// S3 lowercases metadata keys, and SDKs differ on whether they hand
+		// them back canonicalised.
+		switch {
+		case strings.EqualFold(k, s3VersionMeta) && v != "":
+			ver = Version(v)
+		case strings.EqualFold(k, s3SizeMeta) && v != "":
+			if n, perr := strconv.ParseInt(v, 10, 64); perr == nil {
+				size = n
+			}
+		}
+	}
+	if ver != "" {
+		return ver, size, nil
+	}
+	// Written before the stamps existed: read the record itself.
+	rec, err := s.readRecordByKey(ctx, key)
+	if err != nil {
+		return "", 0, err
+	}
+	return rec.Version, int64(len(rec.Data)), nil
+}
+
+// readRecordByKey fetches one object by its exact key, for the legacy objects a
+// listing cannot describe on its own.
+func (s *S3) readRecordByKey(ctx context.Context, key string) (s3ObjectRecord, error) {
+	got, err := s.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return s3ObjectRecord{}, err
+	}
+	defer got.Body.Close()
+	raw, err := io.ReadAll(got.Body)
+	if err != nil {
+		return s3ObjectRecord{}, err
+	}
+	var rec s3ObjectRecord
+	if err := json.Unmarshal(raw, &rec); err != nil {
+		return s3ObjectRecord{}, err
+	}
+	return rec, nil
 }
 
 func (s *S3) Put(ctx context.Context, path string, data []byte, expected Version) (Version, error) {
@@ -202,7 +303,10 @@ func (s *S3) Put(ctx context.Context, path string, data []byte, expected Version
 	if err != nil {
 		return "", err
 	}
-	rec, etag, err := s.getRecord(ctx, path)
+	if err := s.checkKeyLength(path); err != nil {
+		return "", err
+	}
+	rec, etag, foundKey, err := s.getRecord(ctx, path)
 	actual := Version("")
 	if err == nil {
 		actual = rec.Version
@@ -211,6 +315,13 @@ func (s *S3) Put(ctx context.Context, path string, data []byte, expected Version
 	}
 	if actual != expected {
 		return "", &ConflictError{Path: path, Expected: expected, Actual: actual}
+	}
+	// A legacy object is being replaced, so the write goes to the new key and
+	// the old one is dropped afterwards. Migration happens as a bucket is used
+	// rather than in a step somebody has to remember to run.
+	migrating := foundKey != "" && foundKey != s.objectKey(path)
+	if migrating {
+		etag = "" // the precondition belongs to the key we are writing, not the one we read
 	}
 	next := contentVersion(data)
 	nrec := s3ObjectRecord{Path: sanitizePath(path), Version: next, Data: append([]byte(nil), data...)}
@@ -223,6 +334,16 @@ func (s *S3) Put(ctx context.Context, path string, data []byte, expected Version
 		Key:         aws.String(s.objectKey(path)),
 		Body:        bytes.NewReader(raw),
 		ContentType: aws.String("application/json"),
+		// The CAS token, stamped where a HeadObject can read it. Listing needs
+		// the version as well as the path, and the alternative is downloading
+		// every file to find out what version it is.
+		Metadata: map[string]string{
+			s3VersionMeta: string(next),
+			// The content's own length, not the wrapper's. A listing needs it
+			// for quota accounting and the object's reported size is the JSON
+			// record around it, which is a third larger because of base64.
+			s3SizeMeta: strconv.FormatInt(int64(len(data)), 10),
+		},
 	}
 	if etag != "" {
 		input.IfMatch = aws.String(etag)
@@ -236,6 +357,16 @@ func (s *S3) Put(ctx context.Context, path string, data []byte, expected Version
 		}
 		return "", err
 	}
+	if migrating {
+		// Best-effort: the object is already safe under its new key, and a
+		// leftover legacy copy is only read when the new one is missing.
+		if _, derr := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
+			Bucket: aws.String(s.bucket),
+			Key:    aws.String(foundKey),
+		}); derr != nil {
+			logx.L().Warn("s3 migrate: could not remove the legacy object", "path", path, "key", foundKey, "err", derr)
+		}
+	}
 	logx.L().Debug("s3 put", "path", path, "version", string(next))
 	return next, nil
 }
@@ -245,16 +376,18 @@ func (s *S3) Delete(ctx context.Context, path string, expected Version) error {
 	if err != nil {
 		return err
 	}
-	rec, _, err := s.getRecord(ctx, path)
+	rec, _, foundKey, err := s.getRecord(ctx, path)
 	if err != nil {
 		return err
 	}
 	if rec.Version != expected {
 		return &ConflictError{Path: path, Expected: expected, Actual: rec.Version}
 	}
+	// Delete the key it was actually found under: a legacy object deleted at
+	// the new key would stay readable.
 	_, err = s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: aws.String(s.bucket),
-		Key:    aws.String(s.objectKey(path)),
+		Key:    aws.String(foundKey),
 	})
 	return err
 }

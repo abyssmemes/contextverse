@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"path/filepath"
@@ -114,5 +115,130 @@ func TestSanitizePath(t *testing.T) {
 	t.Parallel()
 	if got := sanitizePath("/a/../b//c.md"); got != "b/c.md" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+// A listing wants a path and a version, and the record keeps the file's bytes
+// in the same JSON document. Decoding into the full record read and decoded
+// every byte of every file to answer a question about names — on every tree,
+// every changes and every quota check, holding the store's exclusive lock.
+func TestListDoesNotDecodeFileBodies(t *testing.T) {
+	l, err := OpenLocal(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+
+	body := bytes.Repeat([]byte("x"), 256<<10)
+	for _, p := range []string{"a.md", "b.md", "team/c.md"} {
+		if _, err := l.Put(ctx, p, body, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	entries, err := l.List(ctx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("listed %d entries, want 3", len(entries))
+	}
+	for _, e := range entries {
+		if e.Path == "" {
+			t.Error("an entry came back with no path")
+		}
+		if e.Version == "" {
+			t.Errorf("%s came back with no version; callers compare against it", e.Path)
+		}
+	}
+
+	// The version a listing reports must be the one Get reports, or the two
+	// disagree about what a caller is holding.
+	_, ver, err := l.Get(ctx, "a.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if e.Path == "a.md" && e.Version != ver {
+			t.Errorf("list says %q, get says %q", e.Version, ver)
+		}
+	}
+}
+
+func TestListFiltersByPrefix(t *testing.T) {
+	l, err := OpenLocal(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	for _, p := range []string{"team/a.md", "team/b.md", "other/c.md"} {
+		if _, err := l.Put(ctx, p, []byte("body"), ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	entries, err := l.List(ctx, "team/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("listed %d entries under team/, want 2", len(entries))
+	}
+}
+
+// Quota accounting used to list the backend and then stat the working-tree
+// mirror for sizes. That mirror is written by whichever replica handled the
+// write, so with a shared backend every other replica counted the files as
+// nothing and let the space grow past its limit. The backend has to answer.
+func TestListReportsTheSizeOfEachObject(t *testing.T) {
+	l, err := OpenLocal(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+
+	want := map[string]int64{}
+	for _, tc := range []struct {
+		path string
+		size int
+	}{{"a.md", 10}, {"b.md", 4096}, {"team/c.md", 1}} {
+		body := bytes.Repeat([]byte("x"), tc.size)
+		if _, err := l.Put(ctx, tc.path, body, ""); err != nil {
+			t.Fatal(err)
+		}
+		want[tc.path] = int64(tc.size)
+	}
+
+	entries, err := l.List(ctx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != len(want) {
+		t.Fatalf("listed %d entries, want %d", len(entries), len(want))
+	}
+	for _, e := range entries {
+		if e.Size != want[e.Path] {
+			t.Errorf("%s reported %d bytes, want %d", e.Path, e.Size, want[e.Path])
+		}
+	}
+}
+
+// An empty file is legitimately zero bytes, and must not be mistaken for a size
+// the backend failed to report.
+func TestAnEmptyFileListsAsZero(t *testing.T) {
+	l, err := OpenLocal(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if _, err := l.Put(ctx, "empty.md", nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := l.List(ctx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Size != 0 {
+		t.Errorf("got %+v, want one entry of zero bytes", entries)
 	}
 }

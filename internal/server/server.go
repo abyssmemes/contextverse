@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -415,16 +417,59 @@ func (s *Server) auth(next http.HandlerFunc) http.Handler {
 	})
 }
 
+// maxRequestIDLen bounds a caller-supplied correlation id.
+const maxRequestIDLen = 64
+
+// withRequestID gives every request an id for logs and error bodies.
+//
+// A caller may bring its own so a trace can be followed across services, but
+// what it brings is checked. The value went into structured logs and into the
+// error envelope verbatim: newlines forge log lines, control bytes confuse
+// whatever reads them, and an unbounded string is an unbounded log record.
+//
+// The generated id is random rather than the clock. UnixNano is guessable — it
+// let a caller predict and then claim somebody else's id — and on a platform
+// with a coarse clock two requests in the same tick shared one, which is
+// precisely when correlating them matters.
 func (s *Server) withRequestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := r.Header.Get("X-Request-Id")
+		id := sanitizeRequestID(r.Header.Get("X-Request-Id"))
 		if id == "" {
-			id = fmt.Sprintf("%d", time.Now().UnixNano())
+			id = randomRequestID()
 		}
 		w.Header().Set("X-Request-Id", id)
 		ctx := context.WithValue(r.Context(), requestIDKey, id)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// sanitizeRequestID keeps a caller's id only if it is plainly printable and
+// short. Anything else is discarded rather than escaped: a correlation id has no
+// business carrying punctuation we would have to reason about.
+func sanitizeRequestID(id string) string {
+	if id == "" || len(id) > maxRequestIDLen {
+		return ""
+	}
+	for i := 0; i < len(id); i++ {
+		c := id[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		case c == '-', c == '_', c == '.', c == ':':
+		default:
+			return ""
+		}
+	}
+	return id
+}
+
+func randomRequestID() string {
+	var b [12]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// Only reachable if the system entropy source is broken, at which point
+		// a unique-ish id is the least of anyone's problems.
+		return fmt.Sprintf("t%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b[:])
 }
 
 func (s *Server) withAccessLog(next http.Handler) http.Handler {
@@ -524,7 +569,7 @@ func (s *Server) handleUserpassLogin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, "invalid_request", "invalid json", nil)
 		return
 	}
-	tok, rec, err := s.Auth.LoginUserpass(body.Username, body.Password)
+	tok, rec, err := s.Auth.LoginUserpassFrom(body.Username, body.Password, s.clientIP(r))
 	if err != nil {
 		s.auditWrite(r, "auth.login", "", body.Username, audit.ResultDenied, err.Error(), nil)
 		if errors.Is(err, auth.ErrLockedOut) {
@@ -839,7 +884,21 @@ func (s *Server) handlePutFile(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, "invalid_request", err.Error(), nil)
 		return
 	}
-	data, err := io.ReadAll(io.LimitReader(r.Body, 32<<20))
+	// Bounded by the space's own limit, and one byte past it is an error rather
+	// than a shorter file. io.LimitReader stops at the cap and reports success,
+	// so the previous 32 MiB reader silently stored a truncated document and
+	// answered 200 — a client that uploaded 40 MiB was told its file was safe.
+	// The cap sits above max_file_size so the quota check still produces the
+	// specific "file too large" answer for the ordinary case.
+	limit := s.Spaces.QuotasFor(name).MaxFileSize
+	data, err := readAtMost(r.Body, limit)
+	if errors.Is(err, errBodyTooLarge) {
+		writeErr(w, r, http.StatusRequestEntityTooLarge, "quota_exceeded",
+			fmt.Sprintf("file too large: limit %d bytes", limit), map[string]any{
+				"quota": "max_file_size", "limit": limit,
+			})
+		return
+	}
 	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, "invalid_request", "read body", nil)
 		return
@@ -1086,6 +1145,30 @@ func (s *Server) bumpHead(ctx context.Context, name string) (storage.Version, er
 		return "", err
 	}
 	return next, nil
+}
+
+// errBodyTooLarge marks a request body that ran past the limit, as opposed to
+// one that ended there.
+var errBodyTooLarge = errors.New("request body over limit")
+
+// readAtMost reads a body of at most limit bytes and refuses a longer one.
+//
+// The distinction is the whole point: io.LimitReader returns EOF at the cap and
+// io.ReadAll calls that success, so reading a stream that had more to give is
+// indistinguishable from reading one that did not. Asking for one extra byte is
+// what tells the two apart.
+func readAtMost(body io.Reader, limit int64) ([]byte, error) {
+	if limit <= 0 {
+		limit = 5 << 20
+	}
+	data, err := io.ReadAll(io.LimitReader(body, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > limit {
+		return nil, errBodyTooLarge
+	}
+	return data, nil
 }
 
 func parseIfMatch(h string) (storage.Version, error) {

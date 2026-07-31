@@ -309,12 +309,19 @@ func livePutVersion(ctx context.Context, fl *storage.FileLog, path string) (int,
 	return n, n > 0
 }
 
-// inventory returns the on-disk size of every file in the space and their total.
+// inventory returns the size of every file in the space and their total, as the
+// backend reports them.
 //
-// A list failure is an error rather than a pass. The previous behaviour returned
-// nil — "don't block on list failure" — which made an unreadable space an
-// unlimited one, the exact failure QuotasFor's own comment warns about two
-// screens above.
+// The sizes used to come from os.Stat on the working-tree mirror. That mirror is
+// written by whichever replica handled the write, so with s3 or sql every other
+// replica saw the files as absent and counted them as nothing — a space read as
+// far smaller than it is, and a quota that lets it grow past its limit. The
+// documented stateless HA is precisely that arrangement, so the failure was not
+// hypothetical for anyone running more than one process.
+//
+// A list failure is an error rather than a pass. The behaviour before that
+// returned nil — "don't block on list failure" — which made an unreadable space
+// an unlimited one, the exact failure QuotasFor's own comment warns about.
 func (s *Service) inventory(ctx context.Context, name string) (map[string]int64, int64, error) {
 	entries, err := s.Tree(ctx, name)
 	if err != nil {
@@ -323,16 +330,19 @@ func (s *Service) inventory(ctx context.Context, name string) (map[string]int64,
 	sizes := make(map[string]int64, len(entries))
 	var total int64
 	for _, e := range entries {
-		p, err := s.treePath(name, e.Path)
-		if err != nil {
-			continue
+		size := e.Size
+		if size == 0 {
+			// The backend did not answer. Fall back to the local mirror rather
+			// than counting the file as nothing: an unknown size read as zero is
+			// free space that is not there.
+			if p, perr := s.treePath(name, e.Path); perr == nil {
+				if st, serr := os.Stat(p); serr == nil {
+					size = st.Size()
+				}
+			}
 		}
-		st, err := os.Stat(p)
-		if err != nil {
-			continue
-		}
-		sizes[e.Path] = st.Size()
-		total += st.Size()
+		sizes[e.Path] = size
+		total += size
 	}
 	return sizes, total, nil
 }

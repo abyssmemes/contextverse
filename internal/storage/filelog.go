@@ -215,7 +215,18 @@ func (f *FileLog) LiveVersion(ctx context.Context, path string) (Version, error)
 	return FormatFileVersion(1), nil
 }
 
-// Get returns live content.
+// Get returns the current version's content.
+//
+// Read from the version blob the metadata names, not from the live copy. Those
+// are two objects and a write cannot update both at once, so reading one while
+// labelling it from the other is how a caller ends up holding version N's bytes
+// stamped N+1 — and then writing back against a token that describes content
+// they never saw.
+//
+// The live copy stays as the mirror that makes a space enumerable: List walks
+// real paths, and a tree of hashed version blobs would not be a space anybody
+// could look at. It is a mirror, though, and this is the one place that used to
+// treat it as the source of truth.
 func (f *FileLog) Get(ctx context.Context, path string) ([]byte, Version, error) {
 	m, err := f.loadMeta(ctx, path)
 	if err != nil {
@@ -226,13 +237,22 @@ func (f *FileLog) Get(ctx context.Context, path string) ([]byte, Version, error)
 		return nil, "", err
 	}
 	if m.Current == 0 {
+		// No version history: an unversioned blob written before the file log,
+		// or nothing at all.
 		data, ver, err := f.Backend.Get(ctx, path)
 		if err != nil {
 			return nil, "", err
 		}
 		return data, ver, nil
 	}
-	data, _, err := f.Backend.Get(ctx, path)
+	data, _, err := f.Backend.Get(ctx, verBlobPath(path, m.Current))
+	if errors.Is(err, ErrNotFound) {
+		// The metadata names a version whose blob is gone — pruned, destroyed,
+		// or lost. Falling back to the live copy would hand back content that
+		// does not belong to the version being reported, so say what happened.
+		return nil, "", fmt.Errorf("%s is recorded at version %d but that version's content is missing: %w",
+			path, m.Current, ErrNotFound)
+	}
 	if err != nil {
 		return nil, "", err
 	}
@@ -326,24 +346,55 @@ func (f *FileLog) Put(ctx context.Context, path string, data []byte, expected Ve
 			}
 		}
 	}
+	// Three writes, and the order decides what a half-finished one leaves
+	// behind.
+	//
+	// It used to run version blob, then live blob, then metadata. Stop after the
+	// second and the live file holds the new content while the metadata still
+	// says the old version is current — so the file reads at version N while
+	// containing N+1, every CAS token handed out is wrong, and the new content
+	// belongs to no version at all. Nothing detects it and nothing repairs it.
+	//
+	// The order now is: version blob, metadata, live blob. Metadata is the
+	// commit point, because it is the only one of the three that decides what a
+	// version *is* — and Get reads the version blob it names, so the pair is
+	// self-consistent whichever write is interrupted.
+	//
+	// Stopping before the metadata leaves an unreferenced blob: storage spent,
+	// nothing else. Stopping after it leaves the live mirror stale, which costs
+	// a listing that is briefly out of date and no reader a wrong answer. There
+	// is no ordering that makes three writes into one; there is an ordering
+	// where every interruption leaves a state somebody can explain.
 	hash := string(contentVersion(data))
 	if _, err := f.Backend.Put(ctx, verBlobPath(path, next), data, ""); err != nil {
 		return "", err
 	}
-	if err := f.putLive(ctx, path, data); err != nil {
-		return "", err
-	}
 
-	m.Current = next
-	m.Versions[strconv.Itoa(next)] = FileVersionInfo{
+	committed := *m
+	committed.Current = next
+	committed.Versions = make(map[string]FileVersionInfo, len(m.Versions)+1)
+	for k, v := range m.Versions {
+		committed.Versions[k] = v
+	}
+	committed.Versions[strconv.Itoa(next)] = FileVersionInfo{
 		Version:   next,
 		CreatedAt: time.Now().UTC(),
 		Hash:      hash,
 		Size:      len(data),
 	}
-	f.prune(ctx, m)
-	if err := f.saveMeta(ctx, m); err != nil {
+	f.prune(ctx, &committed)
+	if err := f.saveMeta(ctx, &committed); err != nil {
+		// Nothing has been published. The version blob written above is
+		// unreferenced and will be overwritten by the next attempt at this
+		// version number.
 		return "", err
+	}
+
+	if err := f.putLive(ctx, path, data); err != nil {
+		// The version is real — its bytes are in the version blob and the
+		// metadata names it — but the live copy is stale. Say so precisely
+		// rather than reporting a clean failure over a committed write.
+		return "", fmt.Errorf("version %d of %s was recorded but the live copy was not updated: %w", next, path, err)
 	}
 	return FormatFileVersion(next), nil
 }

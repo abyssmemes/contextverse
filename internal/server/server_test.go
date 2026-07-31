@@ -163,7 +163,6 @@ func TestServerPushPullFlow(t *testing.T) {
 	}
 
 	// secret-scan blocks known patterns
-	head2 := headBody.Space
 	// refresh head after push
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/spaces/team/head", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -173,7 +172,7 @@ func TestServerPushPullFlow(t *testing.T) {
 	}
 	_ = json.NewDecoder(res.Body).Decode(&headBody)
 	res.Body.Close()
-	head2 = headBody.Space
+	head2 := headBody.Space
 	leak, _ := json.Marshal(map[string]any{
 		"expected_head": head2,
 		"ops": []map[string]string{{

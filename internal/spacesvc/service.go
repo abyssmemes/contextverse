@@ -433,13 +433,17 @@ func (s *Service) SpaceUsage(ctx context.Context, name string) (bytes int64, fil
 	if err != nil {
 		return 0, 0, err
 	}
+	// Same reasoning as inventory: the backend knows what it holds, and the
+	// working-tree mirror only exists on whichever replica did the writing.
 	for _, e := range entries {
-		p, err := s.treePath(name, e.Path)
-		if err != nil {
+		if e.Size > 0 {
+			bytes += e.Size
 			continue
 		}
-		if st, err := os.Stat(p); err == nil {
-			bytes += st.Size()
+		if p, perr := s.treePath(name, e.Path); perr == nil {
+			if st, serr := os.Stat(p); serr == nil {
+				bytes += st.Size()
+			}
 		}
 	}
 	return bytes, len(entries), nil
