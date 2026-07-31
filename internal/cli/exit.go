@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"net"
-	"os"
 
 	"github.com/orkcom-tech/contextverse/internal/cliout"
 	"github.com/orkcom-tech/contextverse/internal/storage"
@@ -102,13 +101,4 @@ func structuredOutput() bool {
 		return false
 	}
 	return f.Structured()
-}
-
-// stderrIfStructured returns the writer chatter should go to: stderr when stdout
-// is carrying a structured document, stdout otherwise.
-func stderrIfStructured(stdout io.Writer) io.Writer {
-	if structuredOutput() {
-		return os.Stderr
-	}
-	return stdout
 }

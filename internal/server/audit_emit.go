@@ -18,14 +18,6 @@ func (s *Server) auditDenied(r *http.Request, action, space, target, msg string)
 	s.auditWrite(r, action, space, target, audit.ResultDenied, msg, nil)
 }
 
-func (s *Server) auditError(r *http.Request, action, space, target string, err error) {
-	msg := ""
-	if err != nil {
-		msg = err.Error()
-	}
-	s.auditWrite(r, action, space, target, audit.ResultError, msg, nil)
-}
-
 func (s *Server) auditWrite(r *http.Request, action, space, target, result, errMsg string, diff *audit.Diff) {
 	if s.Audit == nil {
 		return

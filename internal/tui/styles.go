@@ -22,13 +22,11 @@ var (
 
 var (
 	styleBrand = lipgloss.NewStyle().Bold(true).Foreground(colAccent)
-	styleTitle = lipgloss.NewStyle().Bold(true).Foreground(colInk)
 	styleMuted = lipgloss.NewStyle().Foreground(colMuted)
 	styleSel   = lipgloss.NewStyle().Foreground(colTabFg).Background(colAccent).Padding(0, 1)
 	styleItem  = lipgloss.NewStyle().Foreground(colInk).Padding(0, 1)
 	styleOk    = lipgloss.NewStyle().Foreground(colOk)
 	styleErr   = lipgloss.NewStyle().Foreground(colDanger)
-	styleBox   = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colAccent).Padding(0, 1)
 
 	styleHeader = lipgloss.NewStyle().
 			Bold(true).

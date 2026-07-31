@@ -88,19 +88,6 @@ func (c *Client) do(ctx context.Context, method, path string, body any) (*http.R
 	return c.HTTP.Do(req)
 }
 
-func (c *Client) doBytes(ctx context.Context, method, path string, data []byte, ifMatch string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+path, bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+c.Token)
-	req.Header.Set("Content-Type", "application/octet-stream")
-	if ifMatch != "" {
-		req.Header.Set("If-Match", `"`+ifMatch+`"`)
-	}
-	return c.HTTP.Do(req)
-}
-
 // WhoAmI returns user/role.
 func (c *Client) WhoAmI(ctx context.Context) (user, role string, err error) {
 	res, err := c.do(ctx, http.MethodGet, "/api/v1/auth/whoami", nil)

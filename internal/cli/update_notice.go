@@ -57,8 +57,11 @@ func updateNoticeAllowed(cmd *cobra.Command) bool {
 	if cmd == nil || quietCommands[cmd.CommandPath()] {
 		return false
 	}
-	// Structured output is somebody's input.
-	if flagJSON || flagYAML {
+	// Structured output is somebody's input. structuredOutput already answers
+	// this for the whole CLI — it was written for exactly this and had no
+	// callers, so hand-rolling the flag check here would have been a second
+	// answer to the same question, free to drift from the first.
+	if structuredOutput() {
 		return false
 	}
 	// A person at a terminal, not a pipe, a cron job or a build.

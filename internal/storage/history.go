@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -221,7 +222,7 @@ func Migrate(ctx context.Context, src, dst Backend) (int, error) {
 	}
 	n := 0
 	for _, e := range entries {
-		data, ver, err := src.Get(ctx, e.Path)
+		data, _, err := src.Get(ctx, e.Path)
 		if err != nil {
 			return n, err
 		}
@@ -234,12 +235,26 @@ func Migrate(ctx context.Context, src, dst Backend) (int, error) {
 		} else if !errors.Is(err, ErrNotFound) {
 			return n, err
 		}
-		got, err := dst.Put(ctx, e.Path, data, "")
-		if err != nil {
+		if _, err := dst.Put(ctx, e.Path, data, ""); err != nil {
 			return n, fmt.Errorf("put dest %s: %w", e.Path, err)
 		}
-		if got != ver && contentVersion(data) != got {
-			// versions may differ by driver encoding; content must match
+		// Read it back. The check was here and did nothing: an if with an empty
+		// body, under a comment saying content must match. A migration is the
+		// one operation where "it probably worked" is not good enough — the
+		// operator is about to point the server at the new backend and the old
+		// one stops being consulted, so a file that arrived wrong is a file that
+		// is simply wrong from then on.
+		//
+		// Compared by content rather than by version marker, because the comment
+		// was right about that part: two drivers derive versions differently, and
+		// the same bytes legitimately carry different tokens either side.
+		back, _, err := dst.Get(ctx, e.Path)
+		if err != nil {
+			return n, fmt.Errorf("verify %s on the destination: %w", e.Path, err)
+		}
+		if !bytes.Equal(back, data) {
+			return n, fmt.Errorf("verify %s: the destination holds %d bytes, the source has %d — migration stopped so nothing further is written",
+				e.Path, len(back), len(data))
 		}
 		n++
 	}

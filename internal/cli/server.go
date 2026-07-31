@@ -203,13 +203,6 @@ func loopbackHost(address string) string {
 	return address
 }
 
-func orDefaultInt(v, def int) int {
-	if v == 0 {
-		return def
-	}
-	return v
-}
-
 // UserEntry is one row of `user list`.
 type UserEntry struct {
 	Name     string   `json:"name" yaml:"name"`
