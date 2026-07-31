@@ -839,7 +839,21 @@ func (s *Server) handlePutFile(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, "invalid_request", err.Error(), nil)
 		return
 	}
-	data, err := io.ReadAll(io.LimitReader(r.Body, 32<<20))
+	// Bounded by the space's own limit, and one byte past it is an error rather
+	// than a shorter file. io.LimitReader stops at the cap and reports success,
+	// so the previous 32 MiB reader silently stored a truncated document and
+	// answered 200 — a client that uploaded 40 MiB was told its file was safe.
+	// The cap sits above max_file_size so the quota check still produces the
+	// specific "file too large" answer for the ordinary case.
+	limit := s.Spaces.QuotasFor(name).MaxFileSize
+	data, err := readAtMost(r.Body, limit)
+	if errors.Is(err, errBodyTooLarge) {
+		writeErr(w, r, http.StatusRequestEntityTooLarge, "quota_exceeded",
+			fmt.Sprintf("file too large: limit %d bytes", limit), map[string]any{
+				"quota": "max_file_size", "limit": limit,
+			})
+		return
+	}
 	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, "invalid_request", "read body", nil)
 		return
@@ -1086,6 +1100,30 @@ func (s *Server) bumpHead(ctx context.Context, name string) (storage.Version, er
 		return "", err
 	}
 	return next, nil
+}
+
+// errBodyTooLarge marks a request body that ran past the limit, as opposed to
+// one that ended there.
+var errBodyTooLarge = errors.New("request body over limit")
+
+// readAtMost reads a body of at most limit bytes and refuses a longer one.
+//
+// The distinction is the whole point: io.LimitReader returns EOF at the cap and
+// io.ReadAll calls that success, so reading a stream that had more to give is
+// indistinguishable from reading one that did not. Asking for one extra byte is
+// what tells the two apart.
+func readAtMost(body io.Reader, limit int64) ([]byte, error) {
+	if limit <= 0 {
+		limit = 5 << 20
+	}
+	data, err := io.ReadAll(io.LimitReader(body, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > limit {
+		return nil, errBodyTooLarge
+	}
+	return data, nil
 }
 
 func parseIfMatch(h string) (storage.Version, error) {

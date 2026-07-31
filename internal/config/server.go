@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/orkcom-tech/contextverse/internal/logx"
 )
 
 const (
@@ -186,6 +188,11 @@ func LoadServer(dataDir string) (*ServerConfig, error) {
 	if err := yaml.Unmarshal(raw, &cfg); err != nil {
 		return nil, fmt.Errorf("parse server config: %w", err)
 	}
+	// Same repair-on-read as the client config: this one holds the backend's
+	// credentials for every space the server serves.
+	if err := restrictSecretFile(path); err != nil {
+		logx.L().Debug("could not tighten server config permissions", "path", path, "err", err)
+	}
 	if cfg.DataDir == "" {
 		cfg.DataDir = dataDir
 	}
@@ -317,10 +324,13 @@ func SaveServer(cfg *ServerConfig) error {
 		return err
 	}
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o644); err != nil {
+	if err := os.WriteFile(tmp, raw, secretFileMode); err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	if err := os.Rename(tmp, path); err != nil {
+		return err
+	}
+	return restrictSecretFile(path)
 }
 
 // ServerExists reports whether server config is present.

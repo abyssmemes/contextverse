@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/orkcom-tech/contextverse/internal/logx"
 )
 
 // Mode is the runtime deployment mode.
@@ -153,6 +155,12 @@ func Load(spaceRoot string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse config %s: %w", path, err)
 	}
+	// Repair on read, not only on write: a config written by an earlier version
+	// is world-readable and holds credentials, and nobody is going to notice
+	// that on their own. Best-effort — an unwritable config is still usable.
+	if err := restrictSecretFile(path); err != nil {
+		logx.L().Debug("could not tighten config permissions", "path", path, "err", err)
+	}
 
 	// Where we just read from is authoritative, and it is stored absolute.
 	//
@@ -193,14 +201,35 @@ func Save(cfg *Config) error {
 		return fmt.Errorf("create space root: %w", err)
 	}
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, data, secretFileMode); err != nil {
 		return fmt.Errorf("write config temp: %w", err)
 	}
 	if err := os.Rename(tmp, path); err != nil {
 		_ = os.Remove(tmp)
 		return fmt.Errorf("replace config: %w", err)
 	}
-	return nil
+	// A file written before this was tightened keeps its old mode through a
+	// rename, so the permissions are asserted rather than assumed.
+	return restrictSecretFile(path)
+}
+
+// secretFileMode is owner-only. These files carry git_token, s3_secret_key and
+// sql_dsn — a DSN with the password inline — and were world-readable at 0644,
+// while the bearer token next to them was already 0600. On a shared host or in
+// a container with a second user that is a credential handed out for free.
+const secretFileMode os.FileMode = 0o600
+
+// restrictSecretFile removes group and world access from a file that holds
+// credentials, including one written by an older version.
+func restrictSecretFile(path string) error {
+	st, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if st.Mode().Perm()&0o077 == 0 {
+		return nil
+	}
+	return os.Chmod(path, secretFileMode)
 }
 
 // DetectMode inspects conventional locations and returns the active mode.
